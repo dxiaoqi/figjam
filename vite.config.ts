@@ -1,0 +1,23 @@
+import path from 'node:path'
+import tailwindcss from '@tailwindcss/vite'
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
+
+const corePort = Number(process.env.AIFIG_CORE_PORT ?? 47821)
+const uiPort = Number(process.env.AIFIG_UI_PORT ?? 47820)
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: { '@': path.resolve(import.meta.dirname, './src') },
+  },
+  server: {
+    host: '127.0.0.1',
+    port: uiPort,
+    strictPort: true,
+    proxy: {
+      '/api': `http://127.0.0.1:${corePort}`,
+      '/sync': { target: `ws://127.0.0.1:${corePort}`, ws: true },
+    },
+  },
+})
