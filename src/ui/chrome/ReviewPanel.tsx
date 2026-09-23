@@ -98,7 +98,7 @@ export function ReviewPanel() {
   if (!pending.length) return null
 
   return (
-    <div className="pointer-events-auto absolute right-3 bottom-11 z-[300] flex w-[340px] max-w-[calc(100vw-24px)] flex-col gap-2">
+    <div className="pointer-events-auto absolute right-3 bottom-24 z-[300] sm:bottom-11 flex w-[340px] max-w-[calc(100vw-24px)] flex-col gap-2">
       {pending.length > 1 && (
         <div className="chrome flex items-center justify-between rounded-xl py-1.5 pr-1.5 pl-3 text-xs">
           <span className="font-medium">{pending.length} changes to review</span>
@@ -112,7 +112,29 @@ export function ReviewPanel() {
           </div>
         </div>
       )}
-      {pending.slice(0, 3).map((cs, i) => (
+      {pending.length > 1 && (
+        <div className="chrome flex flex-col rounded-2xl p-1">
+          {pending.slice(1, 5).map((cs) => (
+            <div key={cs.id} className={cn('group flex items-center gap-2 rounded-xl py-1.5 pr-1 pl-2 hover:bg-accent/60', busy === cs.id && 'opacity-60')}>
+              <span className="size-2 shrink-0 rounded-full" style={{ background: cs.author.color ?? '#6E56CF' }} />
+              <button className="min-w-0 flex-1 text-left" onClick={() => locate(cs)}>
+                <div className="truncate text-xs font-medium">{cs.intent}</div>
+                <div className="truncate text-[11px] text-muted-foreground">
+                  {cs.author.name} · {summarize(cs)} · {ago(cs.updatedAt, now)}
+                </div>
+              </button>
+              <Button size="icon" variant="ghost" className="size-7" disabled={!!busy} onClick={() => review(cs.id, 'reject')} aria-label="Reject">
+                <X className="size-3.5" />
+              </Button>
+              <Button size="icon" variant="ghost" className="size-7" disabled={!!busy} onClick={() => review(cs.id, 'accept')} aria-label="Accept">
+                <Check className="size-3.5" />
+              </Button>
+            </div>
+          ))}
+          {pending.length > 5 && <div className="px-2 py-1 text-[11px] text-muted-foreground">+{pending.length - 5} more</div>}
+        </div>
+      )}
+      {pending.slice(0, 1).map((cs, i) => (
         <div
           key={cs.id}
           className={cn('chrome animate-in fade-in slide-in-from-bottom-2 rounded-2xl p-3 duration-200', busy === cs.id && 'opacity-60')}
@@ -150,7 +172,6 @@ export function ReviewPanel() {
           </div>
         </div>
       ))}
-      {pending.length > 3 && <div className="text-center text-[11px] text-muted-foreground">+{pending.length - 3} more</div>}
     </div>
   )
 }

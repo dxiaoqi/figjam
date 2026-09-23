@@ -9,11 +9,12 @@ import {
   stopEventPropagation,
   useEditor,
   useValue,
+  type Editor,
   type TLShape,
   type TLShapeId,
 } from 'tldraw'
 import { measureCard, measureText, stickyFontSize } from '@/shared/text'
-import { COLOR_TOKENS, FONT_SIZES, RADII, STICKY_SIZES, snap, type ColorToken, type SizeToken } from '@/shared/tokens'
+import { COLOR_TOKENS, FONT_SIZES, RADII, SPACING, STICKY_SIZES, snap, type ColorToken, type SizeToken } from '@/shared/tokens'
 
 export const STICKY = 'aifig-sticky'
 export const CARD = 'aifig-card'
@@ -79,14 +80,25 @@ function roundedPath(w: number, h: number, r: number) {
   return p
 }
 
-function AutoFocusArea(props: { value: string; placeholder: string; onChange: (v: string) => void; className?: string; style?: CSSProperties }) {
+function AutoFocusArea(props: { value: string; placeholder: string; onChange: (v: string) => void; className?: string; style?: CSSProperties; autoFocus?: boolean; onTab?: () => void }) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    el.focus()
-    el.setSelectionRange(el.value.length, el.value.length)
-  }, [])
+    if (props.autoFocus === false) return
+    // tldraw moves focus back to the canvas while the creating pointer event settles
+    const focus = () => {
+      const el = ref.current
+      if (!el || document.activeElement === el) return
+      el.focus()
+      el.setSelectionRange(el.value.length, el.value.length)
+    }
+    focus()
+    const raf = requestAnimationFrame(focus)
+    const t = setTimeout(focus, 60)
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(t)
+    }
+  }, [props.autoFocus])
   return (
     <textarea
       ref={ref}
@@ -96,10 +108,28 @@ function AutoFocusArea(props: { value: string; placeholder: string; onChange: (v
       placeholder={props.placeholder}
       onChange={(e) => props.onChange(e.target.value)}
       onPointerDown={stopEventPropagation}
-      onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Tab' && props.onTab && !e.shiftKey) {
+          e.preventDefault()
+          e.stopPropagation()
+          props.onTab()
+          return
+        }
+        if (e.key !== 'Escape') e.stopPropagation()
+      }}
       spellCheck={false}
     />
   )
+}
+
+/** Tab while writing a sticky: start the next one to the right, same color and size. */
+function continueSticky(editor: Editor, shape: StickyShape) {
+  const id = createShapeId()
+  editor.markHistoryStoppingPoint('continue sticky')
+  editor.createShape<StickyShape>({ id, type: STICKY, parentId: shape.parentId, x: shape.x + shape.props.w + SPACING.gap, y: shape.y, props: { ...shape.props, text: '' } })
+  editor.select(id)
+  editor.setEditingShape(id)
+  editor.setCurrentTool('select.editing_shape', { target: 'shape', shape: editor.getShape(id) })
 }
 
 // ---- sticky ------------------------------------------------------------
@@ -117,6 +147,7 @@ function StickyComponent({ shape }: { shape: StickyShape }) {
             value={shape.props.text}
             placeholder="Write an idea…"
             onChange={(text) => editor.updateShape<StickyShape>({ id: shape.id, type: STICKY, props: { text } })}
+            onTab={() => continueSticky(editor, shape)}
           />
         ) : shape.props.text ? (
           <div style={{ whiteSpace: 'pre-wrap' }}>{shape.props.text}</div>
@@ -136,6 +167,9 @@ export class StickyShapeUtil extends BaseBoxShapeUtil<StickyShape> {
   override canResize = () => false
   override hideSelectionBoundsFg = () => true
 
+  override onEditEnd(shape: StickyShape) {
+    if (!shape.props.text.trim()) this.editor.deleteShapes([shape.id])
+  }
   getDefaultProps(): StickyShape['props'] {
     return { w: 200, h: 200, text: '', color: 'yellow', size: 'm' }
   }
@@ -152,6 +186,18 @@ export class StickyShapeUtil extends BaseBoxShapeUtil<StickyShape> {
 function CardComponent({ shape }: { shape: CardShape }) {
   const editor = useEditor()
   const editing = useIsEditing(shape.id)
+  const titleRef = useRef<HTMLInputElement>(null)
+  useLayoutEffect(() => {
+    if (!editing) return
+    const focus = () => titleRef.current && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement !== titleRef.current && titleRef.current.focus()
+    focus()
+    const raf = requestAnimationFrame(focus)
+    const t = setTimeout(focus, 60)
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(t)
+    }
+  }, [editing])
   const update = (patch: Partial<CardShape['props']>) => {
     const next = { ...shape.props, ...patch }
     const m = measureCard(next.title, next.text, next.size as SizeToken)
@@ -164,15 +210,15 @@ function CardComponent({ shape }: { shape: CardShape }) {
         {editing ? (
           <>
             <input
+              ref={titleRef}
               className="title"
               value={shape.props.title}
               placeholder="Title"
-              autoFocus
               onChange={(e) => update({ title: e.target.value })}
               onPointerDown={stopEventPropagation}
               onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}
             />
-            <AutoFocusArea className="body" value={shape.props.text} placeholder="Details…" onChange={(text) => update({ text })} />
+            <AutoFocusArea className="body" autoFocus={false} value={shape.props.text} placeholder="Details…" onChange={(text) => update({ text })} />
           </>
         ) : (
           <>
@@ -191,6 +237,9 @@ export class CardShapeUtil extends BaseBoxShapeUtil<CardShape> {
   static override props = { w: T.number, h: T.number, title: T.string, text: T.string, color: T.string, size: T.string }
   override canEdit = () => true
 
+  override onEditEnd(shape: CardShape) {
+    if (!shape.props.text.trim() && !shape.props.title.trim()) this.editor.deleteShapes([shape.id])
+  }
   getDefaultProps(): CardShape['props'] {
     return { w: 280, h: 96, title: '', text: '', color: 'blue', size: 'm' }
   }
@@ -237,6 +286,9 @@ export class TextShapeUtil extends BaseBoxShapeUtil<TextShape> {
   static override props = { w: T.number, h: T.number, text: T.string, color: T.string, size: T.string }
   override canEdit = () => true
 
+  override onEditEnd(shape: TextShape) {
+    if (!shape.props.text.trim()) this.editor.deleteShapes([shape.id])
+  }
   getDefaultProps(): TextShape['props'] {
     return { w: 160, h: 32, text: '', color: 'gray', size: 'l' }
   }
@@ -252,8 +304,7 @@ export const shapeUtils = [StickyShapeUtil, CardShapeUtil, TextShapeUtil]
 
 // ---- tools -------------------------------------------------------------------
 
-function createAndEdit(tool: StateNode, type: AifigShape['type'], props: Record<string, unknown>, w: number, h: number) {
-  const editor = tool.editor
+export function createAndEdit(editor: Editor, type: AifigShape['type'], props: Record<string, unknown>, w: number, h: number) {
   const p = editor.inputs.getCurrentPagePoint()
   const id = createShapeId()
   let x = snap(p.x - w / 2)
@@ -268,8 +319,13 @@ function createAndEdit(tool: StateNode, type: AifigShape['type'], props: Record<
   editor.markHistoryStoppingPoint(`create ${type}`)
   editor.createShape({ id, type, x, y, parentId, props: { w, h, ...props } } as any)
   editor.select(id)
-  editor.setCurrentTool('select')
   editor.setEditingShape(id)
+  editor.setCurrentTool('select.editing_shape', { target: 'shape', shape: editor.getShape(id) })
+}
+
+export function createStickyHere(editor: Editor) {
+  const s = STICKY_SIZES.m
+  createAndEdit(editor, STICKY, { color: nextColor.get(), text: '', size: 'm' }, s, s)
 }
 
 export class StickyTool extends StateNode {
@@ -278,8 +334,7 @@ export class StickyTool extends StateNode {
     this.editor.setCursor({ type: 'cross', rotation: 0 })
   }
   override onPointerDown() {
-    const s = STICKY_SIZES.m
-    createAndEdit(this, STICKY, { color: nextColor.get(), text: '', size: 'm' }, s, s)
+    createStickyHere(this.editor)
   }
 }
 
@@ -290,7 +345,7 @@ export class CardTool extends StateNode {
   }
   override onPointerDown() {
     const c = nextColor.get()
-    createAndEdit(this, CARD, { color: c === 'yellow' ? 'blue' : c, title: '', text: '', size: 'm' }, 280, 96)
+    createAndEdit(this.editor, CARD, { color: c === 'yellow' ? 'blue' : c, title: '', text: '', size: 'm' }, 280, 96)
   }
 }
 
@@ -300,7 +355,7 @@ export class TextTool extends StateNode {
     this.editor.setCursor({ type: 'cross', rotation: 0 })
   }
   override onPointerDown() {
-    createAndEdit(this, TEXT, { color: 'gray', text: '', size: 'l' }, 160, 40)
+    createAndEdit(this.editor, TEXT, { color: 'gray', text: '', size: 'l' }, 160, 40)
   }
 }
 

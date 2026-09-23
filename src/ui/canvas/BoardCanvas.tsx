@@ -1,7 +1,7 @@
 import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { FrameShapeUtil, Tldraw, createShapeId, react, type Editor, type TLComponents, type TLUiOverrides } from 'tldraw'
+import { DefaultColorStyle, DefaultFontStyle, DefaultSizeStyle, FrameShapeUtil, Tldraw, createShapeId, react, type Editor, type TLComponents, type TLUiOverrides } from 'tldraw'
 import type { Author } from '@/shared/model'
 import { measureCard, measureSticky } from '@/shared/text'
 import { SURFACES, snap } from '@/shared/tokens'
@@ -16,7 +16,7 @@ import { TopRight } from '../chrome/TopRight'
 import { AgentLayer } from './AgentLayer'
 import { BoardBinding } from './binding'
 import { Grid } from './Grid'
-import { CARD, STICKY, TEXT, customTools, nextColor, shapeUtils } from './shapes'
+import { CARD, STICKY, TEXT, createStickyHere, customTools, nextColor, shapeUtils } from './shapes'
 
 const QuietFrameShapeUtil = FrameShapeUtil.configure({
   getCustomDisplayValues(_editor, _shape, _theme, colorMode) {
@@ -60,6 +60,18 @@ const components: TLComponents = {
 function setupEditor(editor: Editor) {
   editor.updateInstanceState({ isGridMode: true })
   editor.updateDocumentSettings({ gridSize: 8 })
+  editor.setStyleForNextShapes(DefaultFontStyle, 'sans')
+  editor.setStyleForNextShapes(DefaultSizeStyle, 's')
+  editor.setStyleForNextShapes(DefaultColorStyle, 'grey')
+
+  // double-click on empty canvas starts a sticky
+  let lastDouble = 0
+  editor.on('event', (info) => {
+    if (info.name !== 'double_click' || info.type !== 'click' || info.target !== 'canvas') return
+    if (Date.now() - lastDouble < 400 || !editor.isIn('select.idle')) return
+    lastDouble = Date.now()
+    createStickyHere(editor)
+  })
 
   editor.registerExternalContentHandler('text', async ({ point, text }) => {
     const center = point ?? editor.getViewportPageBounds().center
@@ -136,10 +148,11 @@ export function BoardCanvas() {
         overrides={overrides}
         components={components}
         colorScheme={theme}
-        options={{ maxPages: 1 }}
+        options={{ maxPages: 1, createTextOnCanvasDoubleClick: false }}
         onMount={(e) => {
           setupEditor(e)
           setEditor(e)
+          if (import.meta.env.DEV) (window as any).editor = e
         }}
       >
         <EmptyState />

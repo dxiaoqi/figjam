@@ -83,11 +83,12 @@ export class BoardBinding {
   // ---- Yjs → tldraw ---------------------------------------------------------
 
   private metaFor(b: Block | Connector): AifigMeta {
-    return {
-      pending: !!b.pending,
-      agentColor: b.author?.kind === 'agent' ? b.author.color : undefined,
-      agentName: b.author?.kind === 'agent' ? b.author.name : undefined,
+    const meta: AifigMeta = { pending: !!b.pending }
+    if (b.author?.kind === 'agent') {
+      if (b.author.color) meta.agentColor = b.author.color
+      meta.agentName = b.author.name
     }
+    return meta
   }
 
   private shapePartial(b: Block) {
@@ -199,6 +200,7 @@ export class BoardBinding {
           end: { x: end.x - start.x, y: end.y - start.y },
           color: 'grey',
           size: 's',
+          font: 'sans',
           arrowheadEnd: 'arrow',
           arrowheadStart: 'none',
           bend: 0,
