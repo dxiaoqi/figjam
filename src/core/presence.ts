@@ -58,7 +58,7 @@ export class PresenceHub {
     } else if (patch.autoStatus) {
       // an explicit status wins for a while over auto-generated ones
       const explicitAt = this.statusSetAt.get(caller.id) ?? 0
-      if (Date.now() - explicitAt > 8000) next.status = patch.autoStatus
+      if (Date.now() - explicitAt > 2500) next.status = patch.autoStatus
     }
     this.agents.set(caller.id, next)
     this.onChange?.()

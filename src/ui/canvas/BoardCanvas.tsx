@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { DefaultColorStyle, DefaultFontStyle, DefaultSizeStyle, FrameShapeUtil, Tldraw, createShapeId, react, type Editor, type TLComponents, type TLUiOverrides } from 'tldraw'
 import type { Author } from '@/shared/model'
@@ -104,6 +104,12 @@ export function BoardCanvas() {
   const { provider, theme } = useBoard()
   const { synced } = useProviderState()
   const [editor, setEditor] = useState<Editor | null>(null)
+  // changing the colorScheme prop remounts the editor, so only use it for the first render
+  const initialTheme = useRef(theme).current
+
+  useEffect(() => {
+    editor?.user.updateUserPreferences({ colorScheme: theme })
+  }, [editor, theme])
 
   useEffect(() => {
     if (!editor || !synced) return
@@ -147,7 +153,7 @@ export function BoardCanvas() {
         tools={customTools}
         overrides={overrides}
         components={components}
-        colorScheme={theme}
+        colorScheme={initialTheme}
         options={{ maxPages: 1, createTextOnCanvasDoubleClick: false }}
         onMount={(e) => {
           setupEditor(e)

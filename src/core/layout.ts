@@ -1,7 +1,7 @@
 import type { Block, Rect } from '../shared/model'
 import { SPACING, snap } from '../shared/tokens'
-import { CARD_BODY_SIZE, CARD_TITLE_SIZE, stickyFontSize, textBlockHeight, measureCard, measureText } from '../shared/text'
-import { FONT_SIZES, CARD_WIDTHS, SPACING as S } from '../shared/tokens'
+import { stickyFontSize, textBlockHeight, measureCard, measureText } from '../shared/text'
+import { FONT_SIZES } from '../shared/tokens'
 
 export type LayoutIntent = 'grid' | 'row' | 'stack' | 'cluster' | 'tree'
 
@@ -283,7 +283,7 @@ export interface LintIssue {
 }
 
 function estimatedContentHeight(b: Block) {
-  const pad = S.blockPadding
+  const pad = SPACING.blockPadding
   if (b.kind === 'sticky') {
     const fs = stickyFontSize(b.text, b.w)
     return textBlockHeight(b.text, b.w - pad * 2, fs) + pad * 2
@@ -347,4 +347,3 @@ export function lintBlocks(all: Block[], scope: Block[], label: (b: Block) => st
   return issues
 }
 
-export { CARD_BODY_SIZE, CARD_TITLE_SIZE, CARD_WIDTHS }

@@ -86,9 +86,9 @@ export function textBlockHeight(text: string, width: number, fontSize: number, b
 export function stickyFontSize(text: string, side: number) {
   const len = [...(text ?? '')].reduce((n, ch) => n + (CJK.test(ch) ? 1.8 : 1), 0)
   const scale = side / 200
-  if (len <= 32) return Math.round(20 * scale)
-  if (len <= 80) return Math.round(17 * scale)
-  if (len <= 150) return Math.round(15 * scale)
+  if (len <= 44) return Math.round(20 * scale)
+  if (len <= 90) return Math.round(17 * scale)
+  if (len <= 160) return Math.round(15 * scale)
   return Math.round(13 * scale)
 }
 
