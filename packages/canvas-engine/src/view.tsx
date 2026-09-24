@@ -133,7 +133,10 @@ function LabelInput({ editor, connector }: { editor: Editor; connector: Connecto
       placeholder="Label"
       size={Math.max(4, (connector.label ?? '').length + 1)}
       onChange={(e) => editor.updateConnector(connector.id, { label: e.target.value })}
+      onPointerDown={(e) => e.stopPropagation()}
+      onBlur={() => editor.editingId === connector.id && editor.stopEditing()}
       onKeyDown={(e) => {
+        if (e.nativeEvent.isComposing || e.keyCode === 229) return
         if (e.key === 'Enter' || e.key === 'Escape') {
           e.preventDefault()
           editor.stopEditing()
@@ -180,7 +183,11 @@ function FrameLabel({ editor, frame }: { editor: Editor; frame: Block }) {
           data-editing-input
           value={frame.title ?? ''}
           onChange={(e) => editor.updateBlock(frame.id, { title: e.target.value })}
+          onPointerDown={(e) => e.stopPropagation()}
+          onBlur={() => editor.editingId === frame.id && editor.stopEditing()}
           onKeyDown={(e) => {
+            // IME composition (e.g. Chinese input) uses Enter to confirm candidates
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return
             if (e.key === 'Enter' || e.key === 'Escape') {
               e.preventDefault()
               editor.stopEditing()

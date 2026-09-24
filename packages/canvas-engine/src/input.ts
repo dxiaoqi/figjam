@@ -29,7 +29,6 @@ export class InputController {
     on(el, 'pointerup', this.onPointerUp)
     on(el, 'pointercancel', this.onPointerUp)
     on(el, 'wheel', this.onWheel, { passive: false })
-    on(el, 'dblclick', this.onDoubleClick)
     on(el, 'contextmenu', (e) => e.preventDefault())
     on(window, 'keydown', this.onKeyDown)
     on(window, 'keyup', this.onKeyUp)
@@ -67,6 +66,18 @@ export class InputController {
 
     const screen = this.local(e)
     const page = ed.screenToPage(screen)
+    // Detect double-clicks here: after pointer capture the browser retargets `dblclick` to the canvas.
+    const now = performance.now()
+    const last = this.lastDown
+    this.lastDown = { t: now, p: screen }
+    if (e.button === 0 && e.pointerType !== 'touch' && last && now - last.t < 380 && Math.hypot(screen.x - last.p.x, screen.y - last.p.y) < 6) {
+      this.lastDown = null
+      if (ed.interaction.type !== 'idle') ed.endInteraction()
+      if (this.onDoubleClick(target, page)) {
+        e.preventDefault()
+        return
+      }
+    }
     this.el.setPointerCapture(e.pointerId)
     this.pointerId = e.pointerId
 
@@ -223,18 +234,36 @@ export class InputController {
     }
   }
 
-  private onDoubleClick = (e: MouseEvent) => {
+  private lastDown: { t: number; p: Vec } | null = null
+
+  /** Returns true when the double-click was handled. */
+  private onDoubleClick(target: HTMLElement, page: Vec): boolean {
     const ed = this.editor
-    const target = e.target as HTMLElement
-    if (target.closest('[data-ui],textarea,input')) return
-    const page = this.page(e)
+    if (target.closest('[data-ui],textarea,input')) return false
+    if (ed.tool !== 'select') return false
     const label = target.closest<HTMLElement>('[data-frame-label]')?.dataset.frameLabel
-    if (label) return ed.startEditing(label)
+    if (label) {
+      ed.startEditing(label)
+      return true
+    }
     const b = ed.hitTest(page)
-    if (b) return ed.startEditing(b.id)
+    if (b) {
+      ed.startEditing(b.id)
+      return true
+    }
     const c = ed.connectorAt(page)
-    if (c) return ed.startEditing(c.id)
-    if (ed.tool === 'select') ed.options.onDoubleClickCanvas?.(page)
+    if (c) {
+      ed.startEditing(c.id)
+      return true
+    }
+    // double-click on a frame's header or empty area edits its title
+    const frame = ed.frameAt(page)
+    if (frame) {
+      ed.startEditing(frame.id)
+      return true
+    }
+    ed.options.onDoubleClickCanvas?.(page)
+    return true
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
