@@ -976,42 +976,10 @@ export class CanvasCore {
     const moves = new Map<string, { x: number; y: number }>()
     const axes: { text: string; x: number; y: number }[] = []
     const field = a.matrix_field as string | undefined
-    if (a.by === 'matrix') {
-      if (!field) throw new ToolError('matrix needs `matrix_field`, e.g. "status" or "done" (see list_types)')
-      const known = BLOCK_TYPE_IDS.some((t) => BLOCK_TYPES[t].fields.some((f) => f.key === field))
-      if (!known) throw new ToolError(`No type has a field "${field}" (see list_types)`)
-      const valueOf = (b: Block) => {
-        const v = typeFields(b)[field]
-        return v === undefined || v === '' ? '—' : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v)
-      }
-      const declared = BLOCK_TYPE_IDS.flatMap((t) => BLOCK_TYPES[t].fields.filter((f) => f.key === field).flatMap((f) => (f.kind === 'enum' ? [...f.options] : f.kind === 'boolean' ? ['no', 'yes'] : [])))
-      const cols = [...new Set([...declared, ...items.map(valueOf)])].filter((c) => items.some((b) => valueOf(b) === c))
-      const labelW = 160
-      const colW = cols.map((c) => Math.max(...items.filter((b) => valueOf(b) === c).map((b) => b.w)))
-      const colX: number[] = []
-      let x = origin.x + labelW
-      for (const w of colW) {
-        colX.push(x)
-        x += w + GAP * 2
-      }
-      let y = origin.y + 40
-      cols.forEach((c, i) => axes.push({ text: c, x: colX[i], y: origin.y }))
-      for (const r of rows) {
-        let rowH = 0
-        const cursor = cols.map(() => y)
-        for (const b of r.list) {
-          const ci = cols.indexOf(valueOf(b))
-          moves.set(b.id, { x: snap(colX[ci]), y: snap(cursor[ci]) })
-          cursor[ci] += b.h + GAP
-          rowH = Math.max(rowH, cursor[ci] - y)
-        }
-        axes.push({ text: r.t ? BLOCK_TYPES[r.t].plural : 'Other', x: origin.x, y })
-        y += rowH - GAP + BAND
-      }
-    } else {
-      let y = origin.y
+    const bandLayout = (list: { t?: BlockTypeId; list: Block[] }[], startY: number) => {
+      let y = startY
       const maxRowW = 6
-      for (const r of rows) {
+      for (const r of list) {
         let x = origin.x
         let rowH = 0
         r.list.forEach((b, i) => {
@@ -1026,7 +994,45 @@ export class CanvasCore {
         })
         y += rowH + BAND
       }
+      return y
     }
+    if (a.by === 'matrix') {
+      if (!field) throw new ToolError('matrix needs `matrix_field`, e.g. "status" or "done" (see list_types)')
+      const withField = new Set(BLOCK_TYPE_IDS.filter((t) => BLOCK_TYPES[t].fields.some((f) => f.key === field)))
+      if (!withField.size) throw new ToolError(`No type has a field "${field}" (see list_types)`)
+      const valueOf = (b: Block) => {
+        const v = typeFields(b)[field]
+        return v === undefined || v === '' ? '—' : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v)
+      }
+      const inMatrix = rows.filter((r) => r.t && withField.has(r.t))
+      const rest = rows.filter((r) => !r.t || !withField.has(r.t))
+      const members = inMatrix.flatMap((r) => r.list)
+      const declared = [...withField].flatMap((t) => BLOCK_TYPES[t].fields.filter((f) => f.key === field).flatMap((f) => (f.kind === 'enum' ? [...f.options] : f.kind === 'boolean' ? ['no', 'yes'] : [])))
+      const cols = [...new Set([...declared, ...members.map(valueOf)])]
+      const labelW = 128
+      const colW = cols.map((c) => Math.max(160, ...members.filter((b) => valueOf(b) === c).map((b) => b.w)))
+      const colX: number[] = []
+      let x = origin.x + labelW
+      for (const w of colW) {
+        colX.push(x)
+        x += w + GAP
+      }
+      let y = origin.y + 32
+      cols.forEach((c, i) => axes.push({ text: c, x: colX[i], y: origin.y }))
+      for (const r of inMatrix) {
+        let rowH = 0
+        const cursor = cols.map(() => y)
+        for (const b of r.list) {
+          const ci = cols.indexOf(valueOf(b))
+          moves.set(b.id, { x: snap(colX[ci]), y: snap(cursor[ci]) })
+          cursor[ci] += b.h + GAP
+          rowH = Math.max(rowH, cursor[ci] - y - GAP)
+        }
+        axes.push({ text: BLOCK_TYPES[r.t!].plural, x: origin.x, y })
+        y += rowH + BAND
+      }
+      if (rest.length) bandLayout(rest, y + GAP)
+    } else bandLayout(rows, origin.y)
     const { changeSet } = this.edit(board, caller, a.intent, a.by === 'matrix' ? `Matrix: types × ${field}` : 'Group by type', (rec) => {
       for (const ax of oldAxes) rec.deleteBlock(ax.id)
       for (const ax of axes) {
