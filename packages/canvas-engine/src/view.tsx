@@ -331,6 +331,32 @@ function Overlay({ editor }: { editor: Editor }) {
           const s = toScreen(editor, expand(selBounds, 4 / z))
           return <div className="ae-selection-bounds" style={{ transform: `translate(${s.x}px, ${s.y}px)`, width: s.w, height: s.h }} />
         })()}
+      {single &&
+        def?.rotatable &&
+        !busy &&
+        editor.editingId !== single.id &&
+        editor.tool === 'select' &&
+        (() => {
+          const s = toScreen(editor, editor.pageRect(single.id)!)
+          const rot = editor.rotationOf(single.id)
+          const c = { x: s.x + s.w / 2, y: s.y + s.h / 2 }
+          const p = rotatePoint({ x: s.x + s.w + 18, y: s.y - 18 }, c, rot)
+          // invisible rotate zones just outside each corner (tldraw/Figma convention) + a visible handle
+          const zones = [
+            { x: s.x - 11, y: s.y - 11 },
+            { x: s.x + s.w + 11, y: s.y - 11 },
+            { x: s.x - 11, y: s.y + s.h + 11 },
+            { x: s.x + s.w + 11, y: s.y + s.h + 11 },
+          ].map((z) => rotatePoint(z, c, rot))
+          return (
+            <>
+              {zones.map((z, i) => (
+                <div key={i} data-rotate={single.id} className="ae-rotate-zone" style={{ transform: `translate(${z.x}px, ${z.y}px) translate(-50%, -50%)` }} />
+              ))}
+              <div data-rotate={single.id} className="ae-rotate-handle" title="Rotate (snaps to 15°, hold ⌥ for free)" style={{ transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%)` }} />
+            </>
+          )
+        })()}
       {showHandles &&
         (() => {
           const s = toScreen(editor, editor.pageRect(single.id)!)
@@ -342,18 +368,6 @@ function Overlay({ editor }: { editor: Editor }) {
             const edge = h.length === 1
             return <div key={h} data-handle={h} className={`ae-handle ae-handle-${h} ${edge ? 'is-edge' : ''}`} style={{ transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%) rotate(${rot}deg)` }} />
           })
-        })()}
-      {single &&
-        def?.rotatable &&
-        !busy &&
-        editor.editingId !== single.id &&
-        editor.tool === 'select' &&
-        (() => {
-          const s = toScreen(editor, editor.pageRect(single.id)!)
-          const rot = editor.rotationOf(single.id)
-          const c = { x: s.x + s.w / 2, y: s.y + s.h / 2 }
-          const p = rotatePoint({ x: s.x + s.w + 16, y: s.y - 16 }, c, rot)
-          return <div data-rotate={single.id} className="ae-rotate-handle" title="Rotate (snaps to 15°, hold ⌥ for free)" style={{ transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%)` }} />
         })()}
       {it.type === 'rotate' &&
         (() => {

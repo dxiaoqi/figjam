@@ -496,6 +496,31 @@ await page.mouse.up()
 await wait(150)
 const rot = await ed((id) => window.editor.block(id).rotation, fm.target)
 check('rotation handle snaps to 15°', rot === 45, `${rot}°`)
+// dragging just outside a corner rotates too (tldraw/Figma convention)
+await ed((id) => window.editor.select([id]), fm.target)
+await wait(120)
+const cornerZone = await ed((id) => {
+  const ed = window.editor
+  const r = ed.pageRect(id)
+  const tl = ed.pageToScreen({ x: r.x, y: r.y })
+  const br = ed.pageToScreen({ x: r.x + r.w, y: r.y + r.h })
+  const c = { x: (tl.x + br.x) / 2, y: (tl.y + br.y) / 2 }
+  const a = ((ed.block(id).rotation ?? 0) * Math.PI) / 180
+  // local top-left corner: clear of the panels once rotated
+  const dx = -((br.x - tl.x) / 2 + 11), dy = -((br.y - tl.y) / 2 + 11)
+  return { x: c.x + dx * Math.cos(a) - dy * Math.sin(a), y: c.y + dx * Math.sin(a) + dy * Math.cos(a), cx: c.x, cy: c.y }
+}, fm.target)
+const zr = Math.hypot(cornerZone.x - cornerZone.cx, cornerZone.y - cornerZone.cy)
+const za0 = Math.atan2(cornerZone.y - cornerZone.cy, cornerZone.x - cornerZone.cx)
+await page.mouse.move(cornerZone.x, cornerZone.y)
+await page.mouse.down()
+for (let i = 1; i <= 6; i++) await page.mouse.move(cornerZone.cx + Math.cos(za0 + (0.55 * i) / 6) * zr, cornerZone.cy + Math.sin(za0 + (0.55 * i) / 6) * zr)
+await page.mouse.up()
+await wait(120)
+const rot2 = await ed((id) => window.editor.block(id).rotation, fm.target)
+check('dragging just outside a corner rotates', rot2 === 75, `${rot2}°`)
+await page.keyboard.press('Control+z')
+await wait(120)
 await ed(() => window.editor.selectNone())
 const corner = await ed((id) => { const r = window.editor.pageRect(id); return window.editor.pageToScreen({ x: r.x + 6, y: r.y + 6 }) }, fm.target)
 await page.mouse.click(corner.x, corner.y)
