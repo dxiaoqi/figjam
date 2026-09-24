@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect } from '@aifig/shared'
+import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
 import { imageInfo, measureSticky } from '@aifig/shared'
 import {
   SPACING,
@@ -44,6 +44,10 @@ const CLUSTER_GAP = SPACING.clusterGap
 function preview(s: string | undefined, n = 48) {
   const t = (s ?? '').replace(/\s+/g, ' ').trim()
   return t.length > n ? `${t.slice(0, n - 1)}…` : t
+}
+
+function slug(s: string) {
+  return s.replace(/[^\w\u4e00-\u9fff-]+/g, '-').replace(/^-|-$/g, '') || 'board'
 }
 
 export function describeBlock(b: Block) {
@@ -201,6 +205,15 @@ export class CanvasCore {
         }, 'api')
         return { board: b.summary() }
       }
+      case 'open_file': {
+        const b = this.registry.openFile(a.path)
+        return { board: b.summary() }
+      }
+      case 'save_file': {
+        const b = this.board(a.board)
+        this.registry.saveAs(b, a.path)
+        return { board: b.summary() }
+      }
       case 'delete_board': {
         const b = this.board(a.board)
         this.registry.delete(b.id)
@@ -244,6 +257,42 @@ export class CanvasCore {
         return this.listChangeSets(a)
       case 'review_change_set':
         return this.review(a, caller)
+      case 'get_threads': {
+        const board = this.board(a.board)
+        this.presence.touch(caller, { boardId: board.id, autoStatus: 'Reading comments…' })
+        const threads = [...board.threads.values()].filter((t) => a.include_resolved || !t.resolved).sort((p, q) => p.createdAt - q.createdAt)
+        return {
+          board: board.id,
+          threads: threads.map((t) => {
+            const b = board.blocks.get(t.target)
+            return {
+              id: t.id,
+              on: b ? { id: b.id, kind: b.kind, title: b.title, text: b.text } : null,
+              author: t.author.name,
+              text: t.text,
+              resolved: t.resolved,
+              replies: t.replies.map((r) => ({ author: r.author.name, text: r.text })),
+            }
+          }),
+        }
+      }
+      case 'reply_thread':
+      case 'resolve_thread': {
+        const board = this.board(a.board)
+        const t = board.threads.get(a.thread)
+        if (!t) throw new ToolError(`No comment thread "${a.thread}"`)
+        const author = this.author(caller)
+        const next: Thread = tool === 'reply_thread' ? { ...t, replies: [...t.replies, { id: newId(), author, text: a.text, createdAt: Date.now() }] } : { ...t, resolved: true, resolvedAt: Date.now() }
+        board.doc.transact(() => board.threads.set(t.id, next), 'api')
+        const target = board.blocks.get(t.target)
+        if (target) {
+          const r = board.pageRect(target)
+          this.presence.touch(caller, { boardId: board.id, cursor: { x: r.x + r.w - 8, y: r.y + 8 }, focus: r, autoStatus: tool === 'reply_thread' ? 'Replying to a comment…' : 'Resolved a comment' })
+        }
+        return { thread: t.id, resolved: next.resolved, replies: next.replies.length }
+      }
+      case 'export_board':
+        return this.exportBoard(a)
       case 'get_design_tokens':
         return tokenManifest()
     }
@@ -752,6 +801,61 @@ export class CanvasCore {
     const { svg, png, width, height } = await renderSnapshot(board, { frameId: target?.id, ids: a.ids, theme: a.theme ?? 'light', format: a.format ?? 'png' })
     if ((a.format ?? 'png') === 'svg') return { board: board.id, width, height, svg }
     return { board: board.id, width, height, image: { mimeType: 'image/png', data: png!.toString('base64') } }
+  }
+
+  // ---- export ----------------------------------------------------------------
+
+  exportBoard(a: Args) {
+    const board = this.board(a.board)
+    const target = a.frame ? this.frame(board, a.frame) : null
+    const all = [...board.blocks.values()]
+    const inScope = (b: Block) => !target || b.id === target.id || b.parent === target.id
+    const blocks = all.filter(inScope)
+    const ids = new Set(blocks.map((b) => b.id))
+    const connectors = [...board.connectors.values()].filter((c) => (!c.from || ids.has(c.from)) && (!c.to || ids.has(c.to)))
+    const threads = [...board.threads.values()].filter((t) => ids.has(t.target))
+    if (a.format === 'json') {
+      const assets = [...board.assets.values()].filter((as) => blocks.some((b) => b.asset === as.id)).map(({ bytes, ...meta }) => ({ ...meta, size: bytes.byteLength }))
+      const clean = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).filter(([k, v]) => v !== undefined && v !== null && k !== 'changeSet')) as T
+      return { format: 'json', filename: `${slug(board.title)}.json`, content: JSON.stringify({ format: 'aifig-export/1', exportedAt: new Date().toISOString(), board: { id: board.id, title: board.title }, blocks: blocks.map(clean), connectors: connectors.map(clean), threads, assets }, null, 2) }
+    }
+    const byY = (p: Block, q: Block) => p.y - q.y || p.x - q.x
+    const label = (b: Block | undefined) => (b ? (b.kind === 'card' || b.kind === 'frame' ? b.title || b.text : b.text).replace(/\s+/g, ' ').trim() : '(free end)')
+    const line = (b: Block): string[] => {
+      const comments = threads.filter((t) => t.target === b.id && !t.resolved)
+      const notes = comments.flatMap((t) => [`  > 💬 ${t.author.name}: ${t.text}`, ...t.replies.map((r) => `  > ↳ ${r.author.name}: ${r.text}`)])
+      switch (b.kind) {
+        case 'card':
+          return [`### ${b.title || 'Untitled card'}`, '', ...(b.text ? [b.text, ''] : []), ...notes]
+        case 'text':
+          return [`**${b.text}**`, '', ...notes]
+        case 'image': {
+          const as = b.asset ? board.assets.get(b.asset) : undefined
+          return [`![${b.text || as?.name || 'image'}](${as?.name ?? b.asset ?? ''})`, '', ...notes]
+        }
+        default:
+          return [`- ${b.text.replace(/\n/g, '\n  ')}`, ...notes]
+      }
+    }
+    const out: string[] = [`# ${target ? target.title : board.title}`, '', `_Exported from ai-figma on ${new Date().toISOString().slice(0, 10)}_`, '']
+    const frames = blocks.filter((b) => b.kind === 'frame').sort(byY)
+    for (const f of frames) {
+      out.push(`## ${f.title || 'Frame'}`, '')
+      for (const b of all.filter((k) => k.parent === f.id).sort(byY)) out.push(...line(b))
+      out.push('')
+    }
+    const loose = blocks.filter((b) => !b.parent && b.kind !== 'frame').sort(byY)
+    if (loose.length) {
+      if (frames.length) out.push('## Other notes', '')
+      for (const b of loose) out.push(...line(b))
+      out.push('')
+    }
+    if (connectors.length) {
+      out.push('## Connections', '')
+      for (const c of connectors) out.push(`- ${label(c.from ? board.blocks.get(c.from) : undefined)} → ${label(c.to ? board.blocks.get(c.to) : undefined)}${c.label ? ` (${c.label})` : ''}`)
+      out.push('')
+    }
+    return { format: 'markdown', filename: `${slug(board.title)}.md`, content: out.join('\n').replace(/\n{3,}/g, '\n\n') }
   }
 
   // ---- change sets -------------------------------------------------------

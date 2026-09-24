@@ -31,7 +31,7 @@ export function CopyBlock({ text, label }: { text: string; label: string }) {
 
 export function ConnectDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { health } = useBoard()
-  const s = mcpSnippets(health?.bin ?? '/path/to/ai-figma/bin/aifig.mjs')
+  const s = mcpSnippets(health)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
@@ -46,6 +46,7 @@ export function ConnectDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           <TabsList>
             <TabsTrigger value="claude">Claude Code</TabsTrigger>
             <TabsTrigger value="cursor">Cursor</TabsTrigger>
+            <TabsTrigger value="http">HTTP</TabsTrigger>
             <TabsTrigger value="cli">CLI</TabsTrigger>
           </TabsList>
           <TabsContent value="claude" className="space-y-2 pt-2">
@@ -58,6 +59,13 @@ export function ConnectDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               Add to <code className="font-mono">~/.cursor/mcp.json</code> (or your project’s <code className="font-mono">.cursor/mcp.json</code>):
             </p>
             <CopyBlock label="Cursor MCP config" text={s.cursor} />
+          </TabsContent>
+          <TabsContent value="http" className="space-y-2 pt-2">
+            <p className="text-sm text-muted-foreground">
+              While ai-figma is running, agents can also connect over local HTTP (Streamable HTTP) at <code className="font-mono">{s.url}</code> — no process to launch.
+            </p>
+            <CopyBlock label="Claude Code HTTP command" text={s.claudeHttp} />
+            <CopyBlock label="Cursor HTTP config" text={s.cursorHttp} />
           </TabsContent>
           <TabsContent value="cli" className="space-y-2 pt-2">
             <p className="text-sm text-muted-foreground">Scripts and agents without MCP can use the CLI:</p>

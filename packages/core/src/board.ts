@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { customAlphabet } from 'nanoid'
 import * as Y from 'yjs'
-import type { Asset, Block, BoardSummary, ChangeSet, Connector, Rect } from '@aifig/shared'
+import type { Asset, Block, BoardSummary, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
 
 export const newId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 10)
 
@@ -23,8 +23,11 @@ export class Board {
   readonly connectors = this.doc.getMap<Connector>('connectors')
   readonly changeSets = this.doc.getMap<ChangeSet>('changeSets')
   readonly assets = this.doc.getMap<Asset>('assets')
+  readonly threads = this.doc.getMap<Thread>('threads')
   private saveTimer: NodeJS.Timeout | null = null
   deleted = false
+  /** A user-chosen .aifig file (Open / Save As) that every save is mirrored to. */
+  externalPath: string | null = null
 
   constructor(readonly id: string) {
     this.doc.on('update', () => this.scheduleSave())
@@ -69,8 +72,17 @@ export class Board {
     this.saveTimer = null
     fs.mkdirSync(boardsDir(), { recursive: true })
     const tmp = `${this.file}.tmp`
-    fs.writeFileSync(tmp, Y.encodeStateAsUpdate(this.doc))
+    const state = Y.encodeStateAsUpdate(this.doc)
+    fs.writeFileSync(tmp, state)
     fs.renameSync(tmp, this.file)
+    if (this.externalPath) {
+      try {
+        fs.writeFileSync(`${this.externalPath}.tmp`, state)
+        fs.renameSync(`${this.externalPath}.tmp`, this.externalPath)
+      } catch (e) {
+        console.error(`[core] could not write ${this.externalPath}:`, e)
+      }
+    }
     fs.writeFileSync(path.join(boardsDir(), `${this.id}.json`), JSON.stringify(this.toJSON(), null, 2))
   }
 
@@ -94,12 +106,14 @@ export class Board {
       connectors: [...this.connectors.values()],
       changeSets: [...this.changeSets.values()],
       assets: [...this.assets.values()].map(({ bytes, ...meta }) => ({ ...meta, size: bytes.byteLength })),
+      threads: [...this.threads.values()],
     }
   }
 
   summary(): BoardSummary {
     return {
       id: this.id,
+      path: this.externalPath,
       title: this.title,
       createdAt: (this.meta.get('createdAt') as number) ?? 0,
       updatedAt: (this.meta.get('updatedAt') as number) ?? 0,
@@ -149,13 +163,54 @@ export class BoardRegistry {
   private boards = new Map<string, Board>()
   onBoardAdded: ((b: Board) => void) | null = null
 
+  private externalIndex() {
+    return path.join(aifigHome(), 'external.json')
+  }
+
+  private saveExternalIndex() {
+    const map: Record<string, string> = {}
+    for (const b of this.boards.values()) if (b.externalPath) map[b.id] = b.externalPath
+    fs.writeFileSync(this.externalIndex(), JSON.stringify(map, null, 2))
+  }
+
+  /** Open a .aifig file from anywhere; saves are mirrored back to it. */
+  openFile(file: string): Board {
+    const abs = path.resolve(file)
+    const open = [...this.boards.values()].find((b) => b.externalPath === abs)
+    if (open) return open
+    const data = fs.readFileSync(abs)
+    const b = new Board(`b${newId()}`)
+    Y.applyUpdate(b.doc, new Uint8Array(data), 'load')
+    if (!b.meta.get('title')) b.meta.set('title', path.basename(abs, '.aifig'))
+    b.externalPath = abs
+    b.saveNow()
+    this.add(b)
+    this.saveExternalIndex()
+    return b
+  }
+
+  /** Save As: write the board to a file and keep mirroring saves there. */
+  saveAs(b: Board, file: string) {
+    b.externalPath = path.resolve(file)
+    b.saveNow()
+    this.saveExternalIndex()
+  }
+
   loadAll() {
     fs.mkdirSync(boardsDir(), { recursive: true })
+    let external: Record<string, string> = {}
+    try {
+      external = JSON.parse(fs.readFileSync(this.externalIndex(), 'utf8'))
+    } catch {
+      /* none yet */
+    }
     for (const f of fs.readdirSync(boardsDir())) {
       if (!f.endsWith('.aifig')) continue
       const id = f.slice(0, -'.aifig'.length)
       try {
-        this.add(Board.load(id))
+        const b = Board.load(id)
+        if (external[id]) b.externalPath = external[id]
+        this.add(b)
       } catch (e) {
         console.error(`[core] could not load board ${id}:`, e)
       }

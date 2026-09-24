@@ -74,8 +74,12 @@ export async function startCore(port = CORE_PORT) {
   core.presence.onChange = broadcastPresence
 
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
-  const distDir = path.join(root, 'apps', 'canvas', 'dist')
-  const binPath = path.join(root, 'bin', 'aifig.mjs')
+  const distDir = process.env.AIFIG_UI_DIST ?? path.join(root, 'apps', 'canvas', 'dist')
+  const binPath = process.env.AIFIG_BIN ?? path.join(root, 'bin', 'aifig.mjs')
+  const json_ = (v?: string) => (v ? JSON.parse(v) : undefined)
+  const mcpLaunch = process.env.AIFIG_MCP_COMMAND
+    ? { command: process.env.AIFIG_MCP_COMMAND, args: json_(process.env.AIFIG_MCP_ARGS) ?? [binPath, 'mcp'], env: json_(process.env.AIFIG_MCP_ENV) }
+    : { command: 'node', args: [binPath, 'mcp'] }
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
@@ -85,7 +89,7 @@ export async function startCore(port = CORE_PORT) {
     }
     try {
       if (url.pathname === '/api/health') {
-        return json(res, 200, { ok: true, name: 'aifig-core', home: aifigHome(), bin: binPath, boards: core.registry.all().length, pid: process.pid })
+        return json(res, 200, { ok: true, name: 'aifig-core', home: aifigHome(), bin: binPath, mcp: mcpLaunch, mcpUrl: `http://127.0.0.1:${port}/mcp`, boards: core.registry.all().length, pid: process.pid })
       }
       if (url.pathname === '/api/boards' && req.method === 'GET') {
         return json(res, 200, { boards: core.registry.all().map((b) => b.summary()), active: core.activeBoardId })
@@ -99,6 +103,14 @@ export async function startCore(port = CORE_PORT) {
         const body = JSON.parse((await readBody(req)) || '{}')
         core.presence.leave(String(body.id ?? ''))
         return json(res, 200, { ok: true })
+      }
+      const exp = url.pathname.match(/^\/api\/boards\/([^/]+)\/export\.(json|md)$/)
+      if (exp) {
+        const r = await core.call({ tool: 'export_board', args: { board: exp[1], format: exp[2] === 'md' ? 'markdown' : 'json', frame: url.searchParams.get('frame') ?? undefined }, caller: { id: 'http', name: 'Viewer', client: 'http', kind: 'human' } })
+        if (!r.ok) return json(res, 404, r)
+        const out = r.result as { content: string; filename: string }
+        res.writeHead(200, { 'content-type': exp[2] === 'md' ? 'text/markdown; charset=utf-8' : 'application/json; charset=utf-8', 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(out.filename)}` })
+        return res.end(out.content)
       }
       const snap = url.pathname.match(/^\/api\/boards\/([^/]+)\/snapshot\.(png|svg)$/)
       if (snap) {

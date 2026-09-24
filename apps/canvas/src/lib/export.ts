@@ -36,3 +36,21 @@ export async function copySnapshot(boardId: string, opts: { ids?: string[]; them
     toast.error(`Couldn’t copy the image — ${(e as Error).message}`)
   }
 }
+
+/** Markdown or JSON document export (rendered by the core). */
+export async function downloadDocument(boardId: string, format: 'md' | 'json') {
+  try {
+    const r = await fetch(`/api/boards/${encodeURIComponent(boardId)}/export.${format}`)
+    if (!r.ok) throw new Error(`Export failed (${r.status})`)
+    const name = decodeURIComponent(r.headers.get('content-disposition')?.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? `board.${format}`)
+    const url = URL.createObjectURL(await r.blob())
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 2000)
+    toast.success(`Exported ${format === 'md' ? 'Markdown' : 'JSON'}`)
+  } catch (e) {
+    toast.error((e as Error).message)
+  }
+}

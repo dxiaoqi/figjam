@@ -197,10 +197,34 @@ export const toolDefs = {
       theme: z.enum(['light', 'dark']).optional(),
     },
   },
+  export_board: {
+    title: 'Export board',
+    description: 'Export the board (or one frame) as readable Markdown or structured JSON — for documents, reports or version control.',
+    input: {
+      board,
+      format: z.enum(['markdown', 'json']).describe('markdown (readable document) or json (full structure, no image bytes)'),
+      frame: z.string().optional(),
+    },
+  },
   set_status: {
     title: 'Set status',
     description: 'Show a short status next to your cursor on the canvas, e.g. "Clustering interview notes…". Pass an empty string to clear.',
     input: { board, status: z.string() },
+  },
+  get_threads: {
+    title: 'Read comments',
+    description: 'Read comment threads people left on blocks (open ones by default), with the block they point at. Use this to pick up feedback and revise.',
+    input: { board, include_resolved: z.boolean().optional() },
+  },
+  reply_thread: {
+    title: 'Reply to comment',
+    description: 'Reply to a comment thread, e.g. to say what you changed.',
+    input: { board, thread: z.string(), text: z.string() },
+  },
+  resolve_thread: {
+    title: 'Resolve comment',
+    description: 'Mark a comment thread as resolved once the feedback is addressed.',
+    input: { board, thread: z.string() },
   },
   begin_change_set: {
     title: 'Begin change set',
@@ -237,6 +261,8 @@ export const humanToolDefs = {
     },
   },
   rename_board: { input: { board, title: z.string() } },
+  open_file: { input: { path: z.string() } },
+  save_file: { input: { board: z.string(), path: z.string() } },
   delete_board: { input: { board: z.string() } },
 } as const
 

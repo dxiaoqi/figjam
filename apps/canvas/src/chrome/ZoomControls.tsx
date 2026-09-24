@@ -1,5 +1,5 @@
 import { Map as MapIcon, Maximize, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Minimap, useCamera } from '@aifig/canvas-engine'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -34,6 +34,14 @@ export function ZoomControls() {
     localStorage.setItem('aifig:minimap', showMap ? 'off' : 'on')
     setShowMap(!showMap)
   }
+  useEffect(() => {
+    const on = () => setShowMap((v) => {
+      localStorage.setItem('aifig:minimap', v ? 'off' : 'on')
+      return !v
+    })
+    window.addEventListener('aifig:toggle-minimap', on)
+    return () => window.removeEventListener('aifig:toggle-minimap', on)
+  }, [])
   return (
     <div className="pointer-events-auto absolute bottom-3 left-3 z-[300] hidden flex-col items-start gap-2 sm:flex">
       {showMap && (

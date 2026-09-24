@@ -217,6 +217,32 @@ program
   })
 
 program
+  .command('export')
+  .description('export the board as markdown, json, png or svg (markdown/json print to stdout without -o)')
+  .option('--format <format>', 'md | json | png | svg', 'md')
+  .option('-f, --frame <frame>')
+  .option('-o, --out <file>')
+  .action(async (o) => {
+    const format = String(o.format).toLowerCase()
+    if (format === 'png' || format === 'svg') {
+      const r = await callCore('render_snapshot', { board: program.opts().board, frame: o.frame, format }, caller())
+      if (!r.ok) throw new Error(r.error)
+      const out = o.out ?? `board.${format}`
+      fs.writeFileSync(out, format === 'svg' ? (r.result as any).svg : Buffer.from(r.image!.data, 'base64'))
+      return console.log(`✓ wrote ${out}`)
+    }
+    const r = await callCore('export_board', { board: program.opts().board, frame: o.frame, format: format === 'json' ? 'json' : 'markdown' }, caller())
+    if (!r.ok) throw new Error(r.error)
+    const res = r.result as { content: string; filename: string }
+    if (!o.out) {
+      process.stdout.write(`${res.content}\n`)
+      return
+    }
+    fs.writeFileSync(o.out, res.content)
+    console.log(`✓ wrote ${o.out}`)
+  })
+
+program
   .command('status [text...]')
   .description('show a status next to your cursor')
   .action((text: string[]) => run('set_status', { status: text.join(' ') }, () => console.log('✓ status set')))

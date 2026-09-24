@@ -12,7 +12,7 @@ export interface BoardContextValue {
   boards: BoardSummary[]
   health: Health | null
   theme: ThemeMode
-  setTheme: (t: ThemeMode) => void
+  setTheme: (t: ThemeMode | 'system') => void
   switchBoard: (id: string) => void
   createBoard: () => void
   refreshBoards: () => void

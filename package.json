@@ -21,7 +21,13 @@
     "build": "npm run build -w @aifig/canvas",
     "start": "npm run build && node bin/aifig.mjs core",
     "typecheck": "tsc -p packages/shared && tsc -p packages/core && tsc -p packages/cli && tsc -p packages/canvas-engine && tsc -p apps/canvas",
-    "lint": "oxlint packages apps"
+    "lint": "oxlint packages apps",
+    "desktop": "npm run build && electron apps/desktop",
+    "desktop:dev": "AIFIG_DESKTOP_URL=http://127.0.0.1:47820 electron apps/desktop",
+    "desktop:build": "node apps/desktop/scripts/build.mjs",
+    "test:aesthetics": "node scripts/aesthetics.mjs",
+    "test:aesthetics:update": "node scripts/aesthetics.mjs --update",
+    "test:e2e": "node scripts/engine-e2e.mjs"
   },
   "dependencies": {
     "tsx": "^4.23.15"
@@ -31,7 +37,9 @@
     "@types/ws": "^8.18.1",
     "concurrently": "^10.0.5",
     "oxlint": "^1.81.0",
+    "pixelmatch": "^7.2.0",
     "playwright-core": "^1.63.0",
+    "pngjs": "^7.0.0",
     "typescript": "~6.0.2"
   }
 }

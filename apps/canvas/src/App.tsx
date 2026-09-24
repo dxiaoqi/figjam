@@ -1,5 +1,5 @@
 import { Loader2, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Toaster } from '@/components/ui/sonner'
@@ -9,13 +9,17 @@ import { BoardContext, type ThemeMode } from './board-context'
 import { BoardCanvas } from './canvas/BoardCanvas'
 import { Logo } from './chrome/BoardMenu'
 import { callCore, fetchBoards, fetchHealth, type Health } from './lib/core'
+import { desktop } from './lib/desktop'
 import { CoreProvider } from './sync/provider'
 
-function initialTheme(): ThemeMode {
+type ThemePref = 'system' | ThemeMode
+
+function initialPref(): ThemePref {
   const saved = localStorage.getItem('aifig:theme')
-  if (saved === 'light' || saved === 'dark') return saved
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return saved === 'light' || saved === 'dark' ? saved : 'system'
 }
+
+const systemTheme = (): ThemeMode => (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 
 function pickBoard(boards: BoardSummary[], active: string | null) {
   const fromUrl = new URLSearchParams(location.search).get('board')
@@ -47,7 +51,9 @@ function CoreOffline({ retrying, onRetry }: { retrying: boolean; onRetry: () => 
 }
 
 export default function App() {
-  const [theme, setThemeState] = useState<ThemeMode>(initialTheme)
+  const [pref, setPref] = useState<ThemePref>(initialPref)
+  const [system, setSystem] = useState<ThemeMode>(systemTheme)
+  const theme: ThemeMode = pref === 'system' ? system : pref
   const [health, setHealth] = useState<Health | null>(null)
   const [boards, setBoards] = useState<BoardSummary[] | null>(null)
   const [boardId, setBoardId] = useState<string | null>(null)
@@ -55,9 +61,18 @@ export default function App() {
   const [retrying, setRetrying] = useState(false)
   const [provider, setProvider] = useState<CoreProvider | null>(null)
 
-  const setTheme = useCallback((t: ThemeMode) => {
-    setThemeState(t)
-    localStorage.setItem('aifig:theme', t)
+  const setTheme = useCallback((t: ThemePref) => {
+    setPref(t)
+    if (t === 'system') localStorage.removeItem('aifig:theme')
+    else localStorage.setItem('aifig:theme', t)
+  }, [])
+
+  // follow the OS appearance when set to "system"
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const on = () => setSystem(mq.matches ? 'dark' : 'light')
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
   }, [])
 
   useEffect(() => {
@@ -123,6 +138,24 @@ export default function App() {
     }
   }, [])
 
+  // desktop shell: native menu actions that don't need the editor, and window state
+  useEffect(() => {
+    if (!desktop) return
+    return desktop.onMenu((action, payload) => {
+      if (action === 'theme') setTheme(payload as ThemePref)
+      else if (action === 'open-board') {
+        refreshBoards().then(() => setBoardId(String(payload)))
+      } else if (action === 'new-board') createBoardRef.current()
+      else if (action === 'connect-agent') window.dispatchEvent(new Event('aifig:connect'))
+    })
+  }, [setTheme, refreshBoards])
+  useEffect(() => {
+    const title = boards?.find((b) => b.id === boardId)?.title ?? ''
+    document.title = title ? `${title} — ai-figma` : 'ai-figma'
+    desktop?.reportState({ boardId, title })
+  }, [boardId, boards])
+
+  const createBoardRef = useRef<() => void>(() => {})
   const createBoard = useCallback(async () => {
     try {
       const r = await callCore<{ board: BoardSummary }>('create_board', { title: 'Untitled board' })
@@ -132,6 +165,8 @@ export default function App() {
       toast.error((e as Error).message)
     }
   }, [refreshBoards])
+
+  createBoardRef.current = createBoard
 
   let body
   if (offline && !provider) body = <CoreOffline retrying={retrying} onRetry={load} />

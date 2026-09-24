@@ -1,0 +1,68 @@
+{
+  "name": "@aifig/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ai-figma desktop app",
+  "main": "src/main.mjs",
+  "type": "module",
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2"
+  },
+  "scripts": {
+    "start": "electron .",
+    "build": "node scripts/build.mjs",
+    "build:dir": "node scripts/build.mjs --dir"
+  },
+  "build": {
+    "appId": "dev.aifig.desktop",
+    "productName": "ai-figma",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/aifig.mjs",
+        "to": "aifig.mjs"
+      },
+      {
+        "from": "../canvas/dist",
+        "to": "ui"
+      },
+      {
+        "from": "../../node_modules/@resvg",
+        "to": "node_modules/@resvg"
+      }
+    ],
+    "fileAssociations": [
+      {
+        "ext": "aifig",
+        "name": "ai-figma board",
+        "role": "Editor"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Graphics"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "npmRebuild": false
+  }
+}

@@ -86,6 +86,25 @@ export interface ChangeSet {
   resolvedReason?: string
 }
 
+/** A comment thread attached to a block (`threads` map). */
+export interface ThreadMessage {
+  id: string
+  author: Author
+  text: string
+  createdAt: number
+}
+
+export interface Thread {
+  id: string
+  target: string
+  author: Author
+  text: string
+  createdAt: number
+  resolved: boolean
+  resolvedAt?: number
+  replies: ThreadMessage[]
+}
+
 /** Binary asset stored inside the board document (`assets` map). */
 export interface Asset {
   id: string
@@ -99,6 +118,8 @@ export interface Asset {
 
 export interface BoardSummary {
   id: string
+  /** File the board is mirrored to (desktop Open / Save As), if any. */
+  path?: string | null
   title: string
   createdAt: number
   updatedAt: number

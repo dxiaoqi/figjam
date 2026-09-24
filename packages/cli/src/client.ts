@@ -26,7 +26,7 @@ export function ensureCore(): Promise<void> {
     const home = process.env.AIFIG_HOME ?? path.join(os.homedir(), '.aifig')
     fs.mkdirSync(home, { recursive: true })
     const log = fs.openSync(path.join(home, 'core.log'), 'a')
-    const bin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../bin/aifig.mjs')
+    const bin = process.env.AIFIG_BIN ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../bin/aifig.mjs')
     const child = spawn(process.execPath, [bin, 'core'], { detached: true, stdio: ['ignore', log, log], env: process.env })
     child.unref()
     for (let i = 0; i < 50; i++) {

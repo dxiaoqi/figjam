@@ -46,7 +46,7 @@ import {
 import { useBoard, useBoardTitle } from '../board-context'
 import { useEditor } from '../canvas/editor-context'
 import { callCore } from '../lib/core'
-import { copySnapshot, downloadSnapshot } from '../lib/export'
+import { copySnapshot, downloadDocument, downloadSnapshot } from '../lib/export'
 
 interface MenuState {
   screen: Vec
@@ -289,6 +289,9 @@ export function ContextMenu() {
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => downloadSnapshot(boardId, title, 'png', { theme }))}>Export PNG</DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => downloadSnapshot(boardId, title, 'svg', { theme }))}>Export SVG</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={run(() => downloadDocument(boardId, 'md'))}>Export Markdown</DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(() => downloadDocument(boardId, 'json'))}>Export JSON</DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
           </>

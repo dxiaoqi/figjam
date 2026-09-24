@@ -14,6 +14,8 @@ import { TopRight } from '../chrome/TopRight'
 import { ZoomControls } from '../chrome/ZoomControls'
 import { AgentLayer } from './AgentLayer'
 import { EditorContext } from './editor-context'
+import { desktop } from '../lib/desktop'
+import { downloadDocument, downloadSnapshot } from '../lib/export'
 import { draftForPastedText, draftForTool, importImages, nextColor, shapeDefs } from './shapes'
 import { toast } from 'sonner'
 
@@ -105,6 +107,40 @@ export function BoardCanvas() {
       if (timer) clearTimeout(timer)
     }
   }, [editor, provider])
+
+  // native menu actions from the desktop shell
+  const { boardId, theme: themeMode } = useBoard()
+  useEffect(() => {
+    if (!editor || !desktop) return
+    return desktop.onMenu((action, payload) => {
+      const ids = editor.selectedBlocks().map((b) => b.id)
+      switch (action) {
+        case 'undo':
+          return editor.undo()
+        case 'redo':
+          return editor.redo()
+        case 'duplicate':
+          return editor.duplicate()
+        case 'select-all':
+          return editor.selectAll()
+        case 'zoom-in':
+          return editor.zoomIn()
+        case 'zoom-out':
+          return editor.zoomOut()
+        case 'zoom-100':
+          return editor.resetZoom()
+        case 'zoom-fit':
+          return editor.zoomToFit()
+        case 'toggle-minimap':
+          return window.dispatchEvent(new Event('aifig:toggle-minimap'))
+        case 'assistant-settings':
+          return window.dispatchEvent(new Event('aifig:assistant-settings'))
+        case 'export':
+          if (payload === 'png' || payload === 'svg') return downloadSnapshot(boardId, document.title.replace(/ — ai-figma$/, ''), payload, { ids: ids.length ? ids : undefined, theme: themeMode })
+          return downloadDocument(boardId, payload === 'json' ? 'json' : 'md')
+      }
+    })
+  }, [editor, boardId, themeMode])
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-[var(--canvas)]">
