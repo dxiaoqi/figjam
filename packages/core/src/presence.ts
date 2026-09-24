@@ -6,6 +6,7 @@ const KNOWN: { match: RegExp; name: string; color: string }[] = [
   { match: /claude/i, name: 'Claude Code', color: '#D97757' },
   { match: /cursor/i, name: 'Cursor', color: '#6E56CF' },
   { match: /codex|openai/i, name: 'Codex', color: '#10A37F' },
+  { match: /^builtin$/i, name: 'Assistant', color: '#0EA5E9' },
 ]
 
 export function identify(caller: CallerInfo) {

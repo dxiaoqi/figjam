@@ -5,6 +5,7 @@ import { COLORS, SURFACES, type Author, type Block } from '@aifig/shared'
 import { useBoard, useProviderState } from '../board-context'
 import { BoardMenu } from '../chrome/BoardMenu'
 import { ContextMenu } from '../chrome/ContextMenu'
+import { AssistantSettings } from '../chrome/AssistantSettings'
 import { EmptyState } from '../chrome/EmptyState'
 import { ReviewPanel } from '../chrome/ReviewPanel'
 import { StatusBanner } from '../chrome/StatusBanner'
@@ -13,6 +14,7 @@ import { Toolbar } from '../chrome/Toolbar'
 import { TopRight } from '../chrome/TopRight'
 import { ZoomControls } from '../chrome/ZoomControls'
 import { AgentLayer } from './AgentLayer'
+import { CommentLayer } from './CommentLayer'
 import { EditorContext } from './editor-context'
 import { desktop } from '../lib/desktop'
 import { downloadDocument, downloadSnapshot } from '../lib/export'
@@ -148,6 +150,7 @@ export function BoardCanvas() {
         <EditorContext.Provider value={editor}>
           <CanvasView editor={editor} className="aifig-canvas">
             <AgentLayer />
+            <CommentLayer />
           </CanvasView>
           <EmptyState />
           <div className="pointer-events-none absolute inset-x-0 top-0 z-[300] flex items-start justify-between">
@@ -163,6 +166,7 @@ export function BoardCanvas() {
           <ZoomControls />
           <ReviewPanel />
           <ContextMenu />
+          <AssistantSettings />
           <StatusBanner />
         </EditorContext.Provider>
       ) : (

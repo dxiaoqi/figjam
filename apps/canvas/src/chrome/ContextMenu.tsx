@@ -18,9 +18,11 @@ import {
   Maximize,
   MousePointerSquareDashed,
   PanelTop,
+  MessageSquarePlus,
   Pencil,
   RotateCcw,
   Scissors,
+  Sparkles,
   StickyNote,
   Trash2,
   Type,
@@ -47,6 +49,7 @@ import { useBoard, useBoardTitle } from '../board-context'
 import { useEditor } from '../canvas/editor-context'
 import { callCore } from '../lib/core'
 import { copySnapshot, downloadDocument, downloadSnapshot } from '../lib/export'
+import { runAssistant, useAssistant } from '../lib/assistant'
 
 interface MenuState {
   screen: Vec
@@ -61,6 +64,7 @@ export function ContextMenu() {
   const { boardId, theme } = useBoard()
   const title = useBoardTitle()
   const [menu, setMenu] = useState<MenuState | null>(null)
+  const assistant = useAssistant()
 
   useEffect(() => {
     editor.options.onContextMenu = ({ screen, page }) => setMenu({ screen, page })
@@ -141,6 +145,11 @@ export function ContextMenu() {
                 <Pencil /> Edit <DropdownMenuShortcut>↵</DropdownMenuShortcut>
               </DropdownMenuItem>
             )}
+            {blocks.length === 1 && (
+              <DropdownMenuItem onSelect={run(() => window.dispatchEvent(new CustomEvent('aifig:comment', { detail: ids[0] })))}>
+                <MessageSquarePlus /> Comment <DropdownMenuShortcut>M</DropdownMenuShortcut>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onSelect={run(() => copy(true))}>
               <Scissors /> Cut <DropdownMenuShortcut>{mod}X</DropdownMenuShortcut>
             </DropdownMenuItem>
@@ -153,6 +162,21 @@ export function ContextMenu() {
             <DropdownMenuItem onSelect={run(() => editor.duplicate())}>
               <CopyPlus /> Duplicate <DropdownMenuShortcut>{mod}D</DropdownMenuShortcut>
             </DropdownMenuItem>
+            {assistant.available && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Assistant</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={run(() => runAssistant(boardId, 'extract', ids))}>
+                  <Sparkles /> Extract ideas
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(() => runAssistant(boardId, 'cluster', ids))} disabled={blocks.filter((b) => b.kind !== 'frame').length < 3}>
+                  <Sparkles /> Cluster into themes
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(() => runAssistant(boardId, 'tidy', ids))}>
+                  <Sparkles /> Tidy up
+                </DropdownMenuItem>
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>

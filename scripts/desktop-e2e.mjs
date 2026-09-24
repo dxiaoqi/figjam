@@ -77,6 +77,25 @@ await mcp.connect(new StdioClientTransport({ command: health.mcp.command, args: 
 const tools = (await mcp.listTools()).tools.length
 await mcp.close()
 check('an agent can connect with that exact config', tools > 15, `${tools} tools`)
+// assistant settings go through the keychain bridge; the core only keeps them in memory
+const before2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`)).json()
+const info = await win.evaluate(async () => {
+  await window.aifigDesktop.assistant.save({ provider: 'mock' })
+  return window.aifigDesktop.assistant.get()
+})
+const after2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`)).json()
+check('assistant settings save via the keychain bridge and enable the assistant', !before2.available && after2.available && info.provider === 'mock', `keychain: ${info.encryption}`)
+const keyResult = await win.evaluate(async () => {
+  try {
+    await window.aifigDesktop.assistant.save({ provider: 'anthropic', key: 'sk-ant-test-SECRET' })
+    return 'saved'
+  } catch (e) {
+    return String(e.message)
+  }
+})
+const stored = fs.readFileSync(path.join(tmp, 'profile', 'assistant.bin')).toString('latin1')
+if (info.encryption === 'unavailable' || info.encryption === 'basic_text') check('without an OS keychain, API keys are refused rather than stored in plain text', keyResult.includes('keychain') && !stored.includes('SECRET'), keyResult.slice(0, 80))
+else check('API keys are stored encrypted by the OS keychain', keyResult === 'saved' && !stored.includes('SECRET'))
 await win.evaluate(() => window.dispatchEvent(new Event('aifig:connect')))
 await win.waitForTimeout(500)
 if (shotDir) await win.screenshot({ path: path.join(shotDir, 'desktop-connect.png') })

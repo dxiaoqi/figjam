@@ -95,11 +95,22 @@ async function call(tool, args) {
 // ---- assistant key (OS keychain via safeStorage; never written to boards) ----
 
 function readAssistant() {
+  let buf
   try {
-    const buf = fs.readFileSync(assistantFile())
-    return JSON.parse(safeStorage.decryptString(buf))
+    buf = fs.readFileSync(assistantFile())
   } catch {
     return null
+  }
+  try {
+    return JSON.parse(safeStorage.decryptString(buf))
+  } catch {
+    // settings without a secret (e.g. the offline demo provider) may be stored in plain form
+    try {
+      const plain = JSON.parse(buf.toString('utf8'))
+      return plain.key ? null : plain
+    } catch {
+      return null
+    }
   }
 }
 
@@ -127,11 +138,12 @@ ipcMain.handle('assistant:get', () => {
 })
 
 ipcMain.handle('assistant:save', async (_e, s) => {
-  if (s.provider && s.provider !== 'mock' && !safeStorage.isEncryptionAvailable()) throw new Error('The OS keychain is not available, so the key cannot be stored securely.')
   const prev = readAssistant()
-  const next = s.provider ? { provider: s.provider, model: s.model || '', baseUrl: s.baseUrl || '', key: s.key || prev?.key || '' } : null
-  if (next) fs.writeFileSync(assistantFile(), safeStorage.encryptString(JSON.stringify(next)))
-  else fs.rmSync(assistantFile(), { force: true })
+  const next = s.provider ? { provider: s.provider, model: s.model || '', baseUrl: s.baseUrl || '', key: s.provider === 'mock' ? '' : s.key || prev?.key || '' } : null
+  if (next?.key && !safeStorage.isEncryptionAvailable()) throw new Error('The OS keychain is not available, so the API key cannot be stored securely.')
+  if (!next) fs.rmSync(assistantFile(), { force: true })
+  else if (next.key) fs.writeFileSync(assistantFile(), safeStorage.encryptString(JSON.stringify(next)))
+  else fs.writeFileSync(assistantFile(), JSON.stringify(next))
   await pushAssistant(next)
   return { ok: true }
 })

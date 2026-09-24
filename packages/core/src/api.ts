@@ -917,7 +917,10 @@ export class CanvasCore {
     const board = this.board(a.board)
     const live = (c: ChangeSet) => c.status === 'pending' || c.status === 'open'
     const targets = a.id === 'all' ? [...board.changeSets.values()].filter(live) : ([board.changeSets.get(a.id)].filter(Boolean) as ChangeSet[])
-    if (!targets.length) throw new ToolError(a.id === 'all' ? 'Nothing to review' : `No change set "${a.id}"`)
+    if (!targets.length) {
+      if (a.id === 'all') return { board: board.id, reviewed: [], action: a.action, items: null }
+      throw new ToolError(`No change set "${a.id}"`)
+    }
     const items: Set<string> | null = a.items?.length ? new Set(a.items as string[]) : null
     board.doc.transact(() => {
       for (const cs of targets) {

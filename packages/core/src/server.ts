@@ -13,6 +13,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { CanvasCore } from './api'
 import { buildMcpServer } from './mcp'
+import { Assistant } from './assistant'
 import { aifigHome, type Board } from './board'
 
 const MSG_SYNC = 0
@@ -53,6 +54,7 @@ const MIME: Record<string, string> = {
 export async function startCore(port = CORE_PORT) {
   const core = new CanvasCore()
   core.init()
+  const assistant = new Assistant(core)
   const conns = new Set<Conn>()
   const bound = new WeakSet<Board>()
 
@@ -143,6 +145,22 @@ export async function startCore(port = CORE_PORT) {
         const body = JSON.parse((await readBody(req)) || '{}') as CallRequest
         if (!body.caller) body.caller = { id: 'anonymous', name: 'Agent', client: 'http', kind: 'agent' }
         return json(res, 200, await core.call(body))
+      }
+      if (url.pathname === '/api/assistant/status') return json(res, 200, assistant.status())
+      if (url.pathname === '/api/assistant/config' && req.method === 'POST') {
+        // only the local desktop shell / tests reach this (the server binds to 127.0.0.1); settings stay in memory
+        const origin = req.headers.origin
+        if (origin && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) return json(res, 403, { ok: false, error: 'Forbidden' })
+        assistant.configure(JSON.parse((await readBody(req)) || '{}'))
+        return json(res, 200, { ok: true, ...assistant.status() })
+      }
+      if (url.pathname === '/api/assistant/run' && req.method === 'POST') {
+        const body = JSON.parse((await readBody(req)) || '{}')
+        try {
+          return json(res, 200, { ok: true, result: await assistant.run(body.board, body.command, body.ids ?? []) })
+        } catch (e) {
+          return json(res, 200, { ok: false, error: (e as Error).message })
+        }
       }
       if (url.pathname === '/api/agent/leave' && req.method === 'POST') {
         const body = JSON.parse((await readBody(req)) || '{}')

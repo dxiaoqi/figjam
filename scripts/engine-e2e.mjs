@@ -687,6 +687,82 @@ await wait(500)
 const undoState = await ed((ids) => [window.editor.block(ids[0])?.text ?? null, !!window.editor.block(ids[1])], uaIds)
 check('undo by author reverts accepted work but keeps later human edits', undoState[0] === 'I changed this' && undoState[1] === false, JSON.stringify(undoState))
 
+// ---- comments (people ↔ agents), exports, built-in assistant ----
+cli('--board', board, '--human', 'accept')
+const cm = JSON.parse(cli('--json', '--board', board, '--human', 'add', 'Insight: onboarding is slow', '--kind', 'card', '--at', '13200,12000')).created[0].id
+await ed((id) => { window.editor.select([id]); const r = window.editor.pageRect(id); window.editor.zoomToBounds({ x: r.x - 300, y: r.y - 200, w: r.w + 600, h: r.h + 400 }, { animate: false }) }, cm)
+await wait(300)
+await page.keyboard.press('m')
+await wait(250)
+await page.locator('[data-comment-input]').fill('Too vague — cite the interviews')
+await page.locator('[data-comment-input]').press('Enter')
+await wait(300)
+const threads = JSON.parse(cli('--json', '--board', board, '--as', 'Claude Code', 'call', 'get_threads', '{}')).threads
+const th = threads.find((t) => t.on?.id === cm)
+check('a person comments on a block and agents read it (get_threads)', th?.text === 'Too vague — cite the interviews', JSON.stringify(th))
+cli('--board', board, '--as', 'Claude Code', 'call', 'reply_thread', JSON.stringify({ thread: th.id, text: 'Added quotes from P3 and P5.' }))
+await wait(400)
+check('agent replies show up live in the thread', (await page.locator('[data-comment-popover]').textContent())?.includes('Added quotes from P3 and P5.'))
+await page.keyboard.press('Escape')
+await wait(150)
+const [mdDl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }).catch(() => null), ed(async (board) => {
+  const { downloadDocument } = await import('/src/lib/export.ts')
+  await downloadDocument(board, 'md')
+}, board)])
+const mdText = mdDl ? fs.readFileSync(await mdDl.path(), 'utf8') : ''
+check('Markdown export downloads a readable document incl. comments', mdText.includes('### Insight: onboarding is slow') && mdText.includes('💬'), mdDl?.suggestedFilename())
+const jsonOut = JSON.parse(cli('--board', board, 'export', '--format', 'json'))
+check('CLI JSON export has blocks, connectors and threads', jsonOut.format === 'aifig-export/1' && jsonOut.blocks.length > 10 && jsonOut.threads.length >= 1)
+
+// built-in assistant: hidden without a provider, works with the mock provider, never writes keys to the board
+const aiMenu = async () => {
+  await ed((id) => window.editor.select([id]), cm)
+  const p = await screenOf(cm)
+  await page.mouse.click(p.x, p.y, { button: 'right' })
+  await wait(250)
+  const v = await page.getByRole('menuitem', { name: 'Extract ideas' }).isVisible().catch(() => false)
+  await page.keyboard.press('Escape')
+  await wait(150)
+  return v
+}
+const cfg = (body) => fetch('http://127.0.0.1:47820/api/assistant/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+await cfg({ provider: null })
+await ed(() => window.dispatchEvent(new Event('aifig:assistant-changed')))
+await wait(300)
+check('assistant commands are hidden without a provider', !(await aiMenu()))
+await cfg({ provider: 'openai', key: 'sk-test-DO-NOT-PERSIST', model: 'x' })
+await cfg({ provider: 'mock' })
+await ed(() => window.dispatchEvent(new Event('aifig:assistant-changed')))
+await wait(300)
+check('assistant commands appear with a provider', await aiMenu())
+const src = await ed(() => {
+  const ed = window.editor
+  const id = ed.createBlock({ kind: 'card', x: 13600, y: 12400, w: 280, h: 120, title: 'Interview P3', text: 'Setup took forever. I wanted templates for research. The agent output looked messy.', color: 'blue', size: 'm' })
+  ed.select([id])
+  return id
+})
+await ed((id) => { const r = window.editor.pageRect(id); window.editor.zoomToBounds({ x: r.x - 200, y: r.y - 200, w: r.w + 800, h: r.h + 400 }, { animate: false }) }, src)
+await wait(250)
+const sp2 = await screenOf(src)
+await page.mouse.click(sp2.x, sp2.y, { button: 'right' })
+await wait(250)
+await page.getByRole('menuitem', { name: 'Extract ideas' }).click()
+await wait(1200)
+const extracted = await ed(() => window.editor.blocks().filter((b) => b.author?.name === 'Assistant' && b.kind === 'sticky').map((b) => b.text))
+check('Extract ideas (mock provider) creates reviewable stickies', extracted.length >= 3 && extracted.some((t) => t.includes('templates')), JSON.stringify(extracted))
+const clusterIds = await ed(() => window.editor.blocks().filter((b) => b.author?.name === 'Assistant' && b.kind === 'sticky').map((b) => b.id))
+await ed((ids) => window.editor.select(ids), clusterIds)
+const cp = await screenOf(clusterIds[0])
+await page.mouse.click(cp.x, cp.y, { button: 'right' })
+await wait(250)
+await page.getByRole('menuitem', { name: 'Cluster into themes' }).click()
+await wait(1200)
+check('Cluster into themes creates a themed frame', await ed(() => window.editor.blocks().some((b) => b.kind === 'frame' && /^Themes \(/.test(b.title ?? ''))))
+await new Promise((r) => setTimeout(r, 600))
+const boardFiles = fs.readdirSync(path.join(process.env.HOME, '.aifig/boards')).map((f) => fs.readFileSync(path.join(process.env.HOME, '.aifig/boards', f)).toString('latin1')).join('')
+check('the API key never reaches board files', !boardFiles.includes('sk-test-DO-NOT-PERSIST'))
+await cfg({ provider: null })
+
 // level of detail + 2,000-block performance
 const many = { blocks: Array.from({ length: 2000 }, (_, i) => ({ text: `Note ${i + 1}`, color: ['yellow', 'blue', 'green', 'pink', 'purple'][i % 5], size: 's' })), layout: 'grid', columns: 50, at: { x: 0, y: 6000 } }
 execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), '--human', '--board', board, 'add', '--from-json', '-'], { input: JSON.stringify(many), encoding: 'utf8' })
