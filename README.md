@@ -96,6 +96,8 @@ use the canvas well. Copy it into `~/.claude/skills/` (or your agent's skills fo
 | Layout | `arrange`, `tidy`, `lint_layout` |
 | Look | `render_snapshot` (PNG or SVG of the board, a frame or specific blocks, rendered headlessly by the core) |
 | Collaborate | `set_status`, `begin_change_set`, `commit_change_set`, `list_change_sets` (incl. per-item rejections and reasons), `get_threads`, `reply_thread`, `resolve_thread` |
+| Types | `list_types`, `set_type` (promote / demote with `none` / update fields), `query_blocks` (by type and field); `create_blocks` accepts `type` + `fields`, `connect` accepts `relation`, `tidy` accepts `by: "type" \| "matrix"` |
+| Web snippets | `create_snippet` (https URL embed, or inline `html` / `css` / `js`), `update_snippet` — both through review |
 | Export | `export_board` (Markdown document or JSON structure) |
 
 Also exposed: resource `aifig://design/tokens` and prompt `layout-best-practices`.
@@ -122,6 +124,13 @@ aifig export --format md -o board.md               # md | json | png | svg (md/j
 aifig status "Clustering interview notes…"
 aifig changes                                      # change sets and their review status
 aifig accept | aifig reject [id] --reason "…"      # review from the terminal
+aifig types                                        # built-in block types and their fields
+aifig add "? why do teams churn" --type question
+aifig set-type <id> hypothesis --status supported  # or: aifig set-type <id> none (fields are kept)
+aifig query --type hypothesis --status unverified
+aifig tidy --frame "Synthesis" --by matrix --field status
+aifig snippet --url https://www.figma.com/proto/…  # or --html @demo.html --css @demo.css --js @demo.js
+aifig snippet-update <id> --js @demo.js
 aifig call <tool> '<json args>'                    # anything in the Canvas API
 ```
 
@@ -163,6 +172,31 @@ screens, one finger pans and two fingers pinch-zoom. The minimap (bottom-left) c
 Far zoom switches to a canvas level of detail, so boards with thousands of blocks stay at 60fps. Dragging snaps to the 8px grid and shows alignment guides against nearby blocks; dropping
 a block into a frame parents it (the frame grows to fit). Selecting blocks shows color and size tokens, plus **Tidy frame** and **Arrange in grid** (both run in the core's
 layout engine, the same one agents use). Light and dark themes are in the top-right corner.
+
+### Typed blocks
+
+Stickies and cards can take a type — **Insight, Question, Quote** (who, source), **Hypothesis** (status, confidence),
+**Idea, Todo** (owner, done) — each with its own token color and icon. Types are optional and never required: press
+`/` on a selection (or type `/` in an empty sticky), use right-click › **Set as…**, or start a sticky with a prefix
+(`?` question, `!` insight, `"` quote, `h:` hypothesis, `idea:`, `[]` todo; switch detection off in Set as…).
+Fields stay collapsed as a one-line summary; click it to edit. Demote to plain at any time — fields are kept and come
+back when you re-promote. The filter bar (top) highlights one type and field values (e.g. unverified hypotheses);
+connectors between typed blocks get a suggested relation (a quote *supports* an insight). Markdown exports are
+organized by type. Types stay small on purpose: anything deeper belongs to Skills.
+
+### Web snippets
+
+The globe in the toolbar (or pasting a YouTube / Figma / CodePen / Loom link) adds a web snippet: an embedded URL or
+an inline HTML/CSS/JS snippet (agents can write these with `create_snippet`). Snippets show a static preview and only
+run when you double-click them; `Esc` or clicking outside stops them, and they pause when idle or off screen.
+
+Sandbox: inline snippets are served by a separate snippet host (`localhost:<core port + 1>`, a different site from
+the app) into `sandbox="allow-scripts"` iframes (opaque origin, credentialless), with a CSP that blocks all network
+(`connect-src 'none'`, no external scripts, images, fonts or frames). They can't reach the board, files or keys; the
+only channel is `aifig.getState()` / `aifig.setState(obj)` for the snippet's own state (≤16 KB).
+`aifig.requestPermission('network' | 'neighbors')` is the hook for v2 grants (denied in v1). A heartbeat watchdog stops
+snippets that hang (endless loops) or use too much memory. URL embeds run as their own origin without top navigation.
+In the desktop app, the window's session also denies permission prompts and navigation for anything that isn't the app.
 
 ## How it fits together
 

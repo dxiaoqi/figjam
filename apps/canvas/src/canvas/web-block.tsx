@@ -72,7 +72,6 @@ function useBridge(
           return reply(f, m.id, web?.state ?? null)
         case 'state:set': {
           if (!cur || !web) return reply(f, m.id, undefined, 'Snippet not found')
-          if (ref.current.readOnly) return reply(f, m.id, true)
           let json: string
           try {
             json = JSON.stringify(m.data ?? null)
@@ -80,6 +79,8 @@ function useBridge(
             return reply(f, m.id, undefined, 'State must be JSON')
           }
           if (new TextEncoder().encode(json).byteLength > SNIPPET_LIMITS.stateBytes) return reply(f, m.id, undefined, `State is limited to ${SNIPPET_LIMITS.stateBytes / 1024} KB`)
+          // preview captures run the snippet read-only: same answers, no side effects
+          if (ref.current.readOnly) return reply(f, m.id, true)
           editor.doc.transact(() => editor.blocksMap.set(cur.id, { ...cur, web: { ...web, state: JSON.parse(json) } }), SNIPPET_ORIGIN)
           return reply(f, m.id, true)
         }

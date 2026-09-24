@@ -32,6 +32,55 @@ export function diffWords(before: string, after: string): DiffPart[] {
   return out
 }
 
+/** Line diff for source code: only changed lines (word-diffed) with one line of context; gaps become “…”. */
+export function diffSource(before: string, after: string): DiffPart[] {
+  const a = before.split('\n')
+  const b = after.split('\n')
+  if (a.length * b.length > 250_000) return diffWords(before, after)
+  const dp = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1))
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
+  type Op = { kind: 'same' | 'add' | 'del'; line: string }
+  const ops: Op[] = []
+  let i = 0
+  let j = 0
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) ops.push({ kind: 'same', line: a[i++] }), j++
+    else if (dp[i + 1][j] >= dp[i][j + 1]) ops.push({ kind: 'del', line: a[i++] })
+    else ops.push({ kind: 'add', line: b[j++] })
+  }
+  while (i < a.length) ops.push({ kind: 'del', line: a[i++] })
+  while (j < b.length) ops.push({ kind: 'add', line: b[j++] })
+  const near = (k: number) => ops.slice(Math.max(0, k - 1), k + 2).some((o) => o.kind !== 'same')
+  const out: DiffPart[] = []
+  const push = (kind: DiffPart['kind'], text: string) => {
+    const last = out[out.length - 1]
+    if (last?.kind === kind) last.text += text
+    else out.push({ kind, text })
+  }
+  let gap = false
+  for (let k = 0; k < ops.length; k++) {
+    const o = ops[k]
+    if (o.kind === 'same') {
+      if (near(k)) {
+        push('same', `${o.line}\n`)
+        gap = false
+      } else if (!gap) {
+        push('same', '…\n')
+        gap = true
+      }
+      continue
+    }
+    const next = ops[k + 1]
+    if (o.kind === 'del' && next?.kind === 'add') {
+      for (const p of diffWords(o.line, next.line)) push(p.kind, p.text)
+      push('same', '\n')
+      k++
+    } else push(o.kind, `${o.line}\n`)
+    gap = false
+  }
+  return out
+}
+
 export type FieldChange =
   | { field: 'text' | 'title' | 'source'; parts: DiffPart[] }
   | { field: 'moved'; dx: number; dy: number }
@@ -46,7 +95,7 @@ export function blockChanges(before: Block, after: Block, frameTitle: (id?: stri
   if (bw && aw) {
     if ((bw.url ?? '') !== (aw.url ?? '')) out.push({ field: 'url', from: bw.url ?? 'inline', to: aw.url ?? 'inline' })
     const src = (w: typeof bw) => (w.mode === 'inline' ? [w.html && `<!-- html -->\n${w.html}`, w.css && `/* css */\n${w.css}`, w.js && `// js\n${w.js}`].filter(Boolean).join('\n') : '')
-    if (src(bw) !== src(aw)) out.push({ field: 'source', parts: diffWords(src(bw), src(aw)) })
+    if (src(bw) !== src(aw)) out.push({ field: 'source', parts: diffSource(src(bw), src(aw)) })
     if ((bw.title ?? '') !== (aw.title ?? '')) out.push({ field: 'title', parts: diffWords(bw.title ?? '', aw.title ?? '') })
     return out
   }
