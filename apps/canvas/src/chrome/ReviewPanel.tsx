@@ -1,11 +1,11 @@
-import { Check, Crosshair, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Crosshair, ListChecks, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { union, type Box } from '@aifig/canvas-engine'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { ChangeSet } from '@aifig/shared'
+import type { Block, ChangeSet, Connector } from '@aifig/shared'
 import { useBoard, useChangeSets } from '../board-context'
 import { useEditor } from '../canvas/editor-context'
 import { callCore } from '../lib/core'
@@ -46,6 +46,45 @@ function summarize(cs: ChangeSet) {
   return parts.join(' · ') || 'No changes'
 }
 
+interface ReviewItem {
+  id: string
+  label: string
+  op: 'create' | 'update' | 'delete'
+}
+
+const snippet = (s?: string) => {
+  const t = (s ?? '').replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim()
+  return t.length > 60 ? `${t.slice(0, 59)}…` : t
+}
+
+/** One reviewable item per block / connector the change set touches. */
+function itemsOf(cs: ChangeSet, editor: ReturnType<typeof useEditor>): ReviewItem[] {
+  const seen = new Map<string, ReviewItem>()
+  for (const e of cs.entries) {
+    if (seen.has(e.id)) continue
+    const cur = (e.target === 'block' ? editor.block(e.id) : editor.connector(e.id)) ?? (e.op !== 'create' ? (e.before as Block | Connector) : undefined)
+    let what = ''
+    if (e.target === 'connector') {
+      const c = cur as Connector | undefined
+      const name = (id?: string | null) => {
+        const b = id ? editor.block(id) : undefined
+        return b ? `“${snippet(b.kind === 'card' || b.kind === 'frame' ? b.title : b.text) || b.kind}”` : 'a point'
+      }
+      what = `connector ${name(c?.from)} → ${name(c?.to)}`
+    } else {
+      const b = cur as Block | undefined
+      const text = b ? snippet(b.kind === 'card' || b.kind === 'frame' ? b.title || b.text : b.text) : ''
+      what = `${b?.kind ?? 'block'}${text ? ` “${text}”` : ''}`
+      if (e.op === 'update' && b?.kind === 'frame') {
+        seen.set(e.id, { id: e.id, op: 'update', label: `Resized frame${text ? ` “${text}”` : ''}` })
+        continue
+      }
+    }
+    seen.set(e.id, { id: e.id, op: e.op, label: `${e.op === 'create' ? 'New' : e.op === 'update' ? 'Edited' : 'Removed'} ${what}` })
+  }
+  return [...seen.values()]
+}
+
 export function ReviewPanel() {
   const editor = useEditor()
   const { boardId } = useBoard()
@@ -72,6 +111,84 @@ export function ReviewPanel() {
     },
     [boardId],
   )
+
+  // ---- item-by-item review (J / K to move, A / R to decide) ----
+  const [itemMode, setItemMode] = useState<{ csId: string; index: number } | null>(null)
+  const [reason, setReason] = useState('')
+  const activeCs = itemMode ? pending.find((c) => c.id === itemMode.csId) : undefined
+  const items = useMemo(() => (activeCs ? itemsOf(activeCs, editor) : []), [activeCs, editor])
+  const index = itemMode ? Math.min(itemMode.index, Math.max(0, items.length - 1)) : 0
+  const current = items[index]
+
+  useEffect(() => {
+    if (itemMode && !activeCs) setItemMode(null)
+  }, [itemMode, activeCs])
+
+  // follow the current item on the canvas
+  useEffect(() => {
+    if (!current) return
+    const b = editor.block(current.id)
+    const c = editor.connector(current.id)
+    let box: Box | null = null
+    if (b) box = editor.visualRect(b.id)
+    else if (c) {
+      const r = editor.connectorRoute(c)
+      box = r ? union(r.points.map((p) => ({ x: p.x, y: p.y, w: 1, h: 1 }))) : null
+    }
+    if (b || c) editor.select([current.id])
+    if (box) editor.zoomToBounds(box, { inset: 200, maxZoom: 1 })
+  }, [current?.id, editor])
+
+  const decideItem = useCallback(
+    async (action: 'accept' | 'reject') => {
+      if (!activeCs || !current) return
+      setBusy(activeCs.id)
+      try {
+        await callCore('review_change_set', { board: boardId, id: activeCs.id, action, items: [current.id], reason: action === 'reject' && reason.trim() ? reason.trim() : undefined })
+        setReason('')
+        if ((document.activeElement as HTMLElement | null)?.dataset.reviewReason) (document.activeElement as HTMLElement).blur()
+        if (items.length <= 1) {
+          toast('Change set reviewed')
+          setItemMode(null)
+        }
+      } catch (e) {
+        toast.error((e as Error).message)
+      } finally {
+        setBusy(null)
+      }
+    },
+    [activeCs, current, boardId, reason, items.length],
+  )
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (t.isContentEditable || t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !t.dataset.reviewReason) || editor.editingId) return
+      if (t.dataset.reviewReason && e.key !== 'Enter' && e.key !== 'Escape') return
+      if (!itemMode) {
+        if (e.key === 'j' && !e.metaKey && !e.ctrlKey && !e.altKey && pending.length) {
+          e.preventDefault()
+          e.stopPropagation()
+          setItemMode({ csId: pending[0].id, index: 0 })
+        }
+        return
+      }
+      const k = e.key.toLowerCase()
+      const handled = ['j', 'k', 'a', 'r', 'escape', 'arrowdown', 'arrowup'].includes(k) || (k === 'enter' && t.dataset.reviewReason)
+      if (!handled || e.metaKey || e.ctrlKey) return
+      e.preventDefault()
+      e.stopPropagation()
+      if (k === 'escape') setItemMode(null)
+      else if (k === 'j' || k === 'arrowdown') setItemMode({ ...itemMode, index: Math.min(index + 1, items.length - 1) })
+      else if (k === 'k' || k === 'arrowup') setItemMode({ ...itemMode, index: Math.max(index - 1, 0) })
+      else if (k === 'a' && e.shiftKey) activeCs && review(activeCs.id, 'accept')
+      else if (k === 'a') decideItem('accept')
+      else if (k === 'r' || k === 'enter') decideItem('reject')
+    }
+    // capture phase: while reviewing, these keys must not reach the canvas shortcuts
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [itemMode, index, items.length, pending, decideItem, review, activeCs, editor])
 
   const locate = (cs: ChangeSet) => {
     const ids = cs.entries.map((e) => e.id).filter((id) => editor.block(id))
@@ -135,7 +252,59 @@ export function ReviewPanel() {
           {pending.length > 5 && <div className="px-2 py-1 text-[11px] text-muted-foreground">+{pending.length - 5} more</div>}
         </div>
       )}
-      {pending.slice(0, 1).map((cs, i) => (
+      {activeCs && current && (
+        <div
+          className="chrome animate-in fade-in rounded-2xl p-3 duration-150"
+          style={{ borderColor: `color-mix(in srgb, ${activeCs.author.color ?? '#6E56CF'} 45%, var(--border))` }}
+          data-review-items
+        >
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <AgentAvatar agent={{ name: activeCs.author.name, color: activeCs.author.color ?? '#6E56CF' }} className="size-5 text-[9px] ring-0" />
+            <span className="min-w-0 flex-1 truncate">
+              <span className="font-medium text-foreground">{activeCs.intent}</span>
+            </span>
+            <span className="tabular-nums" data-review-position>
+              {index + 1} / {items.length}
+            </span>
+          </div>
+          <div className="mt-2.5 flex items-start gap-2">
+            <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', current.op === 'create' ? 'bg-emerald-500' : current.op === 'update' ? 'bg-amber-500' : 'bg-red-500')} />
+            <div className="text-[13px] leading-snug font-medium" data-review-item={current.id}>
+              {current.label}
+            </div>
+          </div>
+          <input
+            data-review-reason="true"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason if you reject (optional — the agent reads it)"
+            className="mt-2.5 h-8 w-full rounded-lg bg-muted/70 px-2.5 text-xs outline-none placeholder:text-muted-foreground/70"
+          />
+          <div className="mt-2 flex items-center gap-1.5">
+            <Button size="icon" variant="ghost" className="size-8" disabled={index === 0} onClick={() => setItemMode({ ...itemMode!, index: index - 1 })} aria-label="Previous item">
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button size="icon" variant="ghost" className="size-8" disabled={index >= items.length - 1} onClick={() => setItemMode({ ...itemMode!, index: index + 1 })} aria-label="Next item">
+              <ChevronRight className="size-4" />
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 flex-1 gap-1.5 text-xs" disabled={!!busy} onClick={() => decideItem('reject')}>
+              <X className="size-3.5" /> Reject <kbd className="ml-auto font-mono text-[10px] text-muted-foreground">R</kbd>
+            </Button>
+            <Button size="sm" className="h-8 flex-1 gap-1.5 text-xs" disabled={!!busy} onClick={() => decideItem('accept')}>
+              <Check className="size-3.5" /> Accept <kbd className="ml-auto font-mono text-[10px] opacity-60">A</kbd>
+            </Button>
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>
+              <kbd className="font-mono">J</kbd>/<kbd className="font-mono">K</kbd> next/previous · <kbd className="font-mono">Esc</kbd> done
+            </span>
+            <button className="font-medium text-foreground hover:underline" onClick={() => review(activeCs.id, 'accept')}>
+              Accept the rest <kbd className="font-mono opacity-60">⇧A</kbd>
+            </button>
+          </div>
+        </div>
+      )}
+      {!activeCs && pending.slice(0, 1).map((cs, i) => (
         <div
           key={cs.id}
           className={cn('chrome animate-in fade-in slide-in-from-bottom-2 rounded-2xl p-3 duration-200', busy === cs.id && 'opacity-60')}
@@ -161,7 +330,14 @@ export function ReviewPanel() {
               <TooltipContent>Show on canvas</TooltipContent>
             </Tooltip>
           </div>
-          <div className="mt-3 flex gap-1.5">
+          <button
+            className="mt-2.5 flex w-full items-center gap-1.5 rounded-lg px-1 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+            onClick={() => setItemMode({ csId: cs.id, index: 0 })}
+          >
+            <ListChecks className="size-3.5" /> Review item by item
+            <kbd className="ml-auto font-mono text-[10px]">J</kbd>
+          </button>
+          <div className="mt-2 flex gap-1.5">
             <Button size="sm" variant="outline" className="h-8 flex-1 gap-1.5 text-xs" disabled={!!busy} onClick={() => review(cs.id, 'reject')}>
               <X className="size-3.5" /> Reject
               {i === 0 && <kbd className="ml-auto font-mono text-[10px] text-muted-foreground">⌥R</kbd>}

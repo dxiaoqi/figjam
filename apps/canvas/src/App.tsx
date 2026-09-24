@@ -143,6 +143,7 @@ export default function App() {
     if (!desktop) return
     return desktop.onMenu((action, payload) => {
       if (action === 'theme') setTheme(payload as ThemePref)
+      else if (action === 'os-theme') setSystem(payload ? 'dark' : 'light')
       else if (action === 'open-board') {
         refreshBoards().then(() => setBoardId(String(payload)))
       } else if (action === 'new-board') createBoardRef.current()

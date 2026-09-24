@@ -289,12 +289,16 @@ async function createWindow() {
     await pushAssistant(readAssistant())
     await win.loadURL(devUrl ?? `${coreUrl}/`)
     win.webContents.send('menu', 'theme', prefs.theme ?? 'system')
+    win.webContents.send('menu', 'os-theme', nativeTheme.shouldUseDarkColors)
   } catch (e) {
     dialog.showErrorBox('ai-figma couldn’t start', String(e.message ?? e))
   }
   const fileArg = process.argv.find((a) => a.endsWith('.aifig'))
   if (fileArg) openFile(path.resolve(fileArg))
 }
+
+// the renderer's prefers-color-scheme doesn't track the OS everywhere (e.g. Linux), so forward it
+nativeTheme.on('updated', () => win?.webContents.send('menu', 'os-theme', nativeTheme.shouldUseDarkColors))
 
 app.on('open-file', (e, file) => {
   e.preventDefault()

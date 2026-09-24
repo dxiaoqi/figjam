@@ -712,7 +712,7 @@ export class Editor {
   }
 
   private stamp<T extends Block | Connector>(value: T, patch: Partial<T>): T {
-    return { ...value, ...patch, updatedAt: Date.now() }
+    return { ...value, ...patch, editedBy: this.options.author, updatedAt: Date.now() }
   }
 
   createBlock(draft: BlockDraft): string {

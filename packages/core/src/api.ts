@@ -88,7 +88,7 @@ class Recorder {
   updateBlock(id: string, patch: Partial<Block>): Block {
     const before = this.board.blocks.get(id)
     if (!before) throw new ToolError(`No block with id "${id}"`)
-    const next: Block = { ...before, ...patch, updatedAt: Date.now() }
+    const next: Block = { ...before, ...patch, editedBy: this.author, updatedAt: Date.now() }
     if (this.changeSet) {
       if (!this.alreadyTracked(id)) this.entries.push({ op: 'update', target: 'block', id, before })
       Object.assign(next, this.pendingFields)
@@ -257,6 +257,8 @@ export class CanvasCore {
         return this.listChangeSets(a)
       case 'review_change_set':
         return this.review(a, caller)
+      case 'undo_changes':
+        return this.undoChanges(a, caller)
       case 'get_threads': {
         const board = this.board(a.board)
         this.presence.touch(caller, { boardId: board.id, autoStatus: 'Reading comments…' })
@@ -905,6 +907,7 @@ export class CanvasCore {
         status: c.status,
         entries: c.entries.length,
         reason: c.resolvedReason,
+        rejectedItems: (c.decisions ?? []).filter((d) => d.action === 'reject').map((d) => d.id),
         createdAt: new Date(c.createdAt).toISOString(),
       })),
     }
@@ -912,26 +915,35 @@ export class CanvasCore {
 
   private review(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
-    const targets =
-      a.id === 'all'
-        ? [...board.changeSets.values()].filter((c) => c.status === 'pending' || c.status === 'open')
-        : [board.changeSets.get(a.id)].filter(Boolean) as ChangeSet[]
+    const live = (c: ChangeSet) => c.status === 'pending' || c.status === 'open'
+    const targets = a.id === 'all' ? [...board.changeSets.values()].filter(live) : ([board.changeSets.get(a.id)].filter(Boolean) as ChangeSet[])
     if (!targets.length) throw new ToolError(a.id === 'all' ? 'Nothing to review' : `No change set "${a.id}"`)
+    const items: Set<string> | null = a.items?.length ? new Set(a.items as string[]) : null
     board.doc.transact(() => {
       for (const cs of targets) {
-        if (cs.status === 'accepted' || cs.status === 'rejected') continue
-        if (a.action === 'accept') this.acceptChangeSet(board, cs)
-        else this.rejectChangeSet(board, cs)
-        board.changeSets.set(cs.id, { ...cs, status: a.action === 'accept' ? 'accepted' : 'rejected', resolvedAt: Date.now(), resolvedReason: a.reason, updatedAt: Date.now() })
-        for (const [k, v] of this.openChangeSets) if (v === cs.id) this.openChangeSets.delete(k)
+        if (!live(cs)) continue
+        const chosen = items ? cs.entries.filter((e) => items.has(e.id)) : cs.entries
+        if (!chosen.length) continue
+        if (a.action === 'accept') this.acceptEntries(board, cs, chosen)
+        else this.revertEntries(board, chosen, new Set(chosen.map((e) => e.id)))
+        const remaining = cs.entries.filter((e) => !chosen.includes(e))
+        const decisions = [...(cs.decisions ?? []), ...[...new Set(chosen.map((e) => e.id))].map((id) => ({ id, action: a.action as 'accept' | 'reject', at: Date.now() }))]
+        const accepted = a.action === 'accept' ? [...(cs.accepted ?? []), ...chosen] : (cs.accepted ?? [])
+        let status: ChangeSet['status'] = cs.status
+        if (!remaining.length) {
+          const acts = new Set(decisions.map((d) => d.action))
+          status = acts.size > 1 ? 'partial' : a.action === 'accept' ? 'accepted' : 'rejected'
+        }
+        board.changeSets.set(cs.id, { ...cs, entries: remaining, decisions, accepted, status, resolvedAt: remaining.length ? cs.resolvedAt : Date.now(), resolvedReason: a.reason ?? cs.resolvedReason, updatedAt: Date.now() })
+        if (!remaining.length) for (const [k, v] of this.openChangeSets) if (v === cs.id) this.openChangeSets.delete(k)
       }
       board.touch()
     }, caller.kind === 'human' ? 'review' : 'api')
-    return { board: board.id, reviewed: targets.map((t) => t.id), action: a.action }
+    return { board: board.id, reviewed: targets.map((t) => t.id), action: a.action, items: a.items ?? null }
   }
 
-  private acceptChangeSet(board: Board, cs: ChangeSet) {
-    for (const e of cs.entries) {
+  private acceptEntries(board: Board, cs: ChangeSet, entries: ChangeEntry[]) {
+    for (const e of entries) {
       if (e.op === 'delete') continue
       const map = (e.target === 'block' ? board.blocks : board.connectors) as any
       const cur = map.get(e.id)
@@ -939,29 +951,65 @@ export class CanvasCore {
     }
   }
 
-  private rejectChangeSet(board: Board, cs: ChangeSet) {
-    for (const e of [...cs.entries].reverse()) {
+  /** Undo entries (newest first). Children of removed frames that aren't being reverted move to the page. */
+  private revertEntries(board: Board, entries: ChangeEntry[], reverting: Set<string>) {
+    for (const e of [...entries].reverse()) {
       if (e.target === 'connector') {
         if (e.op === 'create') board.connectors.delete(e.id)
-        else board.connectors.set(e.id, e.before as Connector)
+        else board.connectors.set(e.id, { ...(e.before as Connector), pending: false, changeSet: null })
         continue
       }
       if (e.op === 'create') {
         const b = board.blocks.get(e.id)
         if (!b) continue
-        // keep anything a human put into a rejected frame
         if (b.kind === 'frame') {
           const fr = board.pageRect(b)
           for (const child of board.childrenOf(b.id)) {
-            if (cs.entries.some((x) => x.id === child.id && x.op === 'create')) continue
+            if (reverting.has(child.id)) continue
             board.blocks.set(child.id, { ...child, parent: null, x: child.x + fr.x, y: child.y + fr.y })
           }
         }
         for (const c of [...board.connectors.values()]) if (c.from === e.id || c.to === e.id) board.connectors.delete(c.id)
         board.blocks.delete(e.id)
       } else {
-        board.blocks.set(e.id, e.before as Block)
+        board.blocks.set(e.id, { ...(e.before as Block), pending: false, changeSet: null })
       }
     }
+  }
+
+  /** Undo an author's (or one change set's) work, including accepted changes, keeping later human edits. */
+  private undoChanges(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    const who = a.author ? String(a.author).toLowerCase() : null
+    const sets = [...board.changeSets.values()].filter((c) => {
+      if (c.status === 'rejected' || c.status === 'undone') return false
+      if (a.change_set) return c.id === a.change_set
+      return who && (c.author.id.toLowerCase() === who || c.author.name.toLowerCase() === who)
+    })
+    if (!sets.length) throw new ToolError(a.change_set ? `No change set "${a.change_set}" to undo` : `No changes by "${a.author}" to undo`)
+    const kept: { id: string; reason: string }[] = []
+    let reverted = 0
+    board.doc.transact(() => {
+      for (const cs of [...sets].sort((p, q) => q.createdAt - p.createdAt)) {
+        const since = cs.resolvedAt ?? cs.updatedAt
+        const touchedByHuman = (id: string) => {
+          const cur = (board.blocks.get(id) ?? board.connectors.get(id)) as Block | Connector | undefined
+          return !!cur && cur.editedBy?.kind === 'human' && cur.updatedAt > since
+        }
+        const all = [...(cs.accepted ?? []), ...cs.entries]
+        const safe = all.filter((e) => {
+          if (e.op !== 'delete' && touchedByHuman(e.id)) {
+            kept.push({ id: e.id, reason: 'edited by a person after it was accepted' })
+            return false
+          }
+          return !(e.op === 'delete' && (board.blocks.has(e.id) || board.connectors.has(e.id)))
+        })
+        this.revertEntries(board, safe, new Set(safe.map((e) => e.id)))
+        reverted += new Set(safe.map((e) => e.id)).size
+        board.changeSets.set(cs.id, { ...cs, entries: [], status: 'undone', undoneAt: Date.now(), undoneBy: caller.name, updatedAt: Date.now() })
+      }
+      board.touch()
+    }, 'review')
+    return { board: board.id, undone: sets.map((s) => s.id), reverted, kept }
   }
 }

@@ -238,8 +238,8 @@ export const toolDefs = {
   },
   list_change_sets: {
     title: 'List change sets',
-    description: 'See your change sets and whether the human accepted or rejected them (with reasons).',
-    input: { board, status: z.enum(['open', 'pending', 'accepted', 'rejected']).optional() },
+    description: 'See your change sets and whether the human accepted, rejected (with reasons), partly accepted or undid them.',
+    input: { board, status: z.enum(['open', 'pending', 'accepted', 'rejected', 'partial', 'undone']).optional() },
   },
   get_design_tokens: {
     title: 'Design tokens',
@@ -257,7 +257,15 @@ export const humanToolDefs = {
       board,
       id: z.string().describe('Change set id, or "all" for every pending change set'),
       action: z.enum(['accept', 'reject']),
+      items: z.array(z.string()).optional().describe('Only these block / connector ids within the change set'),
       reason: z.string().optional(),
+    },
+  },
+  undo_changes: {
+    input: {
+      board,
+      author: z.string().optional().describe('Agent id or name — undo everything it did'),
+      change_set: z.string().optional(),
     },
   },
   rename_board: { input: { board, title: z.string() } },

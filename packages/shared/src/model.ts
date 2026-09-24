@@ -36,6 +36,8 @@ export interface Block {
   /** Fractional z-index from the canvas; optional for agent-created blocks. */
   index?: string
   author?: Author
+  /** Who last edited it (used to keep human edits when undoing an agent). */
+  editedBy?: Author
   /** Pending (suggested) change set this block belongs to. */
   changeSet?: string | null
   pending?: boolean
@@ -56,6 +58,7 @@ export interface Connector {
   fromPoint?: Point | null
   toPoint?: Point | null
   label?: string
+  editedBy?: Author
   /** Routing style; defaults to curved. */
   route?: RouteStyle
   /** Manual waypoints (page space) for elbow routes. */
@@ -72,7 +75,7 @@ export type ChangeEntry =
   | { op: 'update'; target: 'block' | 'connector'; id: string; before: Block | Connector }
   | { op: 'delete'; target: 'block' | 'connector'; id: string; before: Block | Connector }
 
-export type ChangeSetStatus = 'open' | 'pending' | 'accepted' | 'rejected'
+export type ChangeSetStatus = 'open' | 'pending' | 'accepted' | 'rejected' | 'partial' | 'undone'
 
 export interface ChangeSet {
   id: string
@@ -84,6 +87,12 @@ export interface ChangeSet {
   updatedAt: number
   resolvedAt?: number
   resolvedReason?: string
+  /** Per-item review decisions (block / connector ids). */
+  decisions?: { id: string; action: 'accept' | 'reject'; at: number }[]
+  /** Entries that were accepted (kept so accepted work can still be undone by author). */
+  accepted?: ChangeEntry[]
+  undoneAt?: number
+  undoneBy?: string
 }
 
 /** A comment thread attached to a block (`threads` map). */

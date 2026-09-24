@@ -85,6 +85,7 @@ program
   .option('--inside <frame>', 'add inside an existing frame')
   .option('--right-of <id>', 'place right of a block')
   .option('--below <id>', 'place below a block')
+  .option('--at <x,y>', 'explicit top-left position')
   .option('--from-json <file>', 'read a full create_blocks payload from a JSON file ("-" for stdin)')
   .option('-i, --intent <text>', 'why (shown to the reviewer)')
   .action((texts: string[], o) => {
@@ -103,7 +104,8 @@ program
         }
         return { kind: o.kind, text: t, color: o.color, size: o.size }
       })
-      args = { blocks, layout: o.layout, columns: o.columns, frame: o.frame, inside: o.inside, right_of: o.rightOf, below: o.below, intent: o.intent }
+      const at = o.at ? (([x, y]) => ({ x, y }))(String(o.at).split(',').map(Number)) : undefined
+      args = { blocks, layout: o.layout, columns: o.columns, frame: o.frame, inside: o.inside, right_of: o.rightOf, below: o.below, at, intent: o.intent }
     }
     return run('create_blocks', args, (r) => {
       console.log(`✓ added ${r.created.length} block${r.created.length === 1 ? '' : 's'}${r.frame ? ` in frame ${r.frame}` : ''}`)
@@ -277,7 +279,7 @@ program
   .description('call any Canvas API tool with a JSON argument object')
   .action((tool, jsonArg) => run(tool, jsonArg ? JSON.parse(jsonArg) : {}))
 
-program.parseAsync().catch((e) => {
+program.parseAsync(process.argv, { from: 'node' }).catch((e) => {
   console.error(`✗ ${(e as Error).message}`)
   process.exit(1)
 })

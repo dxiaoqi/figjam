@@ -56,13 +56,15 @@
       "target": [
         "AppImage"
       ],
-      "category": "Graphics"
+      "category": "Graphics",
+      "executableName": "ai-figma"
     },
     "win": {
       "target": [
         "nsis"
       ]
     },
-    "npmRebuild": false
+    "npmRebuild": false,
+    "executableName": "ai-figma"
   }
 }
