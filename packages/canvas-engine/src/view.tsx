@@ -37,10 +37,12 @@ interface BlockViewProps {
   selected: boolean
   enterDelay: number | undefined
   accepted: boolean
+  held: boolean
+  settling: boolean
   editor: Editor
 }
 
-const BlockView = memo(function BlockView({ block, def, x, y, w, h, rotation, editing, selected, enterDelay, accepted, editor }: BlockViewProps) {
+const BlockView = memo(function BlockView({ block, def, x, y, w, h, rotation, editing, selected, enterDelay, accepted, held, settling, editor }: BlockViewProps) {
   const Render = def.render
   const cls = [
     'ae-block',
@@ -49,6 +51,8 @@ const BlockView = memo(function BlockView({ block, def, x, y, w, h, rotation, ed
     block.pending ? 'is-pending' : '',
     enterDelay !== undefined ? 'is-entering' : '',
     accepted ? 'is-accepted' : '',
+    held ? 'is-held' : '',
+    settling ? 'is-settling' : '',
     editing ? 'is-editing' : '',
     selected ? 'is-selected' : '',
   ].join(' ')
@@ -610,6 +614,8 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
         selected={editor.selection.has(b.id)}
         enterDelay={editor.entering.get(b.id)}
         accepted={editor.accepted.has(b.id)}
+        held={editor.held.has(b.id)}
+        settling={editor.settling.has(b.id)}
         editor={editor}
       />
     )

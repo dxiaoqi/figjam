@@ -1,5 +1,5 @@
 import { Check, ChevronLeft, ChevronRight, Crosshair, ListChecks, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { union, type Box } from '@aifig/canvas-engine'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import type { Block, ChangeSet, Connector } from '@aifig/shared'
 import { useBoard, useChangeSets } from '../board-context'
 import { useEditor } from '../canvas/editor-context'
 import { callCore } from '../lib/core'
+import { blockChanges, type DiffPart, type FieldChange } from '../lib/diff'
 import { AgentAvatar, useNow } from './TopRight'
 
 function ago(ts: number, now: number) {
@@ -83,6 +84,98 @@ function itemsOf(cs: ChangeSet, editor: ReturnType<typeof useEditor>): ReviewIte
     seen.set(e.id, { id: e.id, op: e.op, label: `${e.op === 'create' ? 'New' : e.op === 'update' ? 'Edited' : 'Removed'} ${what}` })
   }
   return [...seen.values()]
+}
+
+function Parts({ parts }: { parts: DiffPart[] }) {
+  return (
+    <span className="break-words whitespace-pre-wrap">
+      {parts.map((p, i) =>
+        p.kind === 'same' ? (
+          <span key={i}>{p.text}</span>
+        ) : p.kind === 'add' ? (
+          <ins key={i} className="rounded-sm bg-emerald-500/15 text-emerald-800 no-underline dark:text-emerald-300" data-diff="add">
+            {p.text}
+          </ins>
+        ) : (
+          <del key={i} className="rounded-sm bg-red-500/10 text-red-700/80 dark:text-red-300/80" data-diff="del">
+            {p.text}
+          </del>
+        ),
+      )}
+    </span>
+  )
+}
+
+const direction = (dx: number, dy: number) =>
+  [dx ? `${Math.abs(dx)}px ${dx > 0 ? 'right' : 'left'}` : '', dy ? `${Math.abs(dy)}px ${dy > 0 ? 'down' : 'up'}` : ''].filter(Boolean).join(', ')
+
+function ChangeRow({ c }: { c: FieldChange }) {
+  const label = (s: string) => <span className="w-14 shrink-0 text-muted-foreground">{s}</span>
+  switch (c.field) {
+    case 'text':
+    case 'title':
+      return (
+        <div className="flex gap-2" data-diff-field={c.field}>
+          {label(c.field === 'title' ? 'Title' : 'Text')}
+          <Parts parts={c.parts} />
+        </div>
+      )
+    case 'moved':
+      return (
+        <div className="flex gap-2" data-diff-field="moved">
+          {label('Moved')}
+          <span>{direction(c.dx, c.dy)} · ghost shows where it was</span>
+        </div>
+      )
+    default:
+      return (
+        <div className="flex gap-2" data-diff-field={c.field}>
+          {label({ resized: 'Size', color: 'Color', size: 'Scale', rotation: 'Rotation', frame: 'Frame' }[c.field])}
+          <span>
+            <span className="text-muted-foreground line-through">{c.from}</span> → {c.to}
+          </span>
+        </div>
+      )
+  }
+}
+
+/** Before/after for the item under review. */
+function ItemDiff({ cs, id }: { cs: ChangeSet; id: string }) {
+  const editor = useEditor()
+  const entry = cs.entries.find((e) => e.id === id)
+  if (!entry || entry.target !== 'block') return null
+  const frameTitle = (fid?: string | null) => (fid ? editor.block(fid)?.title || 'frame' : 'canvas')
+  let body: ReactNode = null
+  if (entry.op === 'update') {
+    const now = editor.block(id)
+    const first = cs.entries.find((e) => e.id === id && e.op === 'update') as { before: Block } | undefined
+    if (!now || !first) return null
+    const changes = blockChanges(first.before, now, frameTitle)
+    if (!changes.length) return null
+    body = changes.map((c, i) => <ChangeRow key={i} c={c} />)
+  } else if (entry.op === 'delete') {
+    const b = entry.before as Block
+    body = (
+      <div className="flex gap-2">
+        <span className="w-14 shrink-0 text-muted-foreground">Removed</span>
+        <del className="text-red-700/80 dark:text-red-300/80">{snippet(b.kind === 'card' ? `${b.title ?? ''} ${b.text}` : b.text) || b.kind}</del>
+      </div>
+    )
+  } else {
+    const b = editor.block(id)
+    if (!b || (!b.text && !b.title)) return null
+    body = (
+      <div className="flex gap-2">
+        <span className="w-14 shrink-0 text-muted-foreground">Adds</span>
+        <ins className="text-emerald-800 no-underline dark:text-emerald-300">{snippet(b.kind === 'card' ? `${b.title ?? ''} — ${b.text}` : b.text)}</ins>
+      </div>
+    )
+  }
+  return (
+    <div className="mt-2 flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg bg-muted/50 px-2.5 py-2 text-[12px] leading-snug" data-item-diff>
+      {body}
+    </div>
+  )
 }
 
 export function ReviewPanel() {
@@ -273,6 +366,7 @@ export function ReviewPanel() {
               {current.label}
             </div>
           </div>
+          <ItemDiff cs={activeCs} id={current.id} />
           <input
             data-review-reason="true"
             value={reason}

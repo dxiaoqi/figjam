@@ -7,6 +7,7 @@ import {
   center,
   containsBox,
   containsPoint,
+  intersects,
   randomId,
   snapTo,
   union,
@@ -146,6 +147,16 @@ export class Editor {
   /** Blocks added by others (agents) recently, with a stagger delay. */
   entering = new Map<string, number>()
   accepted = new Set<string>()
+  /**
+   * Moves made by others (agents, make-room) near the user's caret or drag, held at their old position
+   * until the user pauses; then they settle in with an animation.
+   */
+  held = new Map<string, { x: number; y: number; by?: Author }>()
+  settling = new Set<string>()
+  /** How long the user must pause before held moves are applied. */
+  holdIdleMs = 1200
+  private lastLocalEdit = 0
+  private holdTimer: ReturnType<typeof setInterval> | null = null
 
   private version = 0
   private listeners = new Set<Listener>()
@@ -170,7 +181,11 @@ export class Editor {
 
     const onBlocks = (e: Y.YMapEvent<Block>, tr: Y.Transaction) => {
       this.docVersion++
-      if (tr.origin !== this.origin) {
+      if (tr.origin === this.origin) {
+        this.lastLocalEdit = Date.now()
+        e.changes.keys.forEach((_c, key) => this.held.delete(key))
+      } else {
+        this.holdRemoteMoves(e)
         let i = 0
         const entering: string[] = []
         const accepted: string[] = []
@@ -211,7 +226,61 @@ export class Editor {
     )
   }
 
+  /** Is the user in the middle of something (typing, dragging) right now? */
+  userBusy() {
+    const it = this.interaction.type
+    if (it === 'move' || it === 'resize' || it === 'rotate' || it === 'connect' || it === 'marquee') return true
+    return Date.now() - this.lastLocalEdit < this.holdIdleMs
+  }
+
+  /** Where the user is working: the block being edited, or what's being dragged, padded. */
+  private focusRegion(): Box | null {
+    const pad = 240
+    const it = this.interaction
+    let r: Box | null = null
+    if (this.editingId) r = this.baseRect(this.editingId)
+    else if ((it.type === 'move' || it.type === 'resize' || it.type === 'rotate') && this.selection.size) r = union([...this.selection].map((id) => this.pageRect(id)).filter(Boolean) as Box[])
+    else if (Date.now() - this.lastLocalEdit < this.holdIdleMs && this.selection.size) r = union([...this.selection].map((id) => this.baseRect(id)).filter(Boolean) as Box[])
+    return r ? { x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, h: r.h + pad * 2 } : null
+  }
+
+  private holdRemoteMoves(e: Y.YMapEvent<Block>) {
+    if (!this.userBusy()) return
+    const region = this.focusRegion()
+    if (!region) return
+    e.changes.keys.forEach((change, key) => {
+      if (change.action === 'delete') return void this.held.delete(key)
+      const old = change.oldValue as Block | undefined
+      const b = this.blocksMap.get(key)
+      if (change.action !== 'update' || !old || !b || b.kind === 'frame') return
+      if ((old.x === b.x && old.y === b.y) || (old.parent ?? null) !== (b.parent ?? null)) return
+      const parent = b.parent ? this.baseRect(b.parent) : null
+      const abs = (v: { x: number; y: number }) => ({ x: v.x + (parent?.x ?? 0), y: v.y + (parent?.y ?? 0), w: b.w, h: b.h })
+      if (key !== this.editingId && !intersects(abs(old), region) && !intersects(abs(b), region)) return
+      if (!this.held.has(key)) this.held.set(key, { x: old.x, y: old.y, by: b.editedBy ?? b.author })
+    })
+    if (this.held.size && !this.holdTimer) {
+      this.holdTimer = setInterval(() => {
+        if (this.userBusy()) return
+        this.releaseHeld()
+      }, 200)
+    }
+  }
+
+  /** Apply held moves now, animating each block from where it was shown to where it is. */
+  releaseHeld() {
+    if (this.holdTimer) clearInterval(this.holdTimer)
+    this.holdTimer = null
+    if (!this.held.size) return
+    const ids = [...this.held.keys()]
+    ids.forEach((id) => this.settling.add(id))
+    this.held.clear()
+    this.bump()
+    this.later(460, () => ids.forEach((id) => this.settling.delete(id)))
+  }
+
   dispose() {
+    if (this.holdTimer) clearInterval(this.holdTimer)
     this.disposers.forEach((d) => d())
     this.timers.forEach((t) => clearTimeout(t))
     this.listeners.clear()
@@ -298,8 +367,9 @@ export class Editor {
     if (!b) return null
     const it = this.interaction
     if (it.type === 'resize' && it.id === id) return it.rect
-    let x = b.x
-    let y = b.y
+    const hold = this.held.get(id)
+    let x = hold ? hold.x : b.x
+    let y = hold ? hold.y : b.y
     if (b.parent) {
       const p = this.pageRect(b.parent)
       if (p) {

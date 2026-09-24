@@ -16,6 +16,8 @@ import { ZoomControls } from '../chrome/ZoomControls'
 import { AgentLayer } from './AgentLayer'
 import { toggleCommentMode } from './comment-prefs'
 import { CommentLayer } from './CommentLayer'
+import { HeldNotice } from './HeldNotice'
+import { ReviewGhosts } from './ReviewGhosts'
 import { EditorContext } from './editor-context'
 import { desktop } from '../lib/desktop'
 import { downloadDocument, downloadSnapshot } from '../lib/export'
@@ -152,8 +154,10 @@ export function BoardCanvas() {
       {editor ? (
         <EditorContext.Provider value={editor}>
           <CanvasView editor={editor} className="aifig-canvas">
+            <ReviewGhosts />
             <AgentLayer />
             <CommentLayer />
+            <HeldNotice />
           </CanvasView>
           <EmptyState />
           <div className="pointer-events-none absolute inset-x-0 top-0 z-[300] flex items-start justify-between">
