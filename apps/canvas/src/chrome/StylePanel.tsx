@@ -20,10 +20,10 @@ export function StylePanel() {
   const { boardId, theme } = useBoard()
   const dark = theme === 'dark'
   const selected = editor.selectedBlocks()
-  const blocks = selected.filter((b) => b.kind !== 'frame')
+  const blocks = selected.filter((b) => b.kind !== 'frame' && b.kind !== 'image')
   const frames = selected.filter((b) => b.kind === 'frame')
   if (editor.interaction.type !== 'idle' && editor.interaction.type !== 'pending') return null
-  if (!blocks.length && !frames.length) return null
+  if (!blocks.length && !frames.length && !(selected.length > 1)) return null
 
   const colored = blocks.filter((b) => b.kind !== 'text')
   const colors = new Set(colored.map((b) => b.color))

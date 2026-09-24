@@ -68,7 +68,7 @@ use the canvas well. Copy it into `~/.claude/skills/` (or your agent's skills fo
 | Group | Tools |
 |---|---|
 | Read | `list_boards`, `get_board` (markdown or JSON outline), `get_design_tokens` |
-| Write | `create_blocks` (layout intents `grid` / `row` / `stack` / `cluster` / `tree`; placement `inside` / `right_of` / `below` / new `frame`), `update_blocks`, `delete_blocks`, `connect` (routing `curved` / `elbow` / `straight`), `update_connectors`, `group_into_frame`, `create_board` |
+| Write | `create_blocks` (layout intents `grid` / `row` / `stack` / `cluster` / `tree`; placement `inside` / `right_of` / `below` / new `frame`), `update_blocks` (incl. `rotation`), `delete_blocks`, `connect` (routing `curved` / `elbow` / `straight`), `update_connectors` (routing, label, elbow `waypoints`), `add_image` (file path, URL or base64 — stored inside the board), `group_into_frame`, `create_board` |
 | Layout | `arrange`, `tidy`, `lint_layout` |
 | Look | `render_snapshot` (PNG or SVG of the board, a frame or specific blocks, rendered headlessly by the core) |
 | Collaborate | `set_status`, `begin_change_set`, `commit_change_set`, `list_change_sets` |
@@ -87,6 +87,9 @@ aifig add "FigJam::Great feel, cloud-first" "tldraw::Best canvas SDK" --kind car
 aifig add --from-json plan.json                    # any create_blocks payload
 aifig connect <fromId> <toId> --label "leads to" --route elbow
 aifig route <connectorId...> --style curved         # curved | elbow | straight
+aifig route <connectorId> --waypoints "400,120;400,480"   # elbow bends (--clear-waypoints to auto-route)
+aifig update <id> --rotate 15
+aifig image ./sketch.png --width 320 --inside "Inspiration"  # or an https:// URL
 aifig tidy --frame "Principles"
 aifig lint
 aifig snapshot -o board.png                        # --dark, --frame, --ids a,b,c, .svg
@@ -121,7 +124,15 @@ review), `--json`.
 Hover a block to get connect handles: drag one onto another block to connect them, or drop it on empty canvas to
 create a connected sticky. With the connector tool (`A`) you can also draw free-floating connectors; drag a selected
 connector's endpoint onto a block to rebind it. Connectors are curved by default and route around blocks; elbow
-routing is orthogonal with obstacle avoidance. Double-click a frame's title (or its empty area) to rename it. On touch
+routing is orthogonal with obstacle avoidance. Drag a frame by its title or header strip; once it's selected, dragging its empty area moves it too (on an
+unselected frame, dragging the empty area draws a marquee). Double-click a frame's title (or its empty area) to
+rename it. Selected blocks get a rotation handle (snaps to 15°, hold ⌥ for free rotation). Selected elbow
+connectors show bend handles: drag a hollow dot to add a bend, drag a bend to move it, double-click it to remove it.
+Connector labels slide along the route to stay clear of blocks. Text in stickies, cards and headings is rich text
+(⌘B, ⌘I, ⌘E for code, ⌘K for links, `- ` / `1. ` for lists) and is stored as Markdown in the board, so agents can
+write it too; ⌘/Ctrl-click opens links. Paste, drop or upload images (toolbar) — they are downscaled if huge,
+stored inside the board file, resize with a locked aspect ratio and appear in exports. On touch screens, long-press
+opens the context menu. On touch
 screens, one finger pans and two fingers pinch-zoom. The minimap (bottom-left) can be toggled and clicked to navigate.
 Far zoom switches to a canvas level of detail, so boards with thousands of blocks stay at 60fps. Dragging snaps to the 8px grid and shows alignment guides against nearby blocks; dropping
 a block into a frame parents it (the frame grows to fit). Selecting blocks shows color and size tokens, plus **Tidy frame** and **Arrange in grid** (both run in the core's
@@ -188,7 +199,7 @@ custom semantic blocks and executable edges are ours to extend. The evaluation i
   canvas level of detail for large boards, export / copy as image, connect handles, undo/redo, clipboard, light/dark themes, double-click and `Tab` sticky flow, empty, loading, offline and error states
 - Layout engine: intents (grid, row, stack, cluster, tree), free-space placement near the user's viewport, frame
   auto-grow, size normalization, tidy, lint (overlap, overflow, outside-frame, off-grid, too many colors)
-- MCP server (stdio) with 18 tools, a tokens resource and a best-practices prompt; CLI with the same surface
+- MCP server (stdio) with 19 tools, a tokens resource and a best-practices prompt; CLI with the same surface
 - Agent presence: identity-colored cursor that glides to where the agent works, status capsule, breathing
   work-area highlight, off-screen indicator, agent list; the agent never moves your viewport
 - Suggestion layer: dashed identity-color outlines and staggered entrance for agent blocks, change set cards with
@@ -203,8 +214,8 @@ custom semantic blocks and executable edges are ours to extend. The evaluation i
 - Per-item review (`J`/`K` stepping, before/after diff, ghosted deletions), undo by change set after acceptance,
   trust levels (auto-accept per agent or frame)
 - Waiting for the user to finish dragging or typing before applying agent layout moves; animated tidy
-- Engine gaps vs tldraw: rotation, touch long-press menu and gesture tuning on real devices, connector labels
-  that avoid blocks, manual waypoints on elbow connectors, rich text, image blocks
+- Engine gaps vs tldraw: rotating frames and multi-selections as a group, rich text in exports (formatting is
+  flattened to plain text), gesture tuning on real touch devices, image cropping, curved-connector waypoints
 - Images, files, shapes, text formatting, export menu in the UI, semantic zoom
 - Skills, execution, sync (Phases 1–3)
 

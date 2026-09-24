@@ -142,17 +142,17 @@ export class InputController {
 
     const screen = this.local(e)
     const page = ed.screenToPage(screen)
-    // Detect double-clicks here: after pointer capture the browser retargets `dblclick` to the canvas.
+    // Detect double-clicks ourselves: after pointer capture the browser retargets `dblclick` to the canvas.
+    // Like native dblclick, it fires on the second release, and only if the pointer didn't move (so a quick
+    // click-then-drag still drags).
     const now = performance.now()
     const last = this.lastDown
     this.lastDown = { t: now, p: screen }
+    this.downScreen = screen
+    this.pendingDouble = null
     if (e.button === 0 && e.pointerType !== 'touch' && last && now - last.t < 380 && Math.hypot(screen.x - last.p.x, screen.y - last.p.y) < 6) {
       this.lastDown = null
-      if (ed.interaction.type !== 'idle') ed.endInteraction()
-      if (this.onDoubleClick(target, page)) {
-        e.preventDefault()
-        return
-      }
+      this.pendingDouble = { target, page }
     }
     this.el.setPointerCapture(e.pointerId)
     this.pointerId = e.pointerId
@@ -301,6 +301,15 @@ export class InputController {
   }
 
   private onPointerUp = (e: PointerEvent) => {
+    const dbl = this.pendingDouble
+    this.pendingDouble = null
+    const up = this.local(e)
+    const still = !this.downScreen || Math.hypot(up.x - this.downScreen.x, up.y - this.downScreen.y) < 4
+    this.handleUp(e)
+    if (dbl && still && e.button === 0) this.onDoubleClick(dbl.target, dbl.page)
+  }
+
+  private handleUp(e: PointerEvent) {
     const ed = this.editor
     if (this.pointerId !== null && this.el.hasPointerCapture(this.pointerId)) this.el.releasePointerCapture(this.pointerId)
     this.pointerId = null
@@ -378,6 +387,8 @@ export class InputController {
   }
 
   private lastDown: { t: number; p: Vec } | null = null
+  private downScreen: Vec | null = null
+  private pendingDouble: { target: HTMLElement; page: Vec } | null = null
 
   /** Returns true when the double-click was handled. */
   private onDoubleClick(target: HTMLElement, page: Vec): boolean {

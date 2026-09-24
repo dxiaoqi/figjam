@@ -156,6 +156,8 @@ export function RichEditor(props: {
     autofocus: props.autoFocus === false ? false : 'end',
     editorProps: {
       attributes: { class: cn('aifig-rich', props.className), spellcheck: 'false' },
+      // blocks grow to fit instead of scrolling their clipped content
+      handleScrollToSelection: () => true,
       handleKeyDown: (_view, event) => {
         if (event.isComposing) return false
         if (event.key === 'Tab' && onTab.current && !event.shiftKey && !tiptap?.isActive('listItem')) {
@@ -177,6 +179,14 @@ export function RichEditor(props: {
   const hostRef = useRef<HTMLDivElement>(null)
   const [blockEl, setBlockEl] = useState<HTMLElement | null>(null)
   useLayoutEffect(() => setBlockEl(hostRef.current?.closest<HTMLElement>('.ae-block') ?? null), [])
+  // e.g. Enter in a card title moves the caret to the end of the body
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host || !tiptap) return
+    const focusEnd = () => tiptap.commands.focus('end')
+    host.addEventListener('aifig-focus-end', focusEnd)
+    return () => host.removeEventListener('aifig-focus-end', focusEnd)
+  }, [tiptap])
   if (!tiptap) return null
   return (
     <>

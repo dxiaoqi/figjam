@@ -487,8 +487,9 @@ await page.mouse.move(rh.x + rh.width / 2, rh.y + rh.height / 2)
 await page.mouse.down()
 const ang = (40 * Math.PI) / 180
 const rad = Math.hypot(rh.x + rh.width / 2 - tc.x, rh.y + rh.height / 2 - tc.y)
+const a0 = Math.atan2(rh.y + rh.height / 2 - tc.y, rh.x + rh.width / 2 - tc.x)
 for (let i = 1; i <= 8; i++) {
-  const a = -Math.PI / 2 + (ang * i) / 8
+  const a = a0 + (ang * i) / 8
   await page.mouse.move(tc.x + Math.cos(a) * rad, tc.y + Math.sin(a) * rad)
 }
 await page.mouse.up()

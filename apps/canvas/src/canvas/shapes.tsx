@@ -101,15 +101,36 @@ function Sticky({ block, editing, editor }: BlockRenderProps) {
 
 function Card({ block, editing, editor }: BlockRenderProps) {
   const titleRef = useFocusOnMount<HTMLInputElement>(editing)
+  const boxRef = useRef<HTMLDivElement>(null)
+  // grow to the rendered height while editing (the estimate can't know every line break)
+  useLayoutEffect(() => {
+    const el = boxRef.current
+    if (!editing || !el) return
+    const need = snapUp(el.scrollHeight)
+    if (need > block.h && need < 4000) editor.updateBlock(block.id, { h: need })
+  }, [editing, block.text, block.title, block.w])
   const update = (patch: Partial<Block>) => {
     const next = { ...block, ...patch }
     editor.updateBlock(block.id, { ...patch, h: cardHeight(next.title ?? '', next.text, block.w) })
   }
   return (
-    <div className="aifig-card">
+    <div className="aifig-card" ref={boxRef}>
       {editing ? (
         <>
-          <input ref={titleRef} className="title" value={block.title ?? ''} placeholder="Title" onChange={(e) => update({ title: e.target.value })} />
+          <input
+            ref={titleRef}
+            className="title"
+            value={block.title ?? ''}
+            placeholder="Title"
+            onChange={(e) => update({ title: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return
+              if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                e.preventDefault()
+                e.currentTarget.closest('.ae-block')?.querySelector('.aifig-rich-host')?.dispatchEvent(new Event('aifig-focus-end'))
+              }
+            }}
+          />
           <RichEditor engine={editor} className="body" autoFocus={false} value={block.text} placeholder="Details…" onChange={(text) => update({ text })} />
         </>
       ) : (

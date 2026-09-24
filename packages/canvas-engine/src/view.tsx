@@ -352,7 +352,7 @@ function Overlay({ editor }: { editor: Editor }) {
           const s = toScreen(editor, editor.pageRect(single.id)!)
           const rot = editor.rotationOf(single.id)
           const c = { x: s.x + s.w / 2, y: s.y + s.h / 2 }
-          const p = rotatePoint({ x: c.x, y: s.y - 26 }, c, rot)
+          const p = rotatePoint({ x: s.x + s.w + 16, y: s.y - 16 }, c, rot)
           return <div data-rotate={single.id} className="ae-rotate-handle" title="Rotate (snaps to 15°, hold ⌥ for free)" style={{ transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%)` }} />
         })()}
       {it.type === 'rotate' &&

@@ -386,3 +386,10 @@
   font-size: 12px;
   color: var(--muted-c);
 }
+
+/* card bodies size to their content so the card can grow to fit */
+.aifig-card .aifig-rich-host,
+.aifig-card .aifig-rich-host .ProseMirror {
+  height: auto;
+  min-height: 1.45em;
+}
