@@ -1,4 +1,4 @@
-import { Frame, Hand, ImagePlus, MousePointer2, PanelTop, Spline, StickyNote, Type, type LucideIcon } from 'lucide-react'
+import { Frame, Hand, ImagePlus, MessageCircle, MousePointer2, PanelTop, Spline, StickyNote, Type, type LucideIcon } from 'lucide-react'
 import { useRef } from 'react'
 import { toast } from 'sonner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { COLOR_TOKENS, COLORS } from '@aifig/shared'
 import { useBoard } from '../board-context'
 import { useEditorState } from '../canvas/editor-context'
+import { toggleCommentMode, useCommentPrefs } from '../canvas/comment-prefs'
 import { importImages, nextColor, useNextColor } from '../canvas/shapes'
 
 const TOOLS: { id: string; label: string; kbd: string; icon: LucideIcon }[] = [
@@ -25,6 +26,7 @@ export function Toolbar() {
   const current = editor.tool
   const showColors = current === 'sticky' || current === 'card'
   const fileRef = useRef<HTMLInputElement>(null)
+  const { mode: commentMode } = useCommentPrefs()
   const onPick = async (files: FileList | null) => {
     const list = [...(files ?? [])].filter((f) => f.type.startsWith('image/'))
     if (!list.length) return
@@ -91,6 +93,30 @@ export function Toolbar() {
             </button>
           </TooltipTrigger>
           <TooltipContent side="top">Image — or paste / drop one on the canvas</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              aria-label="Comments"
+              aria-pressed={commentMode}
+              data-comment-ui
+              data-comment-toggle
+              onClick={() => {
+                if (!commentMode && editor.tool !== 'select') editor.setTool('select')
+                toggleCommentMode()
+              }}
+              className={cn(
+                'flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+                commentMode && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground',
+              )}
+            >
+              <MessageCircle className="size-[18px]" strokeWidth={1.75} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="flex items-center gap-2">
+            Comments
+            <kbd className="rounded bg-background/20 px-1.5 font-mono text-[10px]">M</kbd>
+          </TooltipContent>
         </Tooltip>
         <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => onPick(e.target.files)} />
       </div>

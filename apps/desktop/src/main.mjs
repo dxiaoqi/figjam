@@ -249,6 +249,7 @@ function buildMenu() {
         { label: 'Zoom to 100%', accelerator: 'CmdOrCtrl+0', click: send('zoom-100') },
         { label: 'Zoom to Fit', accelerator: 'Shift+1', click: send('zoom-fit') },
         { type: 'separator' },
+        { label: 'Comment Mode', accelerator: 'M', registerAccelerator: false, click: send('toggle-comments') },
         { label: 'Toggle Minimap', click: send('toggle-minimap') },
         {
           label: 'Appearance',

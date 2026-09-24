@@ -14,6 +14,7 @@ import { Toolbar } from '../chrome/Toolbar'
 import { TopRight } from '../chrome/TopRight'
 import { ZoomControls } from '../chrome/ZoomControls'
 import { AgentLayer } from './AgentLayer'
+import { toggleCommentMode } from './comment-prefs'
 import { CommentLayer } from './CommentLayer'
 import { EditorContext } from './editor-context'
 import { desktop } from '../lib/desktop'
@@ -133,6 +134,8 @@ export function BoardCanvas() {
           return editor.resetZoom()
         case 'zoom-fit':
           return editor.zoomToFit()
+        case 'toggle-comments':
+          return toggleCommentMode()
         case 'toggle-minimap':
           return window.dispatchEvent(new Event('aifig:toggle-minimap'))
         case 'assistant-settings':

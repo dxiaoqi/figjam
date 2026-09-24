@@ -112,6 +112,8 @@ export interface Thread {
   resolved: boolean
   resolvedAt?: number
   replies: ThreadMessage[]
+  /** Where the pin sits on the target, as fractions of its unrotated rect. Default: top-right corner. */
+  anchor?: { x: number; y: number }
 }
 
 /** Binary asset stored inside the board document (`assets` map). */

@@ -300,6 +300,27 @@
   --ae-connector: #6b6b73;
   --ae-grid-dot: rgb(255 255 255 / 0.08);
 }
+/* comment mode: a comment cursor everywhere on the canvas, and a quiet hover ring on the block that would get the pin */
+html[data-comment-mode] .aifig-canvas,
+html[data-comment-mode] .aifig-canvas * {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cpath d='M3 23V12a9 9 0 1 1 9 9H3z' fill='%23fff' stroke='%231c1917' stroke-width='1.6' stroke-linejoin='round'/%3E%3Ccircle cx='8.5' cy='12' r='1.2' fill='%231c1917'/%3E%3Ccircle cx='12' cy='12' r='1.2' fill='%231c1917'/%3E%3Ccircle cx='15.5' cy='12' r='1.2' fill='%231c1917'/%3E%3C/svg%3E")
+      3 23,
+    crosshair !important;
+}
+html[data-comment-mode] .aifig-canvas [data-block-id]:hover {
+  outline: 2px solid color-mix(in srgb, var(--ae-accent) 55%, transparent);
+  outline-offset: 2px;
+}
+html[data-comment-mode] .aifig-canvas [data-thread],
+html[data-comment-mode] .aifig-canvas [data-comment-popover] button,
+html[data-comment-mode] .aifig-canvas [data-comment-sidebar] button,
+html[data-comment-mode] .aifig-canvas [data-comment-ui] button {
+  cursor: pointer !important;
+}
+html[data-comment-mode] .aifig-canvas [data-comment-popover] textarea {
+  cursor: text !important;
+}
 .aifig-canvas textarea::placeholder,
 .aifig-canvas input::placeholder {
   color: currentColor;

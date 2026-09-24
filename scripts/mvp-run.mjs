@@ -130,6 +130,8 @@ note('person commented on “Onboarding is slow”')
 await sleep(600)
 await shot('04-person-comments.png')
 await page.keyboard.press('Escape')
+await sleep(200)
+await page.keyboard.press('Escape')
 await sleep(400)
 
 // 4. the agent reads the feedback and revises
