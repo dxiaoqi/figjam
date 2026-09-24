@@ -37,6 +37,14 @@ check('desktop window opens the canvas', (await win.title()).includes('ai-figma'
 const menus = await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.map((i) => i.label))
 check('native menus', ['File', 'Edit', 'View'].every((m) => menus.includes(m)), menus.join(', '))
 check('preload bridge is available', await win.evaluate(() => !!window.aifigDesktop))
+const commentModeOn = () => win.evaluate(() => document.documentElement.hasAttribute('data-comment-mode'))
+const clickCommentMode = () => app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.find((i) => i.label === 'View').submenu.items.find((i) => i.label === 'Comment Mode').click())
+await clickCommentMode()
+await win.waitForTimeout(300)
+const commentOn = await commentModeOn()
+await clickCommentMode()
+await win.waitForTimeout(300)
+check('View ▸ Comment Mode toggles comment mode', commentOn && !(await commentModeOn()))
 
 // OS appearance
 await app.evaluate(({ nativeTheme }) => (nativeTheme.themeSource = 'dark'))
