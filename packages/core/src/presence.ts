@@ -13,7 +13,7 @@ export function identify(caller: CallerInfo) {
   const known = KNOWN.find((k) => k.match.test(caller.client) || k.match.test(caller.name))
   if (known) return { name: caller.name && !/^(mcp|agent)$/i.test(caller.name) ? caller.name : known.name, color: known.color }
   let h = 0
-  for (const ch of caller.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  for (const ch of `${caller.client}|${caller.name}`) h = (h * 31 + ch.charCodeAt(0)) >>> 0
   return { name: caller.name || 'Agent', color: AGENT_COLORS[h % AGENT_COLORS.length] }
 }
 
