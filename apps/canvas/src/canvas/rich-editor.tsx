@@ -156,8 +156,17 @@ export function RichEditor(props: {
     autofocus: props.autoFocus === false ? false : 'end',
     editorProps: {
       attributes: { class: cn('aifig-rich', props.className), spellcheck: 'false' },
-      // blocks grow to fit instead of scrolling their clipped content
-      handleScrollToSelection: () => true,
+      // blocks grow to fit; past their max height only the block's own scroller follows the caret (never the page)
+      handleScrollToSelection: (view) => {
+        const box = view.dom.closest<HTMLElement>('[data-scroll]')
+        if (!box || box.scrollHeight <= box.clientHeight) return true
+        const caret = view.coordsAtPos(view.state.selection.head)
+        const r = box.getBoundingClientRect()
+        const k = r.height / box.offsetHeight || 1
+        if (caret.bottom > r.bottom - 8 * k) box.scrollTop += (caret.bottom - r.bottom) / k + 16
+        else if (caret.top < r.top + 8 * k) box.scrollTop -= (r.top - caret.top) / k + 16
+        return true
+      },
       handleKeyDown: (_view, event) => {
         if (event.isComposing) return false
         if (event.key === 'Tab' && onTab.current && !event.shiftKey && !tiptap?.isActive('listItem')) {

@@ -9,6 +9,8 @@ export interface Author {
   id: string
   name: string
   color?: string
+  /** MCP client name (e.g. "claude-code"); ids are per session, so this plus `name` identifies the agent across sessions. */
+  client?: string
 }
 
 /**
@@ -31,6 +33,10 @@ export interface Block {
   size: SizeToken
   /** Degrees clockwise around the block center. */
   rotation?: number
+  /** Rendered height the content needs (reported by the canvas, which measures real layout). */
+  contentH?: number
+  /** Long content shown in full instead of collapsed behind "Show more". */
+  expanded?: boolean
   /** Image blocks: id of an entry in the board's `assets` map. */
   asset?: string
   /** Fractional z-index from the canvas; optional for agent-created blocks. */

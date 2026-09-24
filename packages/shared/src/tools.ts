@@ -265,7 +265,16 @@ export const humanToolDefs = {
     input: {
       board,
       author: z.string().optional().describe('Agent id or name — undo everything it did'),
+      authors: z.array(z.string()).optional().describe('Author ids (all sessions of one agent)'),
       change_set: z.string().optional(),
+    },
+  },
+  report_layout: {
+    input: {
+      board,
+      items: z
+        .array(z.object({ id: z.string(), content_h: z.number().optional(), expanded: z.boolean().optional() }))
+        .describe('Measured content heights from the canvas, and expand/collapse toggles'),
     },
   },
   rename_board: { input: { board, title: z.string() } },

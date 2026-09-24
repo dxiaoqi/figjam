@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
-import { imageInfo, measureSticky } from '@aifig/shared'
+import { fitHeight, imageInfo, maxBlockHeight, measureSticky, stickyContentHeight } from '@aifig/shared'
 import {
   SPACING,
   snap,
@@ -259,6 +259,8 @@ export class CanvasCore {
         return this.review(a, caller)
       case 'undo_changes':
         return this.undoChanges(a, caller)
+      case 'report_layout':
+        return this.reportLayout(a)
       case 'get_threads': {
         const board = this.board(a.board)
         this.presence.touch(caller, { boardId: board.id, autoStatus: 'Reading comments…' })
@@ -326,7 +328,7 @@ export class CanvasCore {
   private author(caller: CallerInfo): Author {
     if (caller.kind === 'human') return { kind: 'human', id: caller.id, name: caller.name }
     const id = identify(caller)
-    return { kind: 'agent', id: caller.id, name: id.name, color: this.presence.colorFor(caller) }
+    return { kind: 'agent', id: caller.id, name: id.name, color: this.presence.colorFor(caller), client: caller.client }
   }
 
   /** Run edits inside one Yjs transaction, grouped into a change set for agents. */
@@ -381,6 +383,49 @@ export class CanvasCore {
     if (w !== f.w || h !== f.h) rec.updateBlock(frameId, { w, h })
   }
 
+  /** Make room: when a block grows, push the siblings stacked below it down by the same amount. */
+  private makeRoom(board: Board, cur: Block, w: number, grow: number, skip: Set<string>, move: (id: string, y: number) => void) {
+    if (grow <= 0) return
+    for (const s of board.childrenOf(cur.parent ?? null)) {
+      if (s.id === cur.id || skip.has(s.id) || s.kind === 'frame') continue
+      if (s.y >= cur.y + cur.h - 1 && s.x < cur.x + w && s.x + s.w > cur.x) move(s.id, snap(s.y + grow + 7))
+    }
+  }
+
+  /**
+   * The canvas measures real rendered content (fonts, wrapping, lists, code) and reports it here, so layout,
+   * make-room and lint use true heights. Not an edit: no change set, no author, not undoable.
+   */
+  private reportLayout(a: Args) {
+    const board = this.board(a.board)
+    const updated: string[] = []
+    const frames = new Set<string>()
+    board.doc.transact(() => {
+      for (const it of a.items as { id: string; content_h?: number; expanded?: boolean }[]) {
+        const cur = board.blocks.get(it.id)
+        if (!cur || !['card', 'sticky', 'text'].includes(cur.kind)) continue
+        const expanded = it.expanded ?? cur.expanded ?? false
+        const contentH = it.content_h != null ? Math.round(it.content_h) : cur.contentH
+        const h = contentH != null ? fitHeight(cur.kind, cur.w, contentH, expanded) : cur.h
+        if (h === cur.h && contentH === cur.contentH && expanded === !!cur.expanded) continue
+        board.blocks.set(cur.id, { ...cur, h, contentH, expanded: expanded || undefined })
+        this.makeRoom(board, cur, cur.w, h - cur.h, new Set(updated), (id, y) => board.blocks.set(id, { ...board.blocks.get(id)!, y }))
+        updated.push(cur.id)
+        if (cur.parent) frames.add(cur.parent)
+      }
+      for (const fid of frames) {
+        const f = board.blocks.get(fid)
+        const kids = board.childrenOf(fid)
+        if (!f || !kids.length) continue
+        const w = snap(Math.max(f.w, Math.max(...kids.map((k) => k.x + k.w)) + PAD))
+        const h = snap(Math.max(f.h, Math.max(...kids.map((k) => k.y + k.h)) + PAD))
+        if (w !== f.w || h !== f.h) board.blocks.set(fid, { ...f, w, h })
+      }
+      if (updated.length) board.touch()
+    }, 'layout')
+    return { board: board.id, updated }
+  }
+
   private siblingsRects(board: Board, parent: string | null, exclude: Set<string> = new Set()) {
     return board
       .childrenOf(parent)
@@ -410,7 +455,8 @@ export class CanvasCore {
     }
     const line = (b: Block) => {
       const body = b.kind === 'card' ? `**${preview(b.title, 60)}** — ${preview(b.text, 100)}` : `"${preview(b.text, 100)}"`
-      const flags = [b.kind === 'image' ? '' : b.color, b.size !== 'm' && b.kind !== 'image' ? `size ${b.size}` : '', b.rotation ? `rotated ${b.rotation}°` : '', b.pending ? 'pending review' : ''].filter(Boolean).join(', ')
+      const collapsed = b.contentH != null && b.contentH > b.h + 4 && b.h >= maxBlockHeight(b.kind, b.w, b.expanded) - 8
+      const flags = [b.kind === 'image' ? '' : b.color, b.size !== 'm' && b.kind !== 'image' ? `size ${b.size}` : '', b.rotation ? `rotated ${b.rotation}°` : '', b.pending ? 'pending review' : '', collapsed ? `long: collapsed, full height ${b.contentH}px` : ''].filter(Boolean).join(', ')
       return `- ${b.kind} ${body} [${flags}] (id: ${b.id}, ${b.x},${b.y} ${b.w}×${b.h})`
     }
     const out: string[] = []
@@ -477,7 +523,8 @@ export class CanvasCore {
     if (stickies.length > 1) {
       const side = Math.max(...stickies.map((d) => d.w))
       const sz = stickies.find((d) => d.w === side)!.size
-      for (const d of stickies) Object.assign(d, { w: side, h: side, size: sz })
+      const h = Math.max(...stickies.map((d) => fitHeight('sticky', side, stickyContentHeight(d.text, side))))
+      for (const d of stickies) Object.assign(d, { w: side, h, size: sz })
     }
     const cards = drafts.filter((d) => d.kind === 'card')
     if (cards.length > 1) {
@@ -601,28 +648,21 @@ export class CanvasCore {
         if (u.y !== undefined) patch.y = snap(u.y)
         if (u.rotation !== undefined) patch.rotation = ((Math.round(u.rotation) % 360) + 360) % 360
         const merged = { ...cur, ...patch }
-        if (cur.kind === 'sticky' && (patch.text !== undefined || patch.size !== undefined)) {
-          const m = measureSticky(merged.text, merged.size)
-          Object.assign(patch, { w: Math.max(m.w, patch.size ? 0 : cur.w), h: Math.max(m.h, patch.size ? 0 : cur.h), size: m.size })
-        } else if (cur.kind === 'card' || cur.kind === 'text') {
-          if (patch.text !== undefined || patch.title !== undefined || patch.size !== undefined) {
-            const m = measureBlock(merged)
-            patch.w = m.w
-            patch.h = cur.kind === 'card' ? Math.max(m.h, patch.size ? 0 : Math.min(cur.h, m.h + 64)) : m.h
-          }
+        const contentChanged = patch.text !== undefined || patch.title !== undefined || patch.size !== undefined
+        if (contentChanged) patch.contentH = undefined
+        if (cur.kind === 'sticky' && contentChanged) {
+          const m = measureSticky(merged.text, merged.size, cur.expanded)
+          const w = Math.max(m.w, patch.size ? 0 : cur.w)
+          Object.assign(patch, { w, h: w === m.w ? m.h : fitHeight('sticky', w, m.contentH, cur.expanded), size: m.size })
+        } else if ((cur.kind === 'card' || cur.kind === 'text') && contentChanged) {
+          const m = measureBlock(merged)
+          patch.w = m.w
+          patch.h = m.h
         }
         rec.updateBlock(u.id, patch)
         updated.push(u.id)
         if (cur.parent) frames.add(cur.parent)
-        // make room: when a block grows, push the siblings stacked below it down by the same amount
-        const grow = (patch.h ?? cur.h) - cur.h
-        if (grow > 0) {
-          const w = patch.w ?? cur.w
-          for (const s of board.childrenOf(cur.parent ?? null)) {
-            if (s.id === cur.id || updated.includes(s.id) || s.kind === 'frame') continue
-            if (s.y >= cur.y + cur.h - 1 && s.x < cur.x + w && s.x + s.w > cur.x) rec.updateBlock(s.id, { y: snap(s.y + grow + 7) })
-          }
-        }
+        this.makeRoom(board, cur, patch.w ?? cur.w, (patch.h ?? cur.h) - cur.h, new Set(updated), (id, y) => rec.updateBlock(id, { y }))
       }
       for (const f of frames) this.fitFrame(rec, board, f)
       return updated
@@ -996,9 +1036,10 @@ export class CanvasCore {
     const sets = [...board.changeSets.values()].filter((c) => {
       if (c.status === 'rejected' || c.status === 'undone') return false
       if (a.change_set) return c.id === a.change_set
+      if (Array.isArray(a.authors)) return (a.authors as string[]).includes(c.author.id)
       return who && (c.author.id.toLowerCase() === who || c.author.name.toLowerCase() === who)
     })
-    if (!sets.length) throw new ToolError(a.change_set ? `No change set "${a.change_set}" to undo` : `No changes by "${a.author}" to undo`)
+    if (!sets.length) throw new ToolError(a.change_set ? `No change set "${a.change_set}" to undo` : `No changes by "${a.author ?? 'that agent'}" to undo`)
     const kept: { id: string; reason: string }[] = []
     let reverted = 0
     board.doc.transact(() => {

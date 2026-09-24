@@ -369,6 +369,8 @@ export class InputController {
   private onWheel = (e: WheelEvent) => {
     const ed = this.editor
     if ((e.target as HTMLElement).closest('[data-ui]')) return
+    const scroller = (e.target as HTMLElement).closest<HTMLElement>('[data-scroll]')
+    if (scroller && scroller.scrollHeight > scroller.clientHeight && !e.ctrlKey && !e.metaKey) return
     if (ed.editingId && (e.target as HTMLElement).closest('textarea')) {
       const ta = (e.target as HTMLElement).closest('textarea')!
       if (ta.scrollHeight > ta.clientHeight) return

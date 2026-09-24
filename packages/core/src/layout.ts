@@ -1,6 +1,6 @@
 import type { Block, Rect } from '@aifig/shared'
 import { SPACING, snap } from '@aifig/shared'
-import { stickyFontSize, textBlockHeight, measureCard, measureText } from '@aifig/shared'
+import { cardContentHeight, maxBlockHeight, richTextHeight, stickyContentHeight, measureCard, measureText } from '@aifig/shared'
 import { FONT_SIZES } from '@aifig/shared'
 
 export type LayoutIntent = 'grid' | 'row' | 'stack' | 'cluster' | 'tree'
@@ -213,10 +213,10 @@ export function findFreeSpot(occupied: Rect[], size: { w: number; h: number }, v
 
 // ---- measurement ----------------------------------------------------------
 
-export function measureBlock(b: Pick<Block, 'kind' | 'text' | 'title' | 'size' | 'w' | 'h'>): { w: number; h: number } {
+export function measureBlock(b: Pick<Block, 'kind' | 'text' | 'title' | 'size' | 'w' | 'h'> & { expanded?: boolean }): { w: number; h: number } {
   switch (b.kind) {
     case 'card':
-      return measureCard(b.title ?? '', b.text ?? '', b.size)
+      return measureCard(b.title ?? '', b.text ?? '', b.size, b.expanded)
     case 'text':
       return measureText(b.text ?? '', b.size)
     default:
@@ -282,18 +282,12 @@ export interface LintIssue {
   message: string
 }
 
-function estimatedContentHeight(b: Block) {
-  const pad = SPACING.blockPadding
-  if (b.kind === 'sticky') {
-    const fs = stickyFontSize(b.text, b.w)
-    return textBlockHeight(b.text, b.w - pad * 2, fs) + pad * 2
-  }
-  if (b.kind === 'card') {
-    return measureCard(b.title ?? '', b.text ?? '', b.size).h
-  }
-  if (b.kind === 'text') {
-    return textBlockHeight(b.text, b.w - 8, FONT_SIZES[b.size], b.size === 'l' || b.size === 'xl')
-  }
+/** Height the content needs: the canvas-measured value when known, else a Markdown-aware estimate. */
+export function contentHeight(b: Block) {
+  if (b.contentH != null) return b.contentH
+  if (b.kind === 'sticky') return stickyContentHeight(b.text, b.w)
+  if (b.kind === 'card') return cardContentHeight(b.title ?? '', b.text ?? '', b.w)
+  if (b.kind === 'text') return richTextHeight(b.text, b.w - 8, FONT_SIZES[b.size], b.size === 'l' || b.size === 'xl')
   return 0
 }
 
@@ -319,9 +313,10 @@ export function lintBlocks(all: Block[], scope: Block[], label: (b: Block) => st
   const frames = new Map(all.filter((b) => b.kind === 'frame').map((f) => [f.id, f]))
   for (const b of scope) {
     if (b.kind !== 'frame') {
-      const need = estimatedContentHeight(b)
-      if (need > b.h + 4) {
-        issues.push({ severity: 'warning', rule: 'text-overflow', ids: [b.id], message: `${label(b)} text likely overflows (needs ~${Math.round(need)}px, has ${b.h}px). Shorten it or use size "l".` })
+      // content taller than the block is fine once it's at its max height (it collapses behind "Show more"); below that it's clipped
+      const need = contentHeight(b)
+      if (need > b.h + 4 && b.h < maxBlockHeight(b.kind, b.w, b.expanded) - 8) {
+        issues.push({ severity: 'warning', rule: 'text-overflow', ids: [b.id], message: `${label(b)} text is clipped (needs ~${Math.round(need)}px, has ${b.h}px). Let it grow or shorten it.` })
       }
       if (!b.text?.trim() && !b.title?.trim()) {
         issues.push({ severity: 'warning', rule: 'empty-block', ids: [b.id], message: `${label(b)} is empty` })

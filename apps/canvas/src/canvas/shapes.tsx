@@ -1,24 +1,28 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
 import { randomId, snapTo, type BlockDraft, type BlockRenderProps, type Editor, type ShapeDef, type Vec } from '@aifig/canvas-engine'
 import {
-  CARD_ACCENT,
-  CARD_BODY_SIZE,
-  CARD_TITLE_SIZE,
+  cardContentHeight,
+  fitHeight,
   FONT_SIZES,
+  maxBlockHeight,
   RADII,
   SPACING,
   STICKY_SIZES,
   measureCard,
   measureSticky,
   measureText,
+  richTextHeight,
   snapUp,
   stickyFontSize,
-  textBlockHeight,
   type Asset,
   type Block,
   type ColorToken,
   type SizeToken,
 } from '@aifig/shared'
+import { cn } from '@/lib/utils'
+import { useBoard } from '../board-context'
+import { reportLayout } from '../lib/layout-report'
 import { RichEditor, RichText } from './rich-editor'
 
 // ---- next color (shared by the toolbar and creation tools) --------------------
@@ -69,80 +73,137 @@ function continueSticky(editor: Editor, b: Block) {
   editor.startEditing(id)
 }
 
-export function cardHeight(title: string, body: string, w: number) {
-  const inner = w - SPACING.blockPadding * 2
-  let h = SPACING.blockPadding + CARD_ACCENT
-  if (title) h += textBlockHeight(title, inner, CARD_TITLE_SIZE, true)
-  if (title && body) h += 6
-  if (body) h += textBlockHeight(body, inner, CARD_BODY_SIZE)
-  h += SPACING.blockPadding
-  return Math.max(snapUp(h), 88)
+export function cardHeight(title: string, body: string, w: number, expanded?: boolean) {
+  return fitHeight('card', w, cardContentHeight(title, body, w), expanded)
 }
 
 function textHeight(text: string, size: SizeToken, w: number) {
   const bold = size === 'l' || size === 'xl'
-  return snapUp(textBlockHeight(text || ' ', w - 8, FONT_SIZES[size], bold))
+  return snapUp(richTextHeight(text || ' ', w - 8, FONT_SIZES[size], bold))
+}
+
+// ---- long content ---------------------------------------------------------------
+
+/**
+ * Measure what the block really renders and fit its height to it (up to the kind's max, then it collapses).
+ * While editing the local editor applies it; otherwise it's reported to the core, which also makes room below.
+ */
+function useContentFit(block: Block, editing: boolean, editor: Editor, ref: RefObject<HTMLElement | null>, chrome = 0) {
+  const { boardId, provider } = useBoard()
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    let retry: ReturnType<typeof setTimeout> | undefined
+    const measure = () => {
+      const cur = editor.block(block.id)
+      if (!cur) return
+      if (!editing && editor.interaction.type !== 'idle') {
+        retry = setTimeout(measure, 300)
+        return
+      }
+      const contentH = Math.ceil(el.offsetHeight) + chrome
+      const h = fitHeight(cur.kind, cur.w, contentH, cur.expanded)
+      const stale = cur.contentH == null || Math.abs(contentH - cur.contentH) > 2
+      if (h === cur.h && !stale) return
+      if (editing) {
+        const prev = { y: cur.y, h: cur.h }
+        editor.updateBlock(cur.id, { h, contentH })
+        if (h > prev.h) editor.makeRoomBelow(cur.id, prev)
+      } else if (provider.synced) reportLayout(boardId, { id: cur.id, content_h: contentH })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      clearTimeout(retry)
+    }
+  }, [editing, block.id, block.w, block.h, block.expanded, block.contentH, editor, boardId, provider, ref, chrome])
+}
+
+function isCollapsed(block: Block, editing: boolean) {
+  return !editing && block.contentH != null && block.contentH > block.h + 4
+}
+
+/** Fade over the last lines + "Show more"; "Show less" once expanded past the max height. */
+function MoreToggle({ block, editing }: { block: Block; editing: boolean }) {
+  const { boardId } = useBoard()
+  const collapsed = isCollapsed(block, editing)
+  const canCollapse = !editing && !!block.expanded && (block.contentH ?? 0) > maxBlockHeight(block.kind, block.w) + 4
+  if (!collapsed && !canCollapse) return null
+  const toggle = (expanded: boolean) => reportLayout(boardId, { id: block.id, expanded }, true)
+  const btn = (expanded: boolean) => (
+    <button
+      data-ui
+      data-more-toggle={expanded ? 'more' : 'less'}
+      className="aifig-more-btn"
+      onPointerDown={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation()
+        toggle(expanded)
+      }}
+    >
+      {expanded ? 'Show more' : 'Show less'}
+      {expanded ? <ChevronDown className="size-3" strokeWidth={2.25} /> : <ChevronUp className="size-3" strokeWidth={2.25} />}
+    </button>
+  )
+  return collapsed ? <div className="aifig-fade">{btn(true)}</div> : <div className="aifig-less">{btn(false)}</div>
 }
 
 // ---- renderers ----------------------------------------------------------------
 
 function Sticky({ block, editing, editor }: BlockRenderProps) {
   const fs = stickyFontSize(block.text, block.w)
+  const innerRef = useRef<HTMLDivElement>(null)
+  useContentFit(block, editing, editor, innerRef)
   return (
-    <div className="aifig-sticky" style={{ fontSize: fs }}>
-      {editing ? (
-        <RichEditor engine={editor} value={block.text} placeholder="Write an idea…" onChange={(text) => editor.updateBlock(block.id, { text })} onTab={() => continueSticky(editor, block)} />
-      ) : (
-        <RichText value={block.text} placeholder="Double-click to write" />
-      )}
+    <div className={cn('aifig-sticky', editing && 'is-editing')} style={{ fontSize: fs }} data-scroll={editing || undefined}>
+      <div ref={innerRef} className="aifig-sticky-inner">
+        {editing ? (
+          <RichEditor engine={editor} value={block.text} placeholder="Write an idea…" onChange={(text) => editor.updateBlock(block.id, { text })} onTab={() => continueSticky(editor, block)} />
+        ) : (
+          <RichText value={block.text} placeholder="Double-click to write" />
+        )}
+      </div>
+      <MoreToggle block={block} editing={editing} />
     </div>
   )
 }
 
 function Card({ block, editing, editor }: BlockRenderProps) {
   const titleRef = useFocusOnMount<HTMLInputElement>(editing)
-  const boxRef = useRef<HTMLDivElement>(null)
-  // grow to the rendered height while editing (the estimate can't know every line break)
-  useLayoutEffect(() => {
-    const el = boxRef.current
-    if (!editing || !el) return
-    const need = snapUp(el.scrollHeight)
-    if (need > block.h && need < 4000) {
-      const prev = { y: block.y, h: block.h }
-      editor.updateBlock(block.id, { h: need })
-      editor.makeRoomBelow(block.id, prev)
-    }
-  }, [editing, block.text, block.title, block.w])
-  const update = (patch: Partial<Block>) => {
-    const next = { ...block, ...patch }
-    editor.updateBlock(block.id, { ...patch, h: cardHeight(next.title ?? '', next.text, block.w) })
-  }
+  const innerRef = useRef<HTMLDivElement>(null)
+  useContentFit(block, editing, editor, innerRef, 2)
   return (
-    <div className="aifig-card" ref={boxRef}>
-      {editing ? (
-        <>
-          <input
-            ref={titleRef}
-            className="title"
-            value={block.title ?? ''}
-            placeholder="Title"
-            onChange={(e) => update({ title: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.nativeEvent.isComposing || e.keyCode === 229) return
-              if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
-                e.preventDefault()
-                e.currentTarget.closest('.ae-block')?.querySelector('.aifig-rich-host')?.dispatchEvent(new Event('aifig-focus-end'))
-              }
-            }}
-          />
-          <RichEditor engine={editor} className="body" autoFocus={false} value={block.text} placeholder="Details…" onChange={(text) => update({ text })} />
-        </>
-      ) : (
-        <>
-          <div className={`title ${block.title ? '' : 'aifig-placeholder'}`}>{block.title || 'Untitled card'}</div>
-          {block.text && <RichText className="body" value={block.text} />}
-        </>
-      )}
+    <div className={cn('aifig-card', editing && 'is-editing')} data-scroll={editing || undefined}>
+      <div ref={innerRef} className="aifig-card-inner">
+        {editing ? (
+          <>
+            <input
+              ref={titleRef}
+              className="title"
+              value={block.title ?? ''}
+              placeholder="Title"
+              onChange={(e) => editor.updateBlock(block.id, { title: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                  e.preventDefault()
+                  e.currentTarget.closest('.ae-block')?.querySelector('.aifig-rich-host')?.dispatchEvent(new Event('aifig-focus-end'))
+                }
+              }}
+            />
+            <RichEditor engine={editor} className="body" autoFocus={false} value={block.text} placeholder="Details…" onChange={(text) => editor.updateBlock(block.id, { text })} />
+          </>
+        ) : (
+          <>
+            <div className={`title ${block.title ? '' : 'aifig-placeholder'}`}>{block.title || 'Untitled card'}</div>
+            {block.text && <RichText className="body" value={block.text} />}
+          </>
+        )}
+      </div>
+      <MoreToggle block={block} editing={editing} />
     </div>
   )
 }
@@ -151,8 +212,10 @@ function Text({ block, editing, editor }: BlockRenderProps) {
   const size = block.size
   const bold = size === 'l' || size === 'xl'
   const style: CSSProperties = { fontSize: FONT_SIZES[size], fontWeight: bold ? 650 : 400, letterSpacing: bold ? '-0.01em' : undefined }
+  const ref = useRef<HTMLDivElement>(null)
+  useContentFit(block, editing, editor, ref)
   return (
-    <div className="aifig-text" style={style}>
+    <div className="aifig-text" style={style} ref={ref}>
       {editing ? (
         <RichEditor
           engine={editor}
@@ -161,7 +224,7 @@ function Text({ block, editing, editor }: BlockRenderProps) {
           onChange={(text) => {
             const m = measureText(text, size)
             const w = Math.max(m.w, block.w)
-            editor.updateBlock(block.id, { text, w, h: textHeight(text, size, w) })
+            editor.updateBlock(block.id, { text, w })
           }}
         />
       ) : (
@@ -260,7 +323,7 @@ export const shapeDefs: ShapeDef[] = [
     radius: RADII.card,
     minW: 200,
     render: Card,
-    fit: (b, w) => ({ w, h: cardHeight(b.title ?? '', b.text, w) }),
+    fit: (b, w) => ({ w, h: cardHeight(b.title ?? '', b.text, w, b.expanded) }),
     isEmpty: (b) => !b.text.trim() && !(b.title ?? '').trim(),
   },
   { kind: 'text', resize: 'x', canEdit: true, rotatable: true, radius: 4, minW: 48, render: Text, fit: (b, w) => ({ w, h: textHeight(b.text, b.size, w) }), isEmpty: (b) => !b.text.trim() },

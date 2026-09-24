@@ -2,7 +2,7 @@ import { bytesToBase64, estimateLabelSize, placeLabel, rotatedBounds, routeConne
 import { CARD_ACCENT, CARD_BODY_SIZE, CARD_TITLE_SIZE, stickyFontSize, wrapText } from '@aifig/shared'
 import { COLORS, FONT_SIZES, LINE_HEIGHT, RADII, SPACING, SURFACES } from '@aifig/shared'
 import type { Board } from './board'
-import { bboxOf } from './layout'
+import { bboxOf, contentHeight } from './layout'
 
 const FONT = `Inter, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', 'DejaVu Sans', sans-serif`
 
@@ -10,13 +10,26 @@ function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-function textLines(lines: string[], x: number, y: number, fs: number, fill: string, weight = 400, maxLines = 99) {
+function textLines(lines: string[], x: number, y: number, fs: number, fill: string, weight = 400, maxLines = 99, ellipsis = true) {
   const lh = fs * LINE_HEIGHT
   const shown = lines.slice(0, maxLines)
-  if (lines.length > maxLines && shown.length) shown[shown.length - 1] = `${shown[shown.length - 1].replace(/.{0,2}$/, '')}…`
+  if (ellipsis && lines.length > maxLines && shown.length) shown[shown.length - 1] = `${shown[shown.length - 1].replace(/.{0,2}$/, '')}…`
   return shown
     .map((l, i) => `<text x="${x}" y="${(y + fs + i * lh - (lh - fs) * 0.1).toFixed(1)}" font-size="${fs}" font-weight="${weight}" fill="${fill}">${esc(l)}</text>`)
     .join('')
+}
+
+const isCollapsed = (b: Block) => (b.kind === 'card' || b.kind === 'sticky') && contentHeight(b) > b.h + 4
+
+/** Same long-content treatment as the canvas: a fade over the last lines and a "Show more" hint. */
+function collapsedFade(b: Block, r: Rect, bg: string, ink: string) {
+  const id = `fade-${b.id}`
+  const h = 56
+  return (
+    `<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${bg}" stop-opacity="0"/><stop offset="0.6" stop-color="${bg}" stop-opacity="0.94"/><stop offset="1" stop-color="${bg}"/></linearGradient>` +
+    `<rect x="${r.x + 1}" y="${r.y + r.h - h}" width="${r.w - 2}" height="${h - 1}" fill="url(#${id})"/>` +
+    `<text x="${r.x + SPACING.blockPadding}" y="${r.y + r.h - 12}" font-size="12" font-weight="600" fill="${ink}" opacity="0.7">Show more ⌄</text>`
+  )
 }
 
 export async function renderSnapshot(
@@ -73,7 +86,9 @@ export async function renderSnapshot(
       parts.push(`<rect x="${r.x}" y="${r.y + 2}" width="${r.w}" height="${r.h}" rx="${RADII.sticky}" fill="#000" opacity="${theme === 'light' ? 0.06 : 0.25}"/>`)
       parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.sticky}" fill="${c.bg}"/>`)
       const lines = wrapText(b.text, r.w - pad * 2, fs)
-      parts.push(textLines(lines, r.x + pad, r.y + pad, fs, c.ink, 450, Math.floor((r.h - pad * 2) / (fs * LINE_HEIGHT))))
+      const collapsed = isCollapsed(b)
+      parts.push(textLines(lines, r.x + pad, r.y + pad, fs, c.ink, 450, Math.max(1, collapsed ? Math.ceil((r.h - pad) / (fs * LINE_HEIGHT)) : Math.floor((r.h - pad * 2) / (fs * LINE_HEIGHT))), !collapsed))
+      if (collapsed) parts.push(collapsedFade(b, r, c.bg, c.ink))
     } else if (b.kind === 'card') {
       parts.push(`<rect x="${r.x}" y="${r.y + 1}" width="${r.w}" height="${r.h}" rx="${RADII.card}" fill="#000" opacity="${theme === 'light' ? 0.05 : 0.3}"/>`)
       parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.card}" fill="${surf.surface}" stroke="${surf.border}"/>`)
@@ -88,8 +103,10 @@ export async function renderSnapshot(
       }
       if (b.text) {
         const bl = wrapText(b.text, inner, CARD_BODY_SIZE)
-        const room = Math.max(1, Math.floor((r.y + r.h - pad - y) / (CARD_BODY_SIZE * LINE_HEIGHT)))
-        parts.push(textLines(bl, r.x + pad, y, CARD_BODY_SIZE, surf.muted, 400, room))
+        const collapsed = isCollapsed(b)
+        const room = Math.max(1, collapsed ? Math.ceil((r.y + r.h - y) / (CARD_BODY_SIZE * LINE_HEIGHT)) : Math.floor((r.y + r.h - pad - y) / (CARD_BODY_SIZE * LINE_HEIGHT)))
+        parts.push(textLines(bl, r.x + pad, y, CARD_BODY_SIZE, surf.muted, 400, room, !collapsed))
+        if (collapsed) parts.push(collapsedFade(b, r, surf.surface, surf.ink))
       }
     } else if (b.kind === 'text') {
       const fs = FONT_SIZES[b.size]
