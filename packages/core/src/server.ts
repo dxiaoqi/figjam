@@ -8,7 +8,11 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import * as syncProtocol from 'y-protocols/sync'
 import type { ClientMessage, ServerMessage } from '@aifig/shared'
 import { CORE_PORT, type CallRequest } from '@aifig/shared'
+import { randomUUID } from 'node:crypto'
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { CanvasCore } from './api'
+import { buildMcpServer } from './mcp'
 import { aifigHome, type Board } from './board'
 
 const MSG_SYNC = 0
@@ -81,8 +85,49 @@ export async function startCore(port = CORE_PORT) {
     ? { command: process.env.AIFIG_MCP_COMMAND, args: json_(process.env.AIFIG_MCP_ARGS) ?? [binPath, 'mcp'], env: json_(process.env.AIFIG_MCP_ENV) }
     : { command: 'node', args: [binPath, 'mcp'] }
 
+  // MCP over local HTTP (Streamable HTTP), alongside stdio
+  const mcpSessions = new Map<string, StreamableHTTPServerTransport>()
+  const hosts = [`127.0.0.1:${port}`, `localhost:${port}`]
+  const handleMcp = async (req: http.IncomingMessage, res: http.ServerResponse) => {
+    const sid = req.headers['mcp-session-id'] as string | undefined
+    let body: unknown
+    if (req.method === 'POST') {
+      const raw = await readBody(req)
+      body = raw ? JSON.parse(raw) : undefined
+    }
+    let transport = sid ? mcpSessions.get(sid) : undefined
+    if (!transport) {
+      if (req.method !== 'POST' || !isInitializeRequest(body)) return json(res, sid ? 404 : 400, { jsonrpc: '2.0', error: { code: -32000, message: sid ? 'Unknown MCP session' : 'Start with an initialize request' }, id: null })
+      const t: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        enableDnsRebindingProtection: true,
+        allowedHosts: hosts,
+        onsessioninitialized: (id) => {
+          mcpSessions.set(id, t)
+        },
+      })
+      const short = randomUUID().slice(0, 6)
+      const { server: mcp, caller } = buildMcpServer((tool, args, who) => core.call({ tool, args, caller: who }), (client) => ({ id: `${client}:http:${short}`, name: '', client, kind: 'agent' }))
+      t.onclose = () => {
+        if (t.sessionId) mcpSessions.delete(t.sessionId)
+        core.presence.leave(caller().id)
+      }
+      await mcp.connect(t)
+      transport = t
+    }
+    await transport.handleRequest(req, res, body)
+  }
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
+    if (url.pathname === '/mcp') {
+      try {
+        return await handleMcp(req, res)
+      } catch (e) {
+        if (!res.headersSent) json(res, 500, { jsonrpc: '2.0', error: { code: -32603, message: (e as Error).message }, id: null })
+        return
+      }
+    }
     if (req.method === 'OPTIONS') {
       res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET,POST' })
       return res.end()
