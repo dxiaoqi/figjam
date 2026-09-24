@@ -277,6 +277,33 @@ ipcMain.on('state', (_e, s) => {
   state = s
 })
 
+// ---- web snippets ------------------------------------------------------------
+
+/**
+ * Web snippets run in iframes (inline ones from the localhost snippet host, sandboxed, credentialless → an
+ * ephemeral storage partition of their own). On top of that, in the desktop app: no permission prompts for
+ * anything that isn't the app itself, no navigating the app window away, no popups except https to the browser.
+ */
+function hardenSnippets(w) {
+  const appOrigins = new Set([new URL(coreUrl).origin, devUrl ? new URL(devUrl).origin : null].filter(Boolean))
+  const isApp = (url) => {
+    try {
+      return appOrigins.has(new URL(url).origin)
+    } catch {
+      return false
+    }
+  }
+  const ses = w.webContents.session
+  ses.setPermissionRequestHandler((_wc, permission, cb, details) => cb(isApp(details.requestingUrl ?? '') && ['clipboard-read', 'clipboard-sanitized-write', 'fullscreen'].includes(permission)))
+  ses.setPermissionCheckHandler((_wc, permission, origin) => isApp(origin) && ['clipboard-read', 'clipboard-sanitized-write', 'fullscreen'].includes(permission))
+  w.webContents.on('will-navigate', (e, url) => {
+    if (!isApp(url)) e.preventDefault()
+  })
+  w.webContents.on('will-frame-navigate', (e) => {
+    if (e.isMainFrame && !isApp(e.url)) e.preventDefault()
+  })
+}
+
 // ---- window ------------------------------------------------------------------
 
 async function createWindow() {
@@ -293,9 +320,10 @@ async function createWindow() {
     webPreferences: { preload: path.join(here, 'preload.cjs'), contextIsolation: true, sandbox: false },
   })
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    if (/^https:\/\//.test(url)) shell.openExternal(url)
     return { action: 'deny' }
   })
+  hardenSnippets(win)
   buildMenu()
   try {
     await ensureCore()

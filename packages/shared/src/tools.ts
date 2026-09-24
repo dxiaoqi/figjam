@@ -195,6 +195,46 @@ export const toolDefs = {
       intent,
     },
   },
+  create_snippet: {
+    title: 'Create web snippet',
+    description: [
+      'Add a web snippet block: either an embedded https URL (YouTube, Figma prototype, CodePen, Loom, Google Slides, …)',
+      'or an inline HTML/CSS/JS snippet you write (a small interactive demo, chart or prototype).',
+      'Snippets show a static preview and only run when a person double-clicks them, in a sandboxed frame on a separate origin.',
+      'Inline snippets have NO network access (no fetch, no external scripts/images/fonts — inline everything, use data: URLs)',
+      'and cannot see the board. They can keep a small JSON state (≤16 KB) via `await aifig.getState()` / `aifig.setState(obj)`.',
+      'Placement works like create_blocks. Goes through change-set review.',
+    ].join(' '),
+    input: {
+      board,
+      url: z.string().optional().describe('https URL to embed.'),
+      html: z.string().optional().describe('Inline snippet: body HTML.'),
+      css: z.string().optional(),
+      js: z.string().optional().describe('Runs after the HTML, as a classic script.'),
+      title: z.string().optional().describe('Shown on the preview.'),
+      width: z.number().optional().describe('Default 480.'),
+      height: z.number().optional().describe('Default 320 (270 for 16:9 video).'),
+      inside: z.string().optional(),
+      right_of: z.string().optional(),
+      below: z.string().optional(),
+      at: z.object({ x: z.number(), y: z.number() }).optional(),
+      intent,
+    },
+  },
+  update_snippet: {
+    title: 'Update web snippet',
+    description: 'Change a snippet\'s URL, HTML, CSS, JS or title (only the fields you pass). Goes through change-set review, with a diff.',
+    input: {
+      board,
+      id: z.string(),
+      url: z.string().optional(),
+      html: z.string().optional(),
+      css: z.string().optional(),
+      js: z.string().optional(),
+      title: z.string().optional(),
+      intent,
+    },
+  },
   list_types: {
     title: 'List block types',
     description: 'The built-in block types (insight, question, quote, hypothesis, idea, todo) with their fields, colors, prefixes and suggested connector relations.',
@@ -309,6 +349,9 @@ export const humanToolDefs = {
       authors: z.array(z.string()).optional().describe('Author ids (all sessions of one agent)'),
       change_set: z.string().optional(),
     },
+  },
+  report_snippet_thumb: {
+    input: { board, id: z.string(), hash: z.string(), png: z.string().describe('base64 PNG captured inside the sandbox') },
   },
   report_layout: {
     input: {

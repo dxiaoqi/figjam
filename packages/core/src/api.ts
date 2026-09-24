@@ -16,6 +16,12 @@ import {
   typePatch,
   type BlockTypeId,
   type FieldValue,
+  normalizeEmbedUrl,
+  SNIPPET_LIMITS,
+  snippetHash,
+  snippetSourceBytes,
+  snippetThumbKey,
+  type WebSnippet,
 } from '@aifig/shared'
 import {
   SPACING,
@@ -279,6 +285,12 @@ export class CanvasCore {
         return this.reportLayout(a)
       case 'list_types':
         return this.listTypes()
+      case 'create_snippet':
+        return this.createSnippet(a, caller)
+      case 'update_snippet':
+        return this.updateSnippet(a, caller)
+      case 'report_snippet_thumb':
+        return this.reportSnippetThumb(a)
       case 'set_type':
         return this.setType(a, caller)
       case 'query_blocks':
@@ -456,6 +468,82 @@ export class CanvasCore {
     return { board: board.id, updated }
   }
 
+  // ---- web snippets --------------------------------------------------------
+
+  private snippetFrom(a: Args, base?: WebSnippet): WebSnippet {
+    const hasInline = a.html !== undefined || a.css !== undefined || a.js !== undefined
+    if (a.url && hasInline) throw new ToolError('Pass either `url` or `html`/`css`/`js`, not both')
+    let web: WebSnippet
+    if (a.url !== undefined) {
+      const n = normalizeEmbedUrl(String(a.url))
+      if ('error' in n) throw new ToolError(n.error)
+      web = { mode: 'url', url: String(a.url), embedUrl: n.embedUrl, provider: n.provider, posterUrl: n.thumbUrl, title: a.title ?? base?.title ?? n.title, state: base?.state, thumb: base?.thumb, thumbFor: base?.thumbFor }
+    } else if (hasInline || base?.mode === 'inline') {
+      web = { ...(base?.mode === 'inline' ? base : {}), mode: 'inline', html: a.html ?? base?.html ?? '', css: a.css ?? base?.css ?? '', js: a.js ?? base?.js ?? '', title: a.title ?? base?.title }
+      if (snippetSourceBytes(web) > SNIPPET_LIMITS.sourceBytes) throw new ToolError(`Snippet source is over ${SNIPPET_LIMITS.sourceBytes / 1024} KB`)
+      if (!`${web.html}${web.js}`.trim()) throw new ToolError('An inline snippet needs some html or js')
+    } else if (base) web = { ...base, title: a.title ?? base.title }
+    else throw new ToolError('Pass `url` (https) or an inline `html` / `css` / `js` snippet')
+    return web
+  }
+
+  private async posterFor(board: Board, web: WebSnippet) {
+    if (!web.posterUrl || (web.thumb && web.thumbFor === snippetHash(web))) return web
+    try {
+      const r = await fetch(web.posterUrl, { signal: AbortSignal.timeout(4000) })
+      if (!r.ok) return web
+      const bytes = new Uint8Array(await r.arrayBuffer())
+      const info = imageInfo(bytes)
+      if (!info || bytes.byteLength > SNIPPET_LIMITS.thumbBytes) return web
+      const id = `a${newId()}`
+      board.doc.transact(() => board.assets.set(id, { id, mime: info.mime, w: info.w, h: info.h, bytes, name: 'poster', createdAt: Date.now() }), 'api')
+      return { ...web, thumb: id, thumbFor: snippetHash(web) }
+    } catch {
+      return web
+    }
+  }
+
+  private async createSnippet(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    let web = this.snippetFrom(a)
+    web = await this.posterFor(board, web)
+    const video = web.mode === 'url' && /YouTube|Vimeo|Loom/.test(web.provider ?? '')
+    const w = snap(Math.min(Math.max(a.width ?? 480, 160), 1600))
+    const h = snap(Math.min(Math.max(a.height ?? (video ? Math.round((w * 9) / 16) : 320), 120), 1200))
+    const r = await this.createBlocks({ ...a, blocks: [{ kind: 'web', w, h, web, text: web.title ?? '' }], intent: a.intent ?? `Add ${web.mode === 'url' ? `a ${web.provider} embed` : 'a web snippet'}` }, caller)
+    return { ...r, id: r.created?.find((c: { kind: string }) => c.kind === 'web')?.id, mode: web.mode, embedUrl: web.embedUrl }
+  }
+
+  private async updateSnippet(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    const cur = board.blocks.get(a.id) ?? board.resolve(a.id)
+    if (!cur || cur.kind !== 'web' || !cur.web) throw new ToolError(`No web snippet "${a.id}"`)
+    let web = this.snippetFrom(a, cur.web)
+    web = await this.posterFor(board, web)
+    const { changeSet } = this.edit(board, caller, a.intent, `Update snippet “${preview(web.title ?? '', 30)}”`, (rec) => {
+      rec.updateBlock(cur.id, { web, text: web.title ?? '' })
+    })
+    return { board: board.id, changeSet, id: cur.id, mode: web.mode }
+  }
+
+  /** The canvas captured a preview inside the sandbox; store it. Not an edit (no change set, not undoable). */
+  private reportSnippetThumb(a: Args) {
+    const board = this.board(a.board)
+    const cur = board.blocks.get(a.id)
+    if (!cur?.web) throw new ToolError('No such snippet')
+    if (snippetThumbKey(cur.web) !== a.hash) return { stale: true }
+    const bytes = new Uint8Array(Buffer.from(String(a.png).replace(/^data:image\/png;base64,/, ''), 'base64'))
+    const info = imageInfo(bytes)
+    if (!info || info.mime !== 'image/png' || bytes.byteLength > SNIPPET_LIMITS.thumbBytes) throw new ToolError('Preview must be a PNG under 1.5 MB')
+    const id = `a${newId()}`
+    board.doc.transact(() => {
+      board.assets.set(id, { id, mime: 'image/png', w: info.w, h: info.h, bytes, name: 'snippet-preview.png', createdAt: Date.now() })
+      const now = board.blocks.get(cur.id)!
+      board.blocks.set(cur.id, { ...now, web: { ...now.web!, thumb: id, thumbFor: a.hash } })
+    }, 'layout')
+    return { board: board.id, thumb: id }
+  }
+
   // ---- block types ---------------------------------------------------------
 
   private listTypes() {
@@ -571,7 +659,12 @@ export class CanvasCore {
       }
     }
     const line = (b: Block) => {
-      const body = b.kind === 'card' ? `**${preview(b.title, 60)}** — ${preview(b.text, 100)}` : `"${preview(b.text, 100)}"`
+      const body =
+        b.kind === 'card'
+          ? `**${preview(b.title, 60)}** — ${preview(b.text, 100)}`
+          : b.kind === 'web' && b.web
+            ? `"${preview(b.web.title ?? '', 60)}" (${b.web.mode === 'url' ? `embed ${b.web.url}` : `inline snippet, ${snippetSourceBytes(b.web)} bytes`})`
+            : `"${preview(b.text, 100)}"`
       const collapsed = b.contentH != null && b.contentH > b.h + 4 && b.h >= maxBlockHeight(b.kind, b.w, b.expanded) - 8
       const flags = [b.kind === 'image' ? '' : b.color, b.size !== 'm' && b.kind !== 'image' ? `size ${b.size}` : '', b.rotation ? `rotated ${b.rotation}°` : '', b.pending ? 'pending review' : '', collapsed ? `long: collapsed, full height ${b.contentH}px` : ''].filter(Boolean).join(', ')
       const typed = b.type ? ` <${b.type}${fieldSummary(b) ? `: ${fieldSummary(b)}` : ''}>` : ''
@@ -626,6 +719,7 @@ export class CanvasCore {
       type?: BlockTypeId
       fields?: Record<string, FieldValue>
       extra: number
+      web?: WebSnippet
     }
     const drafts: Draft[] = a.blocks.map((b: Args, i: number) => {
       const kind: Block['kind'] = b.kind ?? 'sticky'
@@ -643,10 +737,10 @@ export class CanvasCore {
       const extra = type ? typeChrome({ type, typeData: { [type]: fields } }) : 0
       let dims: { w: number; h: number; size?: SizeToken }
       if (kind === 'sticky') dims = measureSticky(text, size, false, extra)
-      else if (kind === 'image') dims = { w: b.w, h: b.h }
+      else if (kind === 'image' || kind === 'web') dims = { w: b.w, h: b.h }
       else if (kind === 'card') dims = measureCard(title ?? '', text, size, false, extra)
       else dims = measureBlock({ kind, text, title, size, w: 0, h: 0 })
-      return { key: `k${i}`, ref: b.ref, kind, text, title, color: type ? BLOCK_TYPES[type].color : color, size: dims.size ?? size, w: dims.w, h: dims.h, group: b.group, parentRef: b.parent, asset: b.asset as string | undefined, type, fields, extra }
+      return { key: `k${i}`, ref: b.ref, kind, text, title, color: type ? BLOCK_TYPES[type].color : color, size: dims.size ?? size, w: dims.w, h: dims.h, group: b.group, parentRef: b.parent, asset: b.asset as string | undefined, type, fields, extra, web: kind === 'web' ? (b.web as WebSnippet) : undefined }
     })
     // same kind in one batch → same size
     const stickies = drafts.filter((d) => d.kind === 'sticky')
@@ -730,7 +824,7 @@ export class CanvasCore {
       const keyToId = new Map<string, string>()
       for (const d of drafts) {
         const p = res.placed.get(d.key)!
-        const b = rec.createBlock({ id: newId(), kind: d.kind, x: snap(p.x + offset.x), y: snap(p.y + offset.y), w: p.w, h: p.h, parent, text: d.text, title: d.title, color: d.color, size: d.size, ...(d.asset ? { asset: d.asset } : {}), ...(d.type ? { type: d.type, typeData: { [d.type]: d.fields ?? {} } } : {}) })
+        const b = rec.createBlock({ id: newId(), kind: d.kind, x: snap(p.x + offset.x), y: snap(p.y + offset.y), w: p.w, h: p.h, parent, text: d.text, title: d.title, color: d.color, size: d.size, ...(d.asset ? { asset: d.asset } : {}), ...(d.type ? { type: d.type, typeData: { [d.type]: d.fields ?? {} } } : {}), ...(d.web ? { web: d.web } : {}) })
         keyToId.set(d.key, b.id)
         created.push({ id: b.id, ref: d.ref, kind: d.kind, label: preview(d.kind === 'card' ? d.title : d.text, 40) })
       }
@@ -1097,6 +1191,14 @@ export class CanvasCore {
           return [`### ${b.title || 'Untitled card'}`, '', ...(b.text ? [b.text, ''] : []), ...notes]
         case 'text':
           return [`**${b.text}**`, '', ...notes]
+        case 'web': {
+          const w = b.web
+          if (!w) return notes
+          const head = `### 🌐 ${w.title || (w.mode === 'url' ? w.provider : 'Web snippet')}`
+          if (w.mode === 'url') return [head, '', `<${w.url}>`, '', ...notes]
+          const fence = (lang: string, code?: string) => (code?.trim() ? ['```' + lang, code.trim(), '```', ''] : [])
+          return [head, '', ...fence('html', w.html), ...fence('css', w.css), ...fence('js', w.js), ...notes]
+        }
         case 'image': {
           const as = b.asset ? board.assets.get(b.asset) : undefined
           return [`![${b.text || as?.name || 'image'}](${as?.name ?? b.asset ?? ''})`, '', ...notes]

@@ -327,6 +327,113 @@
   }
 }
 
+/* web snippets: a static preview until you run it */
+.aifig-web {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border-c);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 8px rgb(0 0 0 / 0.05);
+}
+.aifig-web.is-running {
+  box-shadow: 0 0 0 2px var(--ae-accent), 0 8px 24px rgb(0 0 0 / 0.12);
+}
+.aifig-web-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.aifig-web-poster {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  text-align: center;
+  color: var(--ink);
+  background: linear-gradient(160deg, var(--frame-bg), var(--surface));
+}
+.aifig-web-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.aifig-web-sub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted-c);
+}
+.aifig-web-frame,
+.aifig-web-capture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+.aifig-web-capture {
+  position: absolute;
+  inset: 0;
+  opacity: 0.01;
+  pointer-events: none;
+  z-index: -1;
+}
+.aifig-web-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.aifig-web-hint {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #fff;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.5), transparent);
+  opacity: 0;
+  transition: opacity 140ms ease-out;
+  pointer-events: none;
+}
+.ae-block:hover .aifig-web-hint,
+.ae-block.is-selected .aifig-web-hint {
+  opacity: 1;
+}
+.aifig-web-stopped {
+  position: absolute;
+  inset: auto 8px 8px 8px;
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #7c2d12;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
 /* typed blocks: a quiet header (icon + type) and a collapsed one-line field summary */
 .aifig-type-header {
   display: flex;

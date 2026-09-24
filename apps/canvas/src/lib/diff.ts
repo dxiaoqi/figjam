@@ -33,14 +33,23 @@ export function diffWords(before: string, after: string): DiffPart[] {
 }
 
 export type FieldChange =
-  | { field: 'text' | 'title'; parts: DiffPart[] }
+  | { field: 'text' | 'title' | 'source'; parts: DiffPart[] }
   | { field: 'moved'; dx: number; dy: number }
   | { field: 'resized'; from: string; to: string }
-  | { field: 'color' | 'size' | 'rotation' | 'frame'; from: string; to: string }
+  | { field: 'color' | 'size' | 'rotation' | 'frame' | 'url'; from: string; to: string }
 
 /** What changed between a block's snapshot before the change set and now. */
 export function blockChanges(before: Block, after: Block, frameTitle: (id?: string | null) => string): FieldChange[] {
   const out: FieldChange[] = []
+  const bw = before.web
+  const aw = after.web
+  if (bw && aw) {
+    if ((bw.url ?? '') !== (aw.url ?? '')) out.push({ field: 'url', from: bw.url ?? 'inline', to: aw.url ?? 'inline' })
+    const src = (w: typeof bw) => (w.mode === 'inline' ? [w.html && `<!-- html -->\n${w.html}`, w.css && `/* css */\n${w.css}`, w.js && `// js\n${w.js}`].filter(Boolean).join('\n') : '')
+    if (src(bw) !== src(aw)) out.push({ field: 'source', parts: diffWords(src(bw), src(aw)) })
+    if ((bw.title ?? '') !== (aw.title ?? '')) out.push({ field: 'title', parts: diffWords(bw.title ?? '', aw.title ?? '') })
+    return out
+  }
   if ((before.title ?? '') !== (after.title ?? '')) out.push({ field: 'title', parts: diffWords(before.title ?? '', after.title ?? '') })
   if (before.text !== after.text) {
     const [a, b] = [stripMarkdown(before.text), stripMarkdown(after.text)]

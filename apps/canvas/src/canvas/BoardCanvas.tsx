@@ -18,6 +18,7 @@ import { toggleCommentMode } from './comment-prefs'
 import { CommentLayer } from './CommentLayer'
 import { HeldNotice } from './HeldNotice'
 import { ReviewGhosts } from './ReviewGhosts'
+import { SnippetDialog } from '../chrome/SnippetDialog'
 import { FieldsPopover, TypeFilterBar, TypePalette, useRelationSuggestions } from './types-ui'
 import { EditorContext } from './editor-context'
 import { desktop } from '../lib/desktop'
@@ -179,6 +180,7 @@ export function BoardCanvas() {
           <ReviewPanel />
           <ContextMenu />
           <AssistantSettings />
+          <SnippetDialog />
           <StatusBanner />
         </EditorContext.Provider>
       ) : (

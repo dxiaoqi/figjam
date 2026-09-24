@@ -318,7 +318,7 @@ export function lintBlocks(all: Block[], scope: Block[], label: (b: Block) => st
       if (need > b.h + 4 && b.h < maxBlockHeight(b.kind, b.w, b.expanded) - 8) {
         issues.push({ severity: 'warning', rule: 'text-overflow', ids: [b.id], message: `${label(b)} text is clipped (needs ~${Math.round(need)}px, has ${b.h}px). Let it grow or shorten it.` })
       }
-      if (!b.text?.trim() && !b.title?.trim()) {
+      if (!b.text?.trim() && !b.title?.trim() && b.kind !== 'web' && b.kind !== 'image') {
         issues.push({ severity: 'warning', rule: 'empty-block', ids: [b.id], message: `${label(b)} is empty` })
       }
     }

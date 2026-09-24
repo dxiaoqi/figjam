@@ -94,6 +94,24 @@ export async function renderSnapshot(
       parts.push(`<clipPath id="clip-${b.id}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="6"/></clipPath>`)
       if (asset) parts.push(`<image x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${b.id})" href="data:${asset.mime};base64,${bytesToBase64(asset.bytes)}"/>`)
       else parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="6" fill="${surf.frame}" stroke="${surf.border}"/>`)
+    } else if (b.kind === 'web') {
+      const w = b.web
+      const asset = w?.thumb ? board.assets.get(w.thumb) : undefined
+      parts.push(`<rect x="${r.x}" y="${r.y + 1}" width="${r.w}" height="${r.h}" rx="8" fill="#000" opacity="${theme === 'light' ? 0.05 : 0.3}"/>`)
+      parts.push(`<clipPath id="clip-${b.id}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="8"/></clipPath>`)
+      if (asset) {
+        parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="8" fill="${surf.surface}"/>`)
+        parts.push(`<image x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${b.id})" href="data:${asset.mime};base64,${bytesToBase64(asset.bytes)}"/>`)
+      } else {
+        parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="8" fill="${surf.frame}"/>`)
+        parts.push(`<text x="${r.x + r.w / 2}" y="${r.y + r.h / 2 - 4}" text-anchor="middle" font-size="15" font-weight="600" fill="${surf.ink}">${esc(w?.title || (w?.mode === 'url' ? (w?.provider ?? 'Embed') : 'Web snippet'))}</text>`)
+        parts.push(`<text x="${r.x + r.w / 2}" y="${r.y + r.h / 2 + 18}" text-anchor="middle" font-size="12" fill="${surf.muted}">${esc(w?.mode === 'url' ? (w.url ?? '') : 'HTML · CSS · JS snippet')}</text>`)
+      }
+      parts.push(`<rect x="${r.x + 0.5}" y="${r.y + 0.5}" width="${r.w - 1}" height="${r.h - 1}" rx="8" fill="none" stroke="${surf.border}"/>`)
+      const badge = w?.mode === 'url' ? `▶ ${w.provider ?? 'Embed'}` : '</> Snippet'
+      const bw = badge.length * 6.6 + 16
+      parts.push(`<rect x="${r.x + 10}" y="${r.y + 10}" width="${bw}" height="20" rx="10" fill="#000" opacity="0.55"/>`)
+      parts.push(`<text x="${r.x + 18}" y="${r.y + 24}" font-size="11" font-weight="600" fill="#fff">${esc(badge)}</text>`)
     } else if (b.kind === 'frame') {
       parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.frame}" fill="${surf.frame}" stroke="${surf.border}" stroke-width="1"/>`)
       parts.push(`<text x="${r.x + 2}" y="${r.y - 10}" font-size="14" font-weight="600" fill="${surf.muted}">${esc(b.title ?? '')}</text>`)

@@ -204,6 +204,49 @@ function fieldFlags(rest: string[]) {
   return out
 }
 
+const readSource = (v?: string) => (v === undefined ? undefined : v.startsWith('@') ? fs.readFileSync(v.slice(1) === '-' ? 0 : v.slice(1), 'utf8') : v)
+
+program
+  .command('snippet')
+  .description('add a web snippet: --url <https://…> to embed, or --html/--css/--js (text, or @file) for an inline snippet')
+  .option('--url <url>')
+  .option('--html <html>')
+  .option('--css <css>')
+  .option('--js <js>')
+  .option('--title <title>')
+  .option('--size <w,h>', 'e.g. 480,320')
+  .option('--at <x,y>')
+  .option('--inside <frame>')
+  .option('--right-of <id>')
+  .option('-i, --intent <text>')
+  .action((o) => {
+    const [width, height] = o.size ? String(o.size).split(',').map(Number) : []
+    const at = o.at ? (([x, y]) => ({ x, y }))(String(o.at).split(',').map(Number)) : undefined
+    return run('create_snippet', { url: o.url, html: readSource(o.html), css: readSource(o.css), js: readSource(o.js), title: o.title, width, height, at, inside: o.inside, right_of: o.rightOf, intent: o.intent }, (r) => {
+      console.log(`✓ added ${r.mode === 'url' ? `embed (${r.embedUrl})` : 'inline snippet'} ${r.id}`)
+      const line = csLine(r)
+      if (line) console.log(line)
+    })
+  })
+
+program
+  .command('snippet-update')
+  .description('change a web snippet (only the parts you pass)')
+  .argument('<id>')
+  .option('--url <url>')
+  .option('--html <html>')
+  .option('--css <css>')
+  .option('--js <js>')
+  .option('--title <title>')
+  .option('-i, --intent <text>')
+  .action((id: string, o) =>
+    run('update_snippet', { id, url: o.url, html: readSource(o.html), css: readSource(o.css), js: readSource(o.js), title: o.title, intent: o.intent }, (r) => {
+      console.log(`✓ updated snippet ${r.id}`)
+      const line = csLine(r)
+      if (line) console.log(line)
+    }),
+  )
+
 program
   .command('types')
   .description('list the built-in block types and their fields')

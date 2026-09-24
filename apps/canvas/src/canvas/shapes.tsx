@@ -12,6 +12,7 @@ import {
   measureCard,
   measureSticky,
   measureText,
+  normalizeEmbedUrl,
   richTextHeight,
   snapUp,
   stickyFontSize,
@@ -24,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { useBoard } from '../board-context'
 import { reportLayout } from '../lib/layout-report'
 import { RichEditor, RichText } from './rich-editor'
+import { WebBlock as WebBlockLazy } from './web-block'
 import { applyPrefix, filterActive, matchesFilter, TypeFooter, TypeHeader, useTypeFilter } from './types-ui'
 
 // ---- next color (shared by the toolbar and creation tools) --------------------
@@ -280,8 +282,10 @@ function assetUrl(editor: Editor, id: string | undefined) {
   return url
 }
 
-function useAssetUrl(editor: Editor, id: string | undefined) {
-  const [url, setUrl] = useState(() => assetUrl(editor, id))
+export function useAssetUrl(editor: Editor, id: string | undefined) {
+  const [state, setState] = useState(() => ({ id, url: assetUrl(editor, id) }))
+  const url = state.id === id ? state.url : assetUrl(editor, id)
+  const setUrl = (u: string) => setState({ id, url: u })
   useEffect(() => {
     if (url) return
     const assets = editor.doc.getMap<Asset>('assets')
@@ -356,6 +360,7 @@ export const shapeDefs: ShapeDef[] = [
   { kind: 'text', resize: 'x', canEdit: true, rotatable: true, radius: 4, minW: 48, render: Text, fit: (b, w) => ({ w, h: textHeight(b.text, b.size, w) }), isEmpty: (b) => !b.text.trim() },
   { kind: 'frame', resize: 'xy', canEdit: true, container: true, radius: RADII.frame, minW: 160, minH: 120, render: Frame },
   { kind: 'image', resize: 'xy', canEdit: false, rotatable: true, lockAspect: true, radius: 6, minW: 48, minH: 32, render: ImageBlock },
+  { kind: 'web', resize: 'xy', canEdit: true, rotatable: false, radius: 8, minW: 160, minH: 120, render: (p) => <WebBlockLazy {...p} /> },
 ]
 
 export function draftForTool(tool: string): BlockDraft | null {
@@ -368,6 +373,13 @@ export function draftForTool(tool: string): BlockDraft | null {
 
 export function draftForPastedText(text: string): BlockDraft {
   const clean = text.trim()
+  if (/^https:\/\/\S+$/.test(clean)) {
+    const n = normalizeEmbedUrl(clean)
+    if (!('error' in n) && n.provider !== new URL(clean).hostname.replace(/^www\./, '')) {
+      const video = /YouTube|Vimeo|Loom/.test(n.provider)
+      return { kind: 'web', w: 480, h: video ? 272 : 320, color: 'gray', size: 'm', text: n.title, web: { mode: 'url', url: clean, embedUrl: n.embedUrl, provider: n.provider, posterUrl: n.thumbUrl, title: n.title } }
+    }
+  }
   if (clean.length > 120 || clean.includes('\n')) {
     const [first, ...rest] = clean.split('\n')
     const title = first.slice(0, 80)

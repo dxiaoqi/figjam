@@ -1,9 +1,10 @@
 import type { RouteStyle } from './routing'
 import type { ColorToken, SizeToken } from './tokens'
+import type { WebSnippet } from './snippet'
 import type { BlockTypeId, FieldValue, Relation } from './types'
 
-export type BlockKind = 'sticky' | 'card' | 'text' | 'frame' | 'image'
-export const BLOCK_KINDS: BlockKind[] = ['sticky', 'card', 'text', 'frame', 'image']
+export type BlockKind = 'sticky' | 'card' | 'text' | 'frame' | 'image' | 'web'
+export const BLOCK_KINDS: BlockKind[] = ['sticky', 'card', 'text', 'frame', 'image', 'web']
 
 export interface Author {
   kind: 'human' | 'agent'
@@ -47,6 +48,8 @@ export interface Block {
   contentH?: number
   /** Long content shown in full instead of collapsed behind "Show more". */
   expanded?: boolean
+  /** Web snippet blocks: an embedded URL or inline HTML/CSS/JS (see snippet.ts). */
+  web?: WebSnippet
   /** Image blocks: id of an entry in the board's `assets` map. */
   asset?: string
   /** Fractional z-index from the canvas; optional for agent-created blocks. */

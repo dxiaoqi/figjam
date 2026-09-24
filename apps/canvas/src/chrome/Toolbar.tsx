@@ -1,4 +1,4 @@
-import { Frame, Hand, ImagePlus, MessageCircle, MousePointer2, PanelTop, Spline, StickyNote, Type, type LucideIcon } from 'lucide-react'
+import { Frame, Globe, Hand, ImagePlus, MessageCircle, MousePointer2, PanelTop, Spline, StickyNote, Type, type LucideIcon } from 'lucide-react'
 import { useRef } from 'react'
 import { toast } from 'sonner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -117,6 +117,19 @@ export function Toolbar() {
             Comments
             <kbd className="rounded bg-background/20 px-1.5 font-mono text-[10px]">M</kbd>
           </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              aria-label="Web snippet"
+              data-web-tool
+              onClick={() => window.dispatchEvent(new CustomEvent('aifig:snippet-dialog', { detail: {} }))}
+              className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Globe className="size-[18px]" strokeWidth={1.75} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Web snippet — embed a URL or write HTML/CSS/JS (or paste a link)</TooltipContent>
         </Tooltip>
         <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => onPick(e.target.files)} />
       </div>

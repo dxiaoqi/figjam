@@ -114,9 +114,10 @@ function ChangeRow({ c }: { c: FieldChange }) {
   switch (c.field) {
     case 'text':
     case 'title':
+    case 'source':
       return (
-        <div className="flex gap-2" data-diff-field={c.field}>
-          {label(c.field === 'title' ? 'Title' : 'Text')}
+        <div className={cn('flex gap-2', c.field === 'source' && 'font-mono text-[11px]')} data-diff-field={c.field}>
+          {label(c.field === 'title' ? 'Title' : c.field === 'source' ? 'Source' : 'Text')}
           <Parts parts={c.parts} />
         </div>
       )
@@ -130,7 +131,7 @@ function ChangeRow({ c }: { c: FieldChange }) {
     default:
       return (
         <div className="flex gap-2" data-diff-field={c.field}>
-          {label({ resized: 'Size', color: 'Color', size: 'Scale', rotation: 'Rotation', frame: 'Frame' }[c.field])}
+          {label({ resized: 'Size', color: 'Color', size: 'Scale', rotation: 'Rotation', frame: 'Frame', url: 'URL' }[c.field])}
           <span>
             <span className="text-muted-foreground line-through">{c.from}</span> → {c.to}
           </span>

@@ -11,8 +11,10 @@ import {
   Check,
   ArrowUpToLine,
   Clipboard,
+  Code2,
   Copy,
   CopyPlus,
+  ExternalLink,
   Frame,
   Image,
   LayoutGrid,
@@ -21,6 +23,7 @@ import {
   PanelTop,
   MessageSquarePlus,
   Pencil,
+  Play,
   RotateCcw,
   Scissors,
   Sparkles,
@@ -145,7 +148,22 @@ export function ContextMenu() {
       <DropdownMenuContent align="start" side="bottom" sideOffset={2} className="w-56" data-ui onCloseAutoFocus={(e) => e.preventDefault()}>
         {blocks.length > 0 && (
           <>
-            {blocks.length === 1 && (
+            {blocks.length === 1 && blocks[0].kind === 'web' && (
+              <>
+                <DropdownMenuItem onSelect={run(() => editor.startEditing(ids[0]))} data-web-run>
+                  <Play /> {blocks[0].web?.mode === 'url' ? 'Open here' : 'Run'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(() => window.dispatchEvent(new CustomEvent('aifig:snippet-dialog', { detail: { id: ids[0] } })))} data-web-edit>
+                  <Code2 /> {blocks[0].web?.mode === 'url' ? 'Change URL…' : 'Edit source…'}
+                </DropdownMenuItem>
+                {blocks[0].web?.mode === 'url' && blocks[0].web.url && (
+                  <DropdownMenuItem onSelect={run(() => window.open(blocks[0].web!.url, '_blank', 'noopener,noreferrer'))}>
+                    <ExternalLink /> Open in browser
+                  </DropdownMenuItem>
+                )}
+              </>
+            )}
+            {blocks.length === 1 && blocks[0].kind !== 'web' && (
               <DropdownMenuItem onSelect={run(() => editor.startEditing(ids[0]))}>
                 <Pencil /> Edit <DropdownMenuShortcut>↵</DropdownMenuShortcut>
               </DropdownMenuItem>
