@@ -1,0 +1,186 @@
+/* @aifig/canvas-engine base styles. Theme with the --ae-* variables. */
+.ae-canvas {
+  --ae-accent: #5b5bd6;
+  --ae-guide: #e5484d;
+  --ae-connector: #a8a29e;
+  --ae-grid-dot: rgb(28 25 23 / 0.13);
+  --ae-label-bg: #fafaf9;
+  --ae-label-ink: #78716c;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+  background-image: radial-gradient(circle, var(--ae-grid-dot) 1px, transparent 1.2px);
+}
+
+.ae-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+}
+
+.ae-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.ae-block {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+}
+
+.ae-block.is-editing {
+  z-index: 1;
+}
+
+.ae-connector-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--ae-label-bg);
+  color: var(--ae-label-ink);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.ae-connector-label input {
+  all: unset;
+  font: inherit;
+  color: inherit;
+  min-width: 3ch;
+}
+
+.ae-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ae-overlay > * {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+}
+
+.ae-frame-label {
+  pointer-events: all;
+  height: 22px;
+  line-height: 22px;
+  padding: 0 4px;
+  margin-left: -4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ae-label-ink);
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+.ae-frame-label.is-selected {
+  color: var(--ae-accent);
+}
+.ae-frame-label input {
+  all: unset;
+  font: inherit;
+  color: inherit;
+  cursor: text;
+}
+
+.ae-selection {
+  border: 1.5px solid var(--ae-accent);
+}
+.ae-selection.is-multi {
+  border-width: 1px;
+  opacity: 0.7;
+}
+.ae-selection-bounds {
+  border: 1px dashed var(--ae-accent);
+  border-radius: 6px;
+}
+.ae-hover {
+  border: 1.5px solid color-mix(in srgb, var(--ae-accent) 45%, transparent);
+}
+
+.ae-handle {
+  pointer-events: all;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: white;
+  border: 1.5px solid var(--ae-accent);
+}
+.ae-handle.is-edge {
+  width: 6px;
+  height: 14px;
+  border-radius: 3px;
+}
+.ae-handle-n.is-edge,
+.ae-handle-s.is-edge {
+  width: 14px;
+  height: 6px;
+}
+.ae-handle-nw,
+.ae-handle-se {
+  cursor: nwse-resize;
+}
+.ae-handle-ne,
+.ae-handle-sw {
+  cursor: nesw-resize;
+}
+.ae-handle-n,
+.ae-handle-s {
+  cursor: ns-resize;
+}
+.ae-handle-e,
+.ae-handle-w {
+  cursor: ew-resize;
+}
+
+.ae-connect-handle {
+  pointer-events: all;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: white;
+  border: 1.5px solid var(--ae-accent);
+  cursor: crosshair;
+  transition: transform 120ms ease, background 120ms ease;
+}
+.ae-connect-handle:hover {
+  background: var(--ae-accent);
+}
+
+.ae-connect-target {
+  border: 2px solid var(--ae-accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ae-accent) 6%, transparent);
+}
+
+.ae-guide {
+  background: var(--ae-guide);
+}
+
+.ae-marquee {
+  border: 1px solid var(--ae-accent);
+  background: color-mix(in srgb, var(--ae-accent) 8%, transparent);
+  border-radius: 2px;
+}
+
+.ae-frame-preview {
+  border: 1.5px dashed var(--ae-accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ae-accent) 4%, transparent);
+}

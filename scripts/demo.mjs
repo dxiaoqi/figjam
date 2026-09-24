@@ -38,8 +38,8 @@ await page.mouse.click(900, 820)
 await sleep(500)
 // step back to make room, like a person would before asking an agent for help
 await page.evaluate(() => {
-  const b = window.editor.getCurrentPageBounds()
-  window.editor.zoomToBounds({ x: b.x - 80, y: b.y - 150, w: 2100, h: 1300 }, { animation: { duration: 400 } })
+  const b = window.editor.contentBounds()
+  window.editor.zoomToBounds({ x: b.x - 80, y: b.y - 150, w: 2100, h: 1300 }, { inset: 0 })
 })
 await sleep(900)
 

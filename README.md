@@ -23,7 +23,7 @@ Open **http://127.0.0.1:47820**. `npm run dev` starts two processes:
 | Process | Port | What it is |
 |---|---|---|
 | core | 47821 | Owns every board as a Yjs document, persists to disk, serves the Canvas API (HTTP) and live sync (WebSocket) |
-| ui | 47820 | The canvas (Vite + React + tldraw), a client of the core. `/api` and `/sync` are proxied to the core |
+| ui | 47820 | The canvas app (Vite + React + our own canvas engine), a client of the core. `/api` and `/sync` are proxied to the core |
 
 Run them separately with `npm run core` and `npm run ui`. If the browser ever shows
 `504 (Outdated Optimize Dep)` (for example after changing dependencies), run `npm run dev:clean`, which clears
@@ -107,10 +107,17 @@ review), `--json`.
 | `T` | Heading |
 | `F` | Frame |
 | `A` | Connector (drag between blocks) |
-| `V` / `H` | Select / pan |
+| `V` / `H` / `Space`-drag | Select / pan (trackpad scroll pans, pinch or `⌘`/`Ctrl`+scroll zooms) |
+| `⌘Z` / `⇧⌘Z` | Undo / redo (your own edits only — agent edits are reviewed, not undone) |
+| `⌘C` / `⌘V` / `⌘D` | Copy / paste / duplicate |
+| Arrows (`⇧` for 32px) | Nudge on the 8px grid |
+| `Enter` / `Esc` | Edit the selection / stop editing, deselect |
+| `⇧1` / `⇧2` / `⌘0` | Zoom to fit / to selection / 100% |
 | `⌥A` / `⌥R` | Accept / reject the latest agent change set |
 
-Selecting blocks shows color and size tokens, plus **Tidy frame** and **Arrange in grid** (both run in the core's
+Hover a block to get connect handles: drag one onto another block to connect them, or drop it on empty canvas to
+create a connected sticky. Dragging snaps to the 8px grid and shows alignment guides against nearby blocks; dropping
+a block into a frame parents it (the frame grows to fit). Selecting blocks shows color and size tokens, plus **Tidy frame** and **Arrange in grid** (both run in the core's
 layout engine, the same one agents use). Light and dark themes are in the top-right corner.
 
 ## How it fits together
@@ -119,64 +126,58 @@ layout engine, the same one agents use). Light and dark themes are in the top-ri
  Claude Code / Cursor ──MCP stdio──┐
  scripts / terminal ────aifig CLI──┼──HTTP /api/call──► aifig core (Node)
                                    │                     ├─ Canvas API (zod-validated tools)
- Canvas UI (tldraw) ◄──WebSocket───┘                     ├─ Yjs board documents  ─► ~/.aifig/boards
+ Canvas app (engine) ◄─WebSocket──┘                     ├─ Yjs board documents  ─► ~/.aifig/boards
    Yjs sync + agent presence                             ├─ layout engine: tokens, intents, tidy, lint
                                                          ├─ change sets / suggestion layer
                                                          └─ headless SVG/PNG snapshots
 ```
 
 - **The core owns the truth.** Each board is a Yjs document with `blocks`, `connectors`, `changeSets` and `meta`
-  maps. The canvas keeps a Yjs replica and a two-way adapter (`src/ui/canvas/binding.ts`) projects it into tldraw's
-  store; tldraw is the renderer and interaction layer, not the data model.
-- **Layout lives in the core** (`src/core/layout.ts`), so CLI, MCP and hand-made edits share the same grid, sizes
+  maps. The canvas app keeps a Yjs replica and the canvas engine renders and edits it directly — there is no second
+  store or adapter.
+- **Canvas engine** (`packages/canvas-engine`): a whiteboard engine we own, with no dependencies beyond React and Yjs — blocks are DOM
+  in one CSS-transformed layer (native text editing and IME), connectors are SVG, handles and guides live in a
+  screen-space overlay. It covers camera, selection and marquee, move/resize with grid and alignment snapping,
+  frames, connectors, clipboard and undo (`Y.UndoManager` scoped to local edits). Block types plug in through a
+  `ShapeDef` registry (`apps/canvas/src/canvas/shapes.tsx`).
+- **Layout lives in the core** (`packages/core/src/layout.ts`), so CLI, MCP and hand-made edits share the same grid, sizes
   and spacing — even with no UI open.
-- **Design tokens** (`src/shared/tokens.ts`) are the only visual values: 9 soft colors with light/dark variants,
+- **Design tokens** (`packages/shared/src/tokens.ts`) are the only visual values: 9 soft colors with light/dark variants,
   4 type sizes, fixed sticky sizes and card widths, 8px spacing. Hex colors from agents are quantized.
 - **Change sets.** Every agent write is recorded with its intent and a `before` snapshot. Accept clears the
   pending state; reject reverts exactly (creations removed, edits and deletions restored).
 
+npm-workspaces monorepo:
+
 ```
-src/
-  shared/   tokens, model types, text measurement, Canvas API tool schemas
-  core/     server (HTTP + Yjs WebSocket), boards + persistence, Canvas API, layout, snapshots, presence
-  mcp/      MCP stdio server
-  cli/      aifig CLI (also launches core / mcp)
-  client/   HTTP client with core auto-start (used by MCP and CLI)
-  ui/       canvas app: tldraw shapes, Yjs binding, agent layer, chrome (shadcn/ui)
-```
-
-## tldraw license
-
-The canvas uses the [tldraw SDK](https://tldraw.dev) (v5), which is source-available, not open source. Without a
-key it only runs in development (http, `localhost`/`127.x`) and shows a "Get a license for production" watermark in
-the bottom-right corner. The watermark is part of tldraw's license — don't hide or patch it out; use a key instead.
-
-| License | Cost | Watermark | Notes |
-|---|---|---|---|
-| None | free | "Get a license for production" | development only; stops rendering in production |
-| [Trial](https://tldraw.dev/get-a-license/trial) | free, 100 days | none | key emailed immediately; one per project; no grace period |
-| [Hobby](https://tldraw.dev/get-a-license/hobby) | free, discretionary | "made with tldraw" (required) | non-commercial projects; reviewed by the tldraw team |
-| [Commercial](https://tldraw.dev/get-a-license/plans) | paid, annual | none | required for commercial production use |
-
-To use a key, put it in a gitignored `.env.local` (see [`.env.example`](.env.example)) and restart `npm run dev`:
-
-```bash
-cp .env.example .env.local
-# edit .env.local: VITE_TLDRAW_LICENSE_KEY=tldraw-…
+packages/
+  shared/         @aifig/shared — tokens, model types, text measurement, Canvas API tool schemas
+  core/           @aifig/core — server (HTTP + Yjs WebSocket), boards + persistence, Canvas API, layout, snapshots, presence
+  canvas-engine/  @aifig/canvas-engine — Editor, CanvasView, input, geometry (React, Yjs)
+  cli/            @aifig/cli — aifig CLI, MCP stdio server, HTTP client with core auto-start
+apps/
+  canvas/         @aifig/canvas — the canvas app: block renderers, agent layer, review UI, chrome (shadcn/ui)
+bin/aifig.mjs     entry point for the CLI, `aifig core` and `aifig mcp`
 ```
 
-The key is passed to `<Tldraw licenseKey>` (tldraw also reads `VITE_TLDRAW_LICENSE_KEY` on its own). Keys are
-public by design, but keeping them in `.env.local` keeps them out of the repo. Keys are bound to the domains you
-register; loopback hosts are always treated as development. Because the document model, layout, change sets and
-snapshots live in the core, replacing the renderer later only touches `src/ui/canvas/`.
+Workspace packages export their TypeScript sources directly (no build step); `tsx` runs the node side and Vite
+bundles the app.
+
+## Why our own canvas engine
+
+The first prototype used the tldraw SDK, whose license requires a key (with a watermark on the free hobby tier) for
+production. We compared permissively licensed options (Excalidraw, BlockSuite, React Flow, Leafer, Konva/Pixi) and
+chose a small in-house engine that renders the core's Yjs document directly. No license keys, no watermark, and
+custom semantic blocks and executable edges are ours to extend. The evaluation is in the project docs
+(`canvas-engine-evaluation.md`).
 
 ## Phase 0 status
 
 **Done**
 
 - Local core with Yjs boards persisted to `.aifig` files plus JSON export; multiple boards
-- Canvas on tldraw with custom token-driven sticky / card / heading shapes, frames and connectors; 8px grid
-  snapping, light/dark themes, double-click and `Tab` sticky flow, empty, loading, offline and error states
+- Own canvas engine with token-driven sticky / card / heading blocks, frames and connectors; 8px grid and
+  alignment-guide snapping, connect handles, undo/redo, clipboard, light/dark themes, double-click and `Tab` sticky flow, empty, loading, offline and error states
 - Layout engine: intents (grid, row, stack, cluster, tree), free-space placement near the user's viewport, frame
   auto-grow, size normalization, tidy, lint (overlap, overflow, outside-frame, off-grid, too many colors)
 - MCP server (stdio) with 16 tools, a tokens resource and a best-practices prompt; CLI with the same surface
@@ -194,13 +195,17 @@ snapshots live in the core, replacing the renderer later only touches `src/ui/ca
 - Per-item review (`J`/`K` stepping, before/after diff, ghosted deletions), undo by change set after acceptance,
   trust levels (auto-accept per agent or frame)
 - Waiting for the user to finish dragging or typing before applying agent layout moves; animated tidy
+- Engine gaps vs tldraw: context menu, touch pinch/rotate gestures, minimap, copy-as-image, free-floating
+  connectors and curved/elbow routing, distance indicators while snapping, canvas/WebGL level-of-detail for very
+  large boards
 - Images, files, shapes, text formatting, export menu in the UI, semantic zoom
 - Skills, execution, sync (Phases 1–3)
 
 ## Development
 
 ```bash
-npm run typecheck                                     # UI + node projects
+npm run typecheck                                     # every workspace
+node scripts/engine-e2e.mjs                           # drive the canvas engine with real pointer/keyboard input
 node scripts/mcp-smoke.mjs                            # drive the canvas through the real MCP server
 node scripts/shot.mjs out.png [--dark] [--w=390]      # screenshot the running canvas (headless Chrome)
 ```

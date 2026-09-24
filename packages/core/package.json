@@ -1,0 +1,19 @@
+{
+  "name": "@aifig/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@aifig/shared": "*",
+    "yjs": "^13.6.32",
+    "y-protocols": "^1.0.7",
+    "lib0": "^0.2.117",
+    "ws": "^8.21.3",
+    "nanoid": "^6.0.1",
+    "@resvg/resvg-js": "^2.6.2",
+    "zod": "^4.6.5"
+  }
+}

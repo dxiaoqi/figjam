@@ -1,0 +1,19 @@
+{
+  "name": "@aifig/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@aifig/shared": "*",
+    "@aifig/core": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "commander": "^15.0.0",
+    "tsx": "^4.23.15"
+  },
+  "bin": {
+    "aifig": "../../bin/aifig.mjs"
+  }
+}

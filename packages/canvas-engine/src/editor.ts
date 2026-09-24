@@ -1,0 +1,986 @@
+import type { ComponentType } from 'react'
+import * as Y from 'yjs'
+import type { Author, Block, Connector } from '@aifig/shared'
+import {
+  box,
+  boxFromPoints,
+  center,
+  containsBox,
+  containsPoint,
+  distToSegment,
+  edgePoint,
+  randomId,
+  snapTo,
+  union,
+  type Box,
+  type Vec,
+} from './geometry'
+
+export interface Camera {
+  /** screen = page * z + (x, y) */
+  x: number
+  y: number
+  z: number
+}
+
+export interface BlockRenderProps {
+  block: Block
+  editing: boolean
+  editor: Editor
+}
+
+export interface ShapeDef {
+  kind: Block['kind']
+  /** Which dimensions a person can resize. */
+  resize: 'none' | 'x' | 'xy'
+  canEdit: boolean
+  /** Frames: hold children in relative coordinates. */
+  container?: boolean
+  minW?: number
+  minH?: number
+  /** Corner radius of the selection outline (page px). */
+  radius?: number
+  render: ComponentType<BlockRenderProps>
+  /** Final size after a resize (e.g. grow a card to fit its text). */
+  fit?: (block: Block, w: number, h: number) => { w: number; h: number }
+  /** Blocks that are empty when editing ends are removed. */
+  isEmpty?: (block: Block) => boolean
+}
+
+export type BlockDraft = Pick<Block, 'kind' | 'w' | 'h'> & Partial<Block>
+
+export interface EditorOptions {
+  doc: Y.Doc
+  shapes: ShapeDef[]
+  author: Author
+  gridSize?: number
+  /** Returns the block a creation tool should place at `at` (center point, page space). */
+  createForTool?: (tool: string, at: Vec) => BlockDraft | null
+  /** Block created when a connector is dropped on empty canvas. */
+  createForConnectorDrop?: (from: Block, at: Vec) => BlockDraft | null
+  onDoubleClickCanvas?: (at: Vec) => void
+  onPasteText?: (text: string, at: Vec) => void
+  /** Extra single-key tool shortcuts, e.g. { s: 'sticky' }. */
+  toolKeys?: Record<string, string>
+}
+
+export type HandleId = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se'
+
+export type Interaction =
+  | { type: 'idle' }
+  | { type: 'pan'; startScreen: Vec; cam: Camera }
+  | { type: 'pending'; startScreen: Vec; startPage: Vec; target: string | null; frameBody: string | null; shift: boolean; wasSelected: boolean }
+  | { type: 'move'; startPage: Vec; ids: string[]; dx: number; dy: number }
+  | { type: 'resize'; id: string; handle: HandleId; startPage: Vec; orig: Box; rect: Box }
+  | { type: 'marquee'; startPage: Vec; rect: Box; base: string[] }
+  | { type: 'connect'; from: string; point: Vec; target: string | null }
+  | { type: 'frame'; startPage: Vec; rect: Box }
+
+export interface Guide {
+  axis: 'x' | 'y'
+  at: number
+  from: number
+  to: number
+}
+
+type Listener = () => void
+
+const ZOOM_STEPS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4]
+const MIN_Z = 0.1
+const MAX_Z = 4
+const SNAP_PX = 6
+const FRAME_PAD = 32
+
+/** Whiteboard editor over a board's Yjs document. The document is the source of truth. */
+export class Editor {
+  readonly doc: Y.Doc
+  readonly blocksMap: Y.Map<Block>
+  readonly connectorsMap: Y.Map<Connector>
+  readonly undoManager: Y.UndoManager
+  readonly origin = { editor: true }
+  readonly shapes: Map<string, ShapeDef>
+  readonly grid: number
+  options: EditorOptions
+
+  camera: Camera = { x: 0, y: 0, z: 1 }
+  viewport = { w: 0, h: 0 }
+  tool = 'select'
+  selection = new Set<string>()
+  hover: string | null = null
+  editingId: string | null = null
+  interaction: Interaction = { type: 'idle' }
+  guides: Guide[] = []
+  spaceDown = false
+  /** Blocks added by others (agents) recently, with a stagger delay. */
+  entering = new Map<string, number>()
+  accepted = new Set<string>()
+
+  private version = 0
+  private listeners = new Set<Listener>()
+  private cameraListeners = new Set<Listener>()
+  private sortedCache: { version: number; list: Block[] } | null = null
+  private docVersion = 0
+  private timers = new Set<ReturnType<typeof setTimeout>>()
+  private disposers: (() => void)[] = []
+  private clipboard: string | null = null
+
+  constructor(options: EditorOptions) {
+    this.options = options
+    this.doc = options.doc
+    this.blocksMap = this.doc.getMap<Block>('blocks')
+    this.connectorsMap = this.doc.getMap<Connector>('connectors')
+    this.shapes = new Map(options.shapes.map((s) => [s.kind, s]))
+    this.grid = options.gridSize ?? 8
+    this.undoManager = new Y.UndoManager([this.blocksMap, this.connectorsMap], {
+      trackedOrigins: new Set([this.origin]),
+      captureTimeout: 400,
+    })
+
+    const onBlocks = (e: Y.YMapEvent<Block>, tr: Y.Transaction) => {
+      this.docVersion++
+      if (tr.origin !== this.origin) {
+        let i = 0
+        const entering: string[] = []
+        const accepted: string[] = []
+        e.changes.keys.forEach((change, key) => {
+          const b = this.blocksMap.get(key)
+          if (change.action === 'add' && b && b.author?.kind === 'agent' && b.kind !== 'frame') {
+            this.entering.set(key, Math.min(i++, 30) * 40)
+            entering.push(key)
+          }
+          if (change.action === 'update' && b && (change.oldValue as Block | undefined)?.pending && !b.pending) {
+            this.accepted.add(key)
+            accepted.push(key)
+          }
+          if (change.action === 'delete') {
+            this.selection.delete(key)
+            if (this.editingId === key) this.editingId = null
+          }
+        })
+        if (entering.length) this.later(1600 + i * 40, () => entering.forEach((k) => this.entering.delete(k)))
+        if (accepted.length) this.later(520, () => accepted.forEach((k) => this.accepted.delete(k)))
+      }
+      this.bump()
+    }
+    const onConnectors = () => {
+      this.docVersion++
+      for (const id of [...this.selection]) if (!this.blocksMap.has(id) && !this.connectorsMap.has(id)) this.selection.delete(id)
+      this.bump()
+    }
+    this.blocksMap.observe(onBlocks)
+    this.connectorsMap.observe(onConnectors)
+    const onStack = () => this.bump()
+    this.undoManager.on('stack-item-added', onStack)
+    this.undoManager.on('stack-item-popped', onStack)
+    this.disposers.push(
+      () => this.blocksMap.unobserve(onBlocks),
+      () => this.connectorsMap.unobserve(onConnectors),
+      () => this.undoManager.destroy(),
+    )
+  }
+
+  dispose() {
+    this.disposers.forEach((d) => d())
+    this.timers.forEach((t) => clearTimeout(t))
+    this.listeners.clear()
+    this.cameraListeners.clear()
+  }
+
+  // ---- subscriptions -------------------------------------------------------
+
+  subscribe(fn: Listener) {
+    this.listeners.add(fn)
+    return () => {
+      this.listeners.delete(fn)
+    }
+  }
+
+  onCamera(fn: Listener) {
+    this.cameraListeners.add(fn)
+    return () => {
+      this.cameraListeners.delete(fn)
+    }
+  }
+
+  getVersion() {
+    return this.version
+  }
+
+  bump() {
+    this.version++
+    for (const l of [...this.listeners]) l()
+  }
+
+  private bumpCamera() {
+    for (const l of [...this.cameraListeners]) l()
+    this.bump()
+  }
+
+  private later(ms: number, fn: () => void) {
+    const t = setTimeout(() => {
+      this.timers.delete(t)
+      fn()
+      this.bump()
+    }, ms)
+    this.timers.add(t)
+  }
+
+  // ---- document reads -----------------------------------------------------
+
+  shape(kind: string) {
+    return this.shapes.get(kind)
+  }
+
+  block(id: string) {
+    return this.blocksMap.get(id)
+  }
+
+  connector(id: string) {
+    return this.connectorsMap.get(id)
+  }
+
+  /** Frames first, then everything else in creation order. */
+  blocks(): Block[] {
+    if (this.sortedCache?.version === this.docVersion) return this.sortedCache.list
+    const list = [...this.blocksMap.values()].sort((a, b) => {
+      const fa = a.kind === 'frame' ? 0 : 1
+      const fb = b.kind === 'frame' ? 0 : 1
+      return fa - fb || a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1)
+    })
+    this.sortedCache = { version: this.docVersion, list }
+    return list
+  }
+
+  connectors(): Connector[] {
+    return [...this.connectorsMap.values()]
+  }
+
+  childrenOf(id: string | null) {
+    return this.blocks().filter((b) => (b.parent ?? null) === id)
+  }
+
+  /** Page-space rect including in-progress move/resize previews. */
+  pageRect(id: string): Box | null {
+    const b = this.blocksMap.get(id)
+    if (!b) return null
+    const it = this.interaction
+    if (it.type === 'resize' && it.id === id) return it.rect
+    let x = b.x
+    let y = b.y
+    if (b.parent) {
+      const p = this.pageRect(b.parent)
+      if (p) {
+        x += p.x
+        y += p.y
+      }
+    }
+    if (it.type === 'move' && it.ids.includes(id)) {
+      x += it.dx
+      y += it.dy
+    }
+    return { x, y, w: b.w, h: b.h }
+  }
+
+  /** Page rect from the document only, ignoring previews. */
+  baseRect(id: string): Box | null {
+    const b = this.blocksMap.get(id)
+    if (!b) return null
+    let x = b.x
+    let y = b.y
+    if (b.parent) {
+      const p = this.baseRect(b.parent)
+      if (p) {
+        x += p.x
+        y += p.y
+      }
+    }
+    return { x, y, w: b.w, h: b.h }
+  }
+
+  contentBounds(): Box | null {
+    return union(this.blocks().map((b) => this.baseRect(b.id)!).filter(Boolean))
+  }
+
+  /** Topmost block under a page point. Non-frames win over frames. */
+  hitTest(p: Vec, opts: { exclude?: Set<string>; frames?: boolean } = {}): Block | null {
+    const list = this.blocks()
+    for (let i = list.length - 1; i >= 0; i--) {
+      const b = list[i]
+      if (opts.exclude?.has(b.id)) continue
+      if (b.kind === 'frame' && !opts.frames) continue
+      const r = this.pageRect(b.id)
+      if (r && containsPoint(r, p)) return b
+    }
+    return null
+  }
+
+  frameAt(p: Vec, exclude?: Set<string>): Block | null {
+    const frames = this.blocks().filter((b) => b.kind === 'frame' && !exclude?.has(b.id))
+    for (let i = frames.length - 1; i >= 0; i--) {
+      const r = this.pageRect(frames[i].id)
+      if (r && containsPoint(r, p)) return frames[i]
+    }
+    return null
+  }
+
+  connectorAt(p: Vec, tolerancePx = 8): Connector | null {
+    const tol = tolerancePx / this.camera.z
+    for (const c of this.connectors()) {
+      const pts = this.connectorPoints(c)
+      if (pts && distToSegment(p, pts.a, pts.b) <= tol) return c
+    }
+    return null
+  }
+
+  /** Endpoints of a connector, clipped to the block edges. */
+  connectorPoints(c: Connector): { a: Vec; b: Vec } | null {
+    const fr = c.from ? this.pageRect(c.from) : null
+    const tr = c.to ? this.pageRect(c.to) : null
+    const fc = fr ? center(fr) : c.fromPoint
+    const tc = tr ? center(tr) : c.toPoint
+    if (!fc || !tc) return null
+    return { a: fr ? edgePoint(fr, tc, 4) : fc, b: tr ? edgePoint(tr, fc, 7) : tc }
+  }
+
+  // ---- camera ---------------------------------------------------------------
+
+  setViewportSize(w: number, h: number) {
+    this.viewport = { w, h }
+    this.bumpCamera()
+  }
+
+  pageToScreen(p: Vec): Vec {
+    return { x: p.x * this.camera.z + this.camera.x, y: p.y * this.camera.z + this.camera.y }
+  }
+
+  screenToPage(p: Vec): Vec {
+    return { x: (p.x - this.camera.x) / this.camera.z, y: (p.y - this.camera.y) / this.camera.z }
+  }
+
+  viewportPageBounds(): Box {
+    const a = this.screenToPage({ x: 0, y: 0 })
+    return { x: a.x, y: a.y, w: this.viewport.w / this.camera.z, h: this.viewport.h / this.camera.z }
+  }
+
+  setCamera(c: Camera) {
+    this.stopAnimation()
+    this.camera = { x: c.x, y: c.y, z: Math.min(MAX_Z, Math.max(MIN_Z, c.z)) }
+    this.bumpCamera()
+  }
+
+  panBy(dx: number, dy: number) {
+    this.setCamera({ ...this.camera, x: this.camera.x + dx, y: this.camera.y + dy })
+  }
+
+  zoomAt(screen: Vec, z: number) {
+    const nz = Math.min(MAX_Z, Math.max(MIN_Z, z))
+    const p = this.screenToPage(screen)
+    this.setCamera({ x: screen.x - p.x * nz, y: screen.y - p.y * nz, z: nz })
+  }
+
+  private get screenCenter(): Vec {
+    return { x: this.viewport.w / 2, y: this.viewport.h / 2 }
+  }
+
+  zoomIn() {
+    const z = ZOOM_STEPS.find((s) => s > this.camera.z + 0.001) ?? MAX_Z
+    this.animateTo(this.cameraForZoom(z))
+  }
+
+  zoomOut() {
+    const z = [...ZOOM_STEPS].reverse().find((s) => s < this.camera.z - 0.001) ?? MIN_Z
+    this.animateTo(this.cameraForZoom(z))
+  }
+
+  resetZoom() {
+    this.animateTo(this.cameraForZoom(1))
+  }
+
+  private cameraForZoom(z: number): Camera {
+    const p = this.screenToPage(this.screenCenter)
+    return { x: this.screenCenter.x - p.x * z, y: this.screenCenter.y - p.y * z, z }
+  }
+
+  zoomToBounds(b: Box, opts: { inset?: number; maxZoom?: number; animate?: boolean } = {}) {
+    const inset = opts.inset ?? 96
+    const w = Math.max(1, this.viewport.w - inset * 2)
+    const h = Math.max(1, this.viewport.h - inset * 2)
+    const z = Math.min(opts.maxZoom ?? 1, Math.max(MIN_Z, Math.min(w / Math.max(b.w, 1), h / Math.max(b.h, 1))))
+    const c = center(b)
+    const cam = { x: this.viewport.w / 2 - c.x * z, y: this.viewport.h / 2 - c.y * z, z }
+    if (opts.animate === false) this.setCamera(cam)
+    else this.animateTo(cam)
+  }
+
+  zoomToFit(animate = true) {
+    const b = this.contentBounds()
+    if (b) this.zoomToBounds(b, { animate })
+    else this.setCamera({ x: this.viewport.w / 2, y: this.viewport.h / 2, z: 1 })
+  }
+
+  private anim: number | null = null
+
+  private stopAnimation() {
+    if (this.anim !== null) cancelAnimationFrame(this.anim)
+    this.anim = null
+  }
+
+  animateTo(target: Camera, duration = 260) {
+    this.stopAnimation()
+    const reduced = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduced) return this.setCamera(target)
+    const from = { ...this.camera }
+    const t0 = performance.now()
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3)
+    const step = () => {
+      const t = Math.min(1, (performance.now() - t0) / duration)
+      const k = ease(t)
+      // interpolate in page space around the viewport center so the motion feels anchored
+      const z = from.z + (target.z - from.z) * k
+      this.camera = { x: from.x + (target.x - from.x) * k, y: from.y + (target.y - from.y) * k, z }
+      this.bumpCamera()
+      this.anim = t < 1 ? requestAnimationFrame(step) : null
+    }
+    this.anim = requestAnimationFrame(step)
+  }
+
+  // ---- tools, selection, editing -------------------------------------------
+
+  setTool(tool: string) {
+    this.tool = tool
+    if (tool !== 'select') this.stopEditing()
+    this.bump()
+  }
+
+  select(ids: Iterable<string>) {
+    this.selection = new Set(ids)
+    this.bump()
+  }
+
+  selectNone() {
+    if (!this.selection.size) return
+    this.selection = new Set()
+    this.bump()
+  }
+
+  selectAll() {
+    this.select(this.blocks().filter((b) => !b.parent || !this.selection.has(b.parent)).map((b) => b.id))
+  }
+
+  selectedBlocks(): Block[] {
+    return [...this.selection].map((id) => this.blocksMap.get(id)).filter(Boolean) as Block[]
+  }
+
+  selectionBounds(): Box | null {
+    return union(
+      [...this.selection]
+        .map((id) => this.pageRect(id))
+        .filter(Boolean) as Box[],
+    )
+  }
+
+  startEditing(id: string) {
+    const b = this.blocksMap.get(id)
+    const c = this.connectorsMap.get(id)
+    if (b && !this.shape(b.kind)?.canEdit) return
+    if (!b && !c) return
+    this.undoManager.stopCapturing()
+    this.editingId = id
+    this.selection = new Set([id])
+    this.tool = 'select'
+    this.bump()
+  }
+
+  stopEditing() {
+    const id = this.editingId
+    if (!id) return
+    this.editingId = null
+    const b = this.blocksMap.get(id)
+    if (b && this.shape(b.kind)?.isEmpty?.(b)) this.deleteIds([id])
+    this.undoManager.stopCapturing()
+    this.bump()
+  }
+
+  // ---- mutations ------------------------------------------------------------
+
+  transact(fn: () => void) {
+    this.doc.transact(fn, this.origin)
+  }
+
+  private stamp<T extends Block | Connector>(value: T, patch: Partial<T>): T {
+    return { ...value, ...patch, updatedAt: Date.now() }
+  }
+
+  createBlock(draft: BlockDraft): string {
+    const id = draft.id ?? randomId()
+    const now = Date.now()
+    const block: Block = {
+      text: '',
+      color: 'yellow',
+      size: 'm',
+      parent: null,
+      x: 0,
+      y: 0,
+      ...draft,
+      id,
+      author: this.options.author,
+      createdAt: now,
+      updatedAt: now,
+      pending: false,
+      changeSet: null,
+    }
+    this.undoManager.stopCapturing()
+    this.transact(() => this.blocksMap.set(id, block))
+    return id
+  }
+
+  updateBlock(id: string, patch: Partial<Block>) {
+    const b = this.blocksMap.get(id)
+    if (!b) return
+    this.transact(() => this.blocksMap.set(id, this.stamp(b, patch)))
+  }
+
+  updateBlocks(patches: { id: string; patch: Partial<Block> }[]) {
+    this.undoManager.stopCapturing()
+    this.transact(() => {
+      for (const { id, patch } of patches) {
+        const b = this.blocksMap.get(id)
+        if (b) this.blocksMap.set(id, this.stamp(b, patch))
+      }
+    })
+  }
+
+  updateConnector(id: string, patch: Partial<Connector>) {
+    const c = this.connectorsMap.get(id)
+    if (!c) return
+    this.transact(() => this.connectorsMap.set(id, this.stamp(c, patch)))
+  }
+
+  createConnector(from: string, to: string, label?: string): string | null {
+    if (from === to) return null
+    const dup = this.connectors().find((c) => c.from === from && c.to === to)
+    if (dup) return dup.id
+    const id = randomId()
+    const now = Date.now()
+    this.transact(() =>
+      this.connectorsMap.set(id, { id, from, to, label: label ?? '', author: this.options.author, createdAt: now, updatedAt: now, pending: false, changeSet: null }),
+    )
+    return id
+  }
+
+  deleteIds(ids: string[]) {
+    if (!ids.length) return
+    this.undoManager.stopCapturing()
+    this.transact(() => {
+      const all = new Set<string>()
+      const add = (id: string) => {
+        if (all.has(id)) return
+        all.add(id)
+        for (const child of this.childrenOf(id)) add(child.id)
+      }
+      ids.forEach(add)
+      for (const id of all) {
+        if (this.connectorsMap.has(id)) this.connectorsMap.delete(id)
+        if (this.blocksMap.has(id)) this.blocksMap.delete(id)
+      }
+      for (const c of this.connectors()) if ((c.from && all.has(c.from)) || (c.to && all.has(c.to))) this.connectorsMap.delete(c.id)
+    })
+    for (const id of ids) this.selection.delete(id)
+    this.bump()
+  }
+
+  deleteSelection() {
+    this.deleteIds([...this.selection])
+  }
+
+  /** Move the top-level members of the selection; nudges snap to the grid. */
+  nudge(dx: number, dy: number) {
+    const ids = this.movableIds([...this.selection])
+    this.updateBlocks(ids.map((id) => ({ id, patch: { x: this.blocksMap.get(id)!.x + dx, y: this.blocksMap.get(id)!.y + dy } })))
+  }
+
+  duplicate() {
+    const text = this.serialize([...this.selection])
+    if (text) this.pasteSerialized(text, { x: 24, y: 24 })
+  }
+
+  undo() {
+    this.stopEditing()
+    this.undoManager.undo()
+  }
+
+  redo() {
+    this.undoManager.redo()
+  }
+
+  /** Selected ids whose parent frame isn't also selected. */
+  movableIds(ids: string[]) {
+    const set = new Set(ids)
+    return ids.filter((id) => {
+      const b = this.blocksMap.get(id)
+      return b && !(b.parent && set.has(b.parent))
+    })
+  }
+
+  // ---- clipboard ---------------------------------------------------------
+
+  serialize(ids: string[]): string | null {
+    const set = new Set<string>()
+    for (const id of this.movableIds(ids)) {
+      if (!this.blocksMap.has(id)) continue
+      set.add(id)
+      for (const c of this.childrenOf(id)) set.add(c.id)
+    }
+    if (!set.size) return null
+    const blocks = [...set].map((id) => {
+      const b = this.blocksMap.get(id)!
+      if (b.parent && !set.has(b.parent)) {
+        const r = this.baseRect(id)!
+        return { ...b, parent: null, x: r.x, y: r.y }
+      }
+      return b
+    })
+    const connectors = this.connectors().filter((c) => c.from && c.to && set.has(c.from) && set.has(c.to))
+    return `aifig:${JSON.stringify({ blocks, connectors })}`
+  }
+
+  copy() {
+    this.clipboard = this.serialize([...this.selection])
+    return this.clipboard
+  }
+
+  /** Paste serialized blocks, either offset from their origin or centered at a page point. */
+  pasteSerialized(text: string, place: Vec | { at: Vec }) {
+    if (!text.startsWith('aifig:')) return false
+    let data: { blocks: Block[]; connectors: Connector[] }
+    try {
+      data = JSON.parse(text.slice(6))
+    } catch {
+      return false
+    }
+    const tops = data.blocks.filter((b) => !b.parent)
+    const bounds = union(tops.map((b) => box(b.x, b.y, b.w, b.h)))
+    if (!bounds) return false
+    const off = 'at' in place ? { x: snapTo(place.at.x - bounds.w / 2 - bounds.x, this.grid), y: snapTo(place.at.y - bounds.h / 2 - bounds.y, this.grid) } : place
+    const idMap = new Map(data.blocks.map((b) => [b.id, randomId()]))
+    const now = Date.now()
+    this.undoManager.stopCapturing()
+    this.transact(() => {
+      data.blocks.forEach((b, i) => {
+        const id = idMap.get(b.id)!
+        const top = !b.parent
+        this.blocksMap.set(id, {
+          ...b,
+          id,
+          parent: b.parent ? (idMap.get(b.parent) ?? null) : null,
+          x: top ? b.x + off.x : b.x,
+          y: top ? b.y + off.y : b.y,
+          author: this.options.author,
+          createdAt: now + i,
+          updatedAt: now,
+          pending: false,
+          changeSet: null,
+        })
+      })
+      for (const c of data.connectors) {
+        const id = randomId()
+        this.connectorsMap.set(id, { ...c, id, from: idMap.get(c.from!)!, to: idMap.get(c.to!)!, author: this.options.author, createdAt: now, updatedAt: now, pending: false, changeSet: null })
+      }
+    })
+    this.select(tops.map((b) => idMap.get(b.id)!))
+    return true
+  }
+
+  paste(text: string | null, at?: Vec) {
+    const pt = at ?? center(this.viewportPageBounds())
+    const t = text ?? this.clipboard
+    if (!t) return
+    if (this.pasteSerialized(t, text ? { at: pt } : { x: 24, y: 24 })) return
+    this.options.onPasteText?.(t, pt)
+  }
+
+  // ---- interactions (driven by the input controller) ---------------------
+
+  beginMove(startPage: Vec) {
+    const ids = this.movableIds([...this.selection].filter((id) => this.blocksMap.has(id)))
+    if (!ids.length) return
+    this.interaction = { type: 'move', startPage, ids, dx: 0, dy: 0 }
+    this.bump()
+  }
+
+  updateMove(page: Vec, snap: boolean) {
+    const it = this.interaction
+    if (it.type !== 'move') return
+    let dx = page.x - it.startPage.x
+    let dy = page.y - it.startPage.y
+    this.guides = []
+    const moving = union(it.ids.map((id) => this.baseRect(id)!).filter(Boolean))
+    if (moving && snap) {
+      const moved = { ...moving, x: moving.x + dx, y: moving.y + dy }
+      const exclude = new Set(it.ids)
+      for (const id of it.ids) for (const c of this.childrenOf(id)) exclude.add(c.id)
+      const vp = this.viewportPageBounds()
+      const others = this.blocks()
+        .filter((b) => !exclude.has(b.id))
+        .map((b) => this.baseRect(b.id)!)
+        .filter((r) => r.x < vp.x + vp.w && r.x + r.w > vp.x && r.y < vp.y + vp.h && r.y + r.h > vp.y)
+      const tol = SNAP_PX / this.camera.z
+      const sx = this.bestSnap([moved.x, moved.x + moved.w / 2, moved.x + moved.w], others.flatMap((r) => [r.x, r.x + r.w / 2, r.x + r.w]), tol)
+      const sy = this.bestSnap([moved.y, moved.y + moved.h / 2, moved.y + moved.h], others.flatMap((r) => [r.y, r.y + r.h / 2, r.y + r.h]), tol)
+      if (sx) dx += sx.delta
+      else dx = snapTo(moving.x + dx, this.grid) - moving.x
+      if (sy) dy += sy.delta
+      else dy = snapTo(moving.y + dy, this.grid) - moving.y
+      const fin = { ...moving, x: moving.x + dx, y: moving.y + dy }
+      if (sx) {
+        const related = others.filter((r) => [r.x, r.x + r.w / 2, r.x + r.w].some((v) => Math.abs(v - sx.at) < 0.5))
+        const ys = [fin.y, fin.y + fin.h, ...related.flatMap((r) => [r.y, r.y + r.h])]
+        this.guides.push({ axis: 'x', at: sx.at, from: Math.min(...ys), to: Math.max(...ys) })
+      }
+      if (sy) {
+        const related = others.filter((r) => [r.y, r.y + r.h / 2, r.y + r.h].some((v) => Math.abs(v - sy.at) < 0.5))
+        const xs = [fin.x, fin.x + fin.w, ...related.flatMap((r) => [r.x, r.x + r.w])]
+        this.guides.push({ axis: 'y', at: sy.at, from: Math.min(...xs), to: Math.max(...xs) })
+      }
+    }
+    this.interaction = { ...it, dx, dy }
+    this.bump()
+  }
+
+  private bestSnap(mine: number[], theirs: number[], tol: number) {
+    let best: { delta: number; at: number } | null = null
+    for (const m of mine) {
+      for (const t of theirs) {
+        const d = t - m
+        if (Math.abs(d) <= tol && (!best || Math.abs(d) < Math.abs(best.delta))) best = { delta: d, at: t }
+      }
+    }
+    return best
+  }
+
+  endMove() {
+    const it = this.interaction
+    if (it.type !== 'move') return
+    this.interaction = { type: 'idle' }
+    this.guides = []
+    if (!it.dx && !it.dy) return this.bump()
+    const moving = new Set(it.ids)
+    const patches: { id: string; patch: Partial<Block> }[] = []
+    const touchedFrames = new Set<string>()
+    for (const id of it.ids) {
+      const b = this.blocksMap.get(id)!
+      const r = this.baseRect(id)!
+      const page = { x: r.x + it.dx, y: r.y + it.dy }
+      if (b.kind === 'frame') {
+        patches.push({ id, patch: { x: b.x + it.dx, y: b.y + it.dy } })
+        continue
+      }
+      const frame = this.frameAt(center({ ...r, ...page }), moving)
+      const parent = frame?.id ?? null
+      if (parent) {
+        const fr = this.baseRect(parent)!
+        patches.push({ id, patch: { parent, x: page.x - fr.x, y: page.y - fr.y } })
+        touchedFrames.add(parent)
+      } else patches.push({ id, patch: { parent: null, x: page.x, y: page.y } })
+    }
+    this.updateBlocks(patches)
+    for (const f of touchedFrames) this.growFrame(f)
+  }
+
+  /** Grow a frame so its children fit with padding (never shrinks). */
+  growFrame(frameId: string) {
+    const f = this.blocksMap.get(frameId)
+    if (!f) return
+    const kids = this.childrenOf(frameId)
+    if (!kids.length) return
+    const minX = Math.min(0, ...kids.map((k) => k.x - FRAME_PAD))
+    const minY = Math.min(0, ...kids.map((k) => k.y - FRAME_PAD))
+    const maxX = Math.max(f.w, ...kids.map((k) => k.x + k.w + FRAME_PAD))
+    const maxY = Math.max(f.h, ...kids.map((k) => k.y + k.h + FRAME_PAD))
+    if (minX === 0 && minY === 0 && maxX === f.w && maxY === f.h) return
+    const sx = snapTo(minX, this.grid)
+    const sy = snapTo(minY, this.grid)
+    this.transact(() => {
+      this.blocksMap.set(frameId, this.stamp(f, { x: f.x + sx, y: f.y + sy, w: snapTo(maxX - sx, this.grid), h: snapTo(maxY - sy, this.grid) }))
+      if (sx || sy) for (const k of kids) this.blocksMap.set(k.id, this.stamp(k, { x: k.x - sx, y: k.y - sy }))
+    })
+  }
+
+  beginResize(id: string, handle: HandleId, startPage: Vec) {
+    const r = this.pageRect(id)
+    if (!r) return
+    this.interaction = { type: 'resize', id, handle, startPage, orig: r, rect: r }
+    this.bump()
+  }
+
+  updateResize(page: Vec) {
+    const it = this.interaction
+    if (it.type !== 'resize') return
+    const b = this.blocksMap.get(it.id)
+    const def = b && this.shape(b.kind)
+    if (!b || !def) return
+    const dx = page.x - it.startPage.x
+    const dy = page.y - it.startPage.y
+    let { x, y, w, h } = it.orig
+    const minW = def.minW ?? 48
+    const minH = def.minH ?? 32
+    const g = this.grid
+    if (it.handle.includes('e')) w = Math.max(minW, snapTo(it.orig.x + it.orig.w + dx, g) - x)
+    if (it.handle.includes('w')) {
+      const nx = Math.min(snapTo(it.orig.x + dx, g), it.orig.x + it.orig.w - minW)
+      w = it.orig.x + it.orig.w - nx
+      x = nx
+    }
+    if (def.resize === 'xy') {
+      if (it.handle.includes('s')) h = Math.max(minH, snapTo(it.orig.y + it.orig.h + dy, g) - y)
+      if (it.handle.includes('n')) {
+        const ny = Math.min(snapTo(it.orig.y + dy, g), it.orig.y + it.orig.h - minH)
+        h = it.orig.y + it.orig.h - ny
+        y = ny
+      }
+    }
+    if (def.fit) {
+      const f = def.fit(b, w, h)
+      if (it.handle.includes('n')) y += h - f.h
+      w = f.w
+      h = f.h
+    }
+    this.interaction = { ...it, rect: { x, y, w, h } }
+    this.bump()
+  }
+
+  endResize() {
+    const it = this.interaction
+    if (it.type !== 'resize') return
+    this.interaction = { type: 'idle' }
+    const b = this.blocksMap.get(it.id)
+    if (!b) return this.bump()
+    const parent = b.parent ? this.baseRect(b.parent) : null
+    this.updateBlocks([{ id: it.id, patch: { x: it.rect.x - (parent?.x ?? 0), y: it.rect.y - (parent?.y ?? 0), w: it.rect.w, h: it.rect.h } }])
+    if (b.parent) this.growFrame(b.parent)
+  }
+
+  beginMarquee(startPage: Vec, additive: boolean) {
+    this.interaction = { type: 'marquee', startPage, rect: box(startPage.x, startPage.y, 0, 0), base: additive ? [...this.selection] : [] }
+    this.bump()
+  }
+
+  updateMarquee(page: Vec) {
+    const it = this.interaction
+    if (it.type !== 'marquee') return
+    const rect = boxFromPoints(it.startPage, page)
+    const hits = this.blocks()
+      .filter((b) => {
+        const r = this.pageRect(b.id)!
+        if (b.kind === 'frame') return containsBox(rect, r)
+        if (b.parent && containsBox(rect, this.pageRect(b.parent)!)) return false
+        return r.x < rect.x + rect.w && r.x + r.w > rect.x && r.y < rect.y + rect.h && r.y + r.h > rect.y
+      })
+      .map((b) => b.id)
+    this.selection = new Set([...it.base, ...hits])
+    this.interaction = { ...it, rect }
+    this.bump()
+  }
+
+  endInteraction() {
+    this.interaction = { type: 'idle' }
+    this.guides = []
+    this.bump()
+  }
+
+  beginConnect(from: string, point: Vec) {
+    this.interaction = { type: 'connect', from, point, target: null }
+    this.bump()
+  }
+
+  updateConnect(point: Vec) {
+    const it = this.interaction
+    if (it.type !== 'connect') return
+    const target = this.hitTest(point, { exclude: new Set([it.from]) })
+    this.interaction = { ...it, point, target: target?.id ?? null }
+    this.bump()
+  }
+
+  endConnect() {
+    const it = this.interaction
+    if (it.type !== 'connect') return
+    this.interaction = { type: 'idle' }
+    const from = this.blocksMap.get(it.from)
+    if (!from) return this.bump()
+    if (it.target) {
+      this.undoManager.stopCapturing()
+      const id = this.createConnector(it.from, it.target)
+      if (id) this.select([id])
+      return
+    }
+    const fr = this.baseRect(it.from)!
+    if (Math.hypot(it.point.x - center(fr).x, it.point.y - center(fr).y) < Math.max(fr.w, fr.h) * 0.7) return this.bump()
+    const draft = this.options.createForConnectorDrop?.(from, it.point)
+    if (!draft) return this.bump()
+    const pid = this.placeDraft(draft, it.point)
+    this.transact(() => {
+      const id = randomId()
+      const now = Date.now()
+      this.connectorsMap.set(id, { id, from: it.from, to: pid, label: '', author: this.options.author, createdAt: now, updatedAt: now, pending: false, changeSet: null })
+    })
+    this.startEditing(pid)
+  }
+
+  /** Create a draft centered at a page point, inside the frame under it if any. */
+  placeDraft(draft: BlockDraft, at: Vec): string {
+    let x = snapTo(at.x - draft.w / 2, this.grid)
+    let y = snapTo(at.y - draft.h / 2, this.grid)
+    let parent: string | null = null
+    if (draft.kind !== 'frame') {
+      const frame = this.frameAt(at)
+      if (frame) {
+        const fr = this.baseRect(frame.id)!
+        parent = frame.id
+        x -= fr.x
+        y -= fr.y
+      }
+    }
+    const id = this.createBlock({ ...draft, x, y, parent })
+    if (parent) this.growFrame(parent)
+    return id
+  }
+
+  createWithTool(tool: string, at: Vec) {
+    const draft = this.options.createForTool?.(tool, at)
+    if (!draft) return
+    const id = this.placeDraft(draft, at)
+    this.tool = 'select'
+    this.startEditing(id)
+  }
+
+  beginFrame(startPage: Vec) {
+    this.interaction = { type: 'frame', startPage, rect: box(startPage.x, startPage.y, 0, 0) }
+    this.bump()
+  }
+
+  updateFrame(page: Vec) {
+    const it = this.interaction
+    if (it.type !== 'frame') return
+    const r = boxFromPoints(it.startPage, page)
+    const g = this.grid
+    const x = snapTo(r.x, g)
+    const y = snapTo(r.y, g)
+    this.interaction = { ...it, rect: { x, y, w: snapTo(r.x + r.w, g) - x, h: snapTo(r.y + r.h, g) - y } }
+    this.bump()
+  }
+
+  endFrame() {
+    const it = this.interaction
+    if (it.type !== 'frame') return
+    this.interaction = { type: 'idle' }
+    let rect = it.rect
+    if (rect.w < 64 || rect.h < 48) rect = { x: snapTo(it.startPage.x, this.grid), y: snapTo(it.startPage.y, this.grid), w: 480, h: 320 }
+    const inside = this.childrenOf(null).filter((b) => b.kind !== 'frame' && containsBox(rect, this.baseRect(b.id)!))
+    const id = this.createBlock({ kind: 'frame', x: rect.x, y: rect.y, w: rect.w, h: rect.h, title: 'Frame', text: '', color: 'gray', size: 'm' })
+    this.transact(() => {
+      for (const b of inside) this.blocksMap.set(b.id, this.stamp(b, { parent: id, x: b.x - rect.x, y: b.y - rect.y }))
+    })
+    this.tool = 'select'
+    this.startEditing(id)
+  }
+}
