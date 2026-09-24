@@ -21,7 +21,7 @@ export interface Health {
   pid: number
   mcp?: { command: string; args: string[]; env?: Record<string, string> }
   mcpUrl?: string
-  snippetOrigin?: string
+  snippetOrigin?: string | null
 }
 
 export async function fetchHealth(): Promise<Health> {

@@ -85,6 +85,20 @@ await mcp.connect(new StdioClientTransport({ command: health.mcp.command, args: 
 const tools = (await mcp.listTools()).tools.length
 await mcp.close()
 check('an agent can connect with that exact config', tools > 15, `${tools} tools`)
+// web snippets run in the desktop app too, from this core's own snippet host
+const coreHealth = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()
+const snipRes = await call('create_snippet', { title: 'Desktop snippet', html: '<button id="b" style="font-size:20px;padding:20px">go</button>', js: "document.getElementById('b').onclick = () => aifig.setState({ clicked: true })" })
+const snipId = snipRes?.id
+await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('menu', 'zoom-fit'))
+await win.waitForTimeout(900)
+const box = await win.locator(`[data-block-id="${snipId}"]`).boundingBox()
+if (box) await win.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2)
+await win.waitForTimeout(1500)
+await win.frameLocator('[data-web-frame]').locator('#b').click({ timeout: 5000 }).catch(() => {})
+await win.waitForTimeout(600)
+const snipState = (await call('get_board', { format: 'json' }))?.blocks?.find((b) => b.id === snipId)?.web?.state
+check('web snippets run sandboxed in the desktop app (own snippet host)', coreHealth.snippetOrigin === `http://localhost:${Number(port) + 1}` && snipState?.clicked === true, JSON.stringify({ origin: coreHealth.snippetOrigin, snipState }))
+await win.keyboard.press('Escape')
 // assistant settings go through the keychain bridge; the core only keeps them in memory
 const before2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`)).json()
 const info = await win.evaluate(async () => {

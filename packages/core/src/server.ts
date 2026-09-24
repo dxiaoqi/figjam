@@ -7,7 +7,7 @@ import * as encoding from 'lib0/encoding'
 import { WebSocketServer, type WebSocket } from 'ws'
 import * as syncProtocol from 'y-protocols/sync'
 import type { ClientMessage, ServerMessage } from '@aifig/shared'
-import { CORE_PORT, snippetOrigin, type CallRequest } from '@aifig/shared'
+import { CORE_PORT, SNIPPET_PORT, snippetOrigin, type CallRequest } from '@aifig/shared'
 import { startSnippetHost } from './snippet-host'
 import { randomUUID } from 'node:crypto'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
@@ -56,7 +56,7 @@ export async function startCore(port = CORE_PORT) {
   const core = new CanvasCore()
   core.init()
   const assistant = new Assistant(core)
-  const snippets = await startSnippetHost(core.registry)
+  const snippets = await startSnippetHost(core.registry, port === CORE_PORT ? SNIPPET_PORT : port + 1)
   const conns = new Set<Conn>()
   const bound = new WeakSet<Board>()
 
@@ -138,7 +138,7 @@ export async function startCore(port = CORE_PORT) {
     }
     try {
       if (url.pathname === '/api/health') {
-        return json(res, 200, { ok: true, name: 'aifig-core', home: aifigHome(), bin: binPath, mcp: mcpLaunch, mcpUrl: `http://127.0.0.1:${port}/mcp`, snippetOrigin: snippetOrigin(snippets.port), boards: core.registry.all().length, pid: process.pid })
+        return json(res, 200, { ok: true, name: 'aifig-core', home: aifigHome(), bin: binPath, mcp: mcpLaunch, mcpUrl: `http://127.0.0.1:${port}/mcp`, snippetOrigin: snippets.ok ? snippetOrigin(snippets.port) : null, boards: core.registry.all().length, pid: process.pid })
       }
       if (url.pathname === '/api/boards' && req.method === 'GET') {
         return json(res, 200, { boards: core.registry.all().map((b) => b.summary()), active: core.activeBoardId })

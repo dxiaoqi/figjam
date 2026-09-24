@@ -143,6 +143,8 @@ export async function startSnippetHost(registry: BoardRegistry, port = SNIPPET_P
       })
     })
   await listen('127.0.0.1')
+  const ok = servers.length > 0
+  if (!ok) console.error(`ai-figma: snippet host port ${port} is busy — web snippets will show previews only`)
   await listen('::1')
-  return { port, close: () => servers.forEach((s) => s.close()) }
+  return { port, ok, close: () => servers.forEach((s) => s.close()) }
 }

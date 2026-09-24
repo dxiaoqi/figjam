@@ -9,7 +9,7 @@ const env = (globalThis as { process?: { env?: Record<string, string | undefined
  * Port of the snippet host. Served as `localhost` while the app uses `127.0.0.1`, so snippets are a
  * different *site* (own process under site isolation), not just a different origin.
  */
-export const SNIPPET_PORT = Number(env.AIFIG_SNIPPET_PORT ?? 47822)
+export const SNIPPET_PORT = Number(env.AIFIG_SNIPPET_PORT ?? (env.AIFIG_CORE_PORT ? Number(env.AIFIG_CORE_PORT) + 1 : 47822))
 export const SNIPPET_HOST = 'localhost'
 export const snippetOrigin = (port = SNIPPET_PORT) => `http://${SNIPPET_HOST}:${port}`
 
