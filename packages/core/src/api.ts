@@ -1125,7 +1125,7 @@ export class CanvasCore {
       for (const b of list) out.push(...typedLine(b))
       out.push('')
     }
-    const plain = (b: Block) => !b.type
+    const plain = (b: Block) => !b.type && b.layoutRole !== 'axis'
     const frames = blocks.filter((b) => b.kind === 'frame').sort(byY)
     for (const f of frames) {
       const kids = all.filter((k) => k.parent === f.id && plain(k)).sort(byY)
