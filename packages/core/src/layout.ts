@@ -1,6 +1,6 @@
 import type { Block, Rect } from '@aifig/shared'
 import { SPACING, snap } from '@aifig/shared'
-import { cardContentHeight, maxBlockHeight, richTextHeight, stickyContentHeight, measureCard, measureText } from '@aifig/shared'
+import { cardContentHeight, maxBlockHeight, richTextHeight, stickyContentHeight, measureCard, measureText, typeChrome } from '@aifig/shared'
 import { FONT_SIZES } from '@aifig/shared'
 
 export type LayoutIntent = 'grid' | 'row' | 'stack' | 'cluster' | 'tree'
@@ -213,10 +213,10 @@ export function findFreeSpot(occupied: Rect[], size: { w: number; h: number }, v
 
 // ---- measurement ----------------------------------------------------------
 
-export function measureBlock(b: Pick<Block, 'kind' | 'text' | 'title' | 'size' | 'w' | 'h'> & { expanded?: boolean }): { w: number; h: number } {
+export function measureBlock(b: Pick<Block, 'kind' | 'text' | 'title' | 'size' | 'w' | 'h'> & Pick<Partial<Block>, 'expanded' | 'type' | 'typeData'>): { w: number; h: number } {
   switch (b.kind) {
     case 'card':
-      return measureCard(b.title ?? '', b.text ?? '', b.size, b.expanded)
+      return measureCard(b.title ?? '', b.text ?? '', b.size, b.expanded, typeChrome(b))
     case 'text':
       return measureText(b.text ?? '', b.size)
     default:
@@ -285,8 +285,8 @@ export interface LintIssue {
 /** Height the content needs: the canvas-measured value when known, else a Markdown-aware estimate. */
 export function contentHeight(b: Block) {
   if (b.contentH != null) return b.contentH
-  if (b.kind === 'sticky') return stickyContentHeight(b.text, b.w)
-  if (b.kind === 'card') return cardContentHeight(b.title ?? '', b.text ?? '', b.w)
+  if (b.kind === 'sticky') return stickyContentHeight(b.text, b.w, typeChrome(b))
+  if (b.kind === 'card') return cardContentHeight(b.title ?? '', b.text ?? '', b.w, typeChrome(b))
   if (b.kind === 'text') return richTextHeight(b.text, b.w - 8, FONT_SIZES[b.size], b.size === 'l' || b.size === 'xl')
   return 0
 }

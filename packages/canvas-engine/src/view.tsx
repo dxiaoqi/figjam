@@ -111,12 +111,13 @@ function ConnectorLabels({ editor, connectors }: { editor: Editor; connectors: C
     <>
       {connectors.map((c) => {
         const editing = editor.editingId === c.id
-        if (!c.label && !editing) return null
+        const relationOnly = !c.label && !!c.relation
+        if (!c.label && !c.relation && !editing) return null
         const m = editor.labelPosition(c)
         if (!m) return null
         return (
-          <div key={c.id} className="ae-connector-label" style={{ transform: `translate(${m.x}px, ${m.y}px) translate(-50%, -50%)` }} data-connector-id={c.id}>
-            {editing ? <LabelInput editor={editor} connector={c} /> : c.label}
+          <div key={c.id} className={`ae-connector-label ${relationOnly && !editing ? 'is-relation' : ''}`} style={{ transform: `translate(${m.x}px, ${m.y}px) translate(-50%, -50%)` }} data-connector-id={c.id} data-relation={c.relation}>
+            {editing ? <LabelInput editor={editor} connector={c} /> : (c.label || c.relation)}
           </div>
         )
       })}

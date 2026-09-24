@@ -18,6 +18,7 @@ import { toggleCommentMode } from './comment-prefs'
 import { CommentLayer } from './CommentLayer'
 import { HeldNotice } from './HeldNotice'
 import { ReviewGhosts } from './ReviewGhosts'
+import { FieldsPopover, TypeFilterBar, TypePalette, useRelationSuggestions } from './types-ui'
 import { EditorContext } from './editor-context'
 import { desktop } from '../lib/desktop'
 import { downloadDocument, downloadSnapshot } from '../lib/export'
@@ -75,6 +76,7 @@ export function BoardCanvas() {
   const { provider } = useBoard()
   const { synced } = useProviderState()
   const [editor, setEditor] = useState<Editor | null>(null)
+  useRelationSuggestions(editor)
 
   useEffect(() => {
     if (!synced) return
@@ -158,8 +160,11 @@ export function BoardCanvas() {
             <AgentLayer />
             <CommentLayer />
             <HeldNotice />
+            <FieldsPopover />
+            <TypePalette />
           </CanvasView>
           <EmptyState />
+          <TypeFilterBar />
           <div className="pointer-events-none absolute inset-x-0 top-0 z-[300] flex items-start justify-between">
             <BoardMenu />
             <div className="flex flex-col items-end">

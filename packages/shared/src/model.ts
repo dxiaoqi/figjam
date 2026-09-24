@@ -1,5 +1,6 @@
 import type { RouteStyle } from './routing'
 import type { ColorToken, SizeToken } from './tokens'
+import type { BlockTypeId, FieldValue, Relation } from './types'
 
 export type BlockKind = 'sticky' | 'card' | 'text' | 'frame' | 'image'
 export const BLOCK_KINDS: BlockKind[] = ['sticky', 'card', 'text', 'frame', 'image']
@@ -33,6 +34,15 @@ export interface Block {
   size: SizeToken
   /** Degrees clockwise around the block center. */
   rotation?: number
+  /** Built-in block type (stickies and cards). Untyped blocks are plain. */
+  type?: BlockTypeId
+  /**
+   * Field values per type. Demoting keeps them, so promoting back restores them; `_color` remembers the
+   * block's own color from before it was first typed.
+   */
+  typeData?: Partial<Record<BlockTypeId, Record<string, FieldValue>>> & { _color?: ColorToken }
+  /** Text blocks placed by a matrix layout as row / column labels (replaced on the next matrix tidy). */
+  layoutRole?: 'axis'
   /** Rendered height the content needs (reported by the canvas, which measures real layout). */
   contentH?: number
   /** Long content shown in full instead of collapsed behind "Show more". */
@@ -57,6 +67,8 @@ export interface Point {
 }
 
 export interface Connector {
+  /** Optional meaning between typed blocks, e.g. a quote *supports* an insight. */
+  relation?: Relation
   id: string
   from?: string | null
   to?: string | null

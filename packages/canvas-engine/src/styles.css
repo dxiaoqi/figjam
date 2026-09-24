@@ -57,6 +57,11 @@
   line-height: 18px;
   white-space: nowrap;
 }
+.ae-connector-label.is-relation {
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.85;
+}
 .ae-connector-label input {
   all: unset;
   font: inherit;

@@ -539,8 +539,9 @@ export class Editor {
   labelPosition(c: Connector): Vec | null {
     const route = this.connectorRoute(c)
     if (!route) return null
-    if (!c.label) return route.mid
-    const { w, h } = estimateLabelSize(c.label)
+    const text = c.label || c.relation
+    if (!text) return route.mid
+    const { w, h } = estimateLabelSize(text)
     const area = union(route.points.map((p) => box(p.x, p.y, 0, 0)))!
     const obstacles: Box[] = []
     for (const b of this.blocks()) {

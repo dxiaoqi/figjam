@@ -8,6 +8,7 @@ import {
   AlignStartVertical,
   AlignVerticalDistributeCenter,
   ArrowDownToLine,
+  Check,
   ArrowUpToLine,
   Clipboard,
   Copy,
@@ -24,15 +25,17 @@ import {
   Scissors,
   Sparkles,
   StickyNote,
+  Tags,
   Trash2,
   Type,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import type { Vec } from '@aifig/canvas-engine'
-import type { RouteStyle } from '@aifig/shared'
+import { BLOCK_TYPE_IDS, BLOCK_TYPES, COLORS, RELATIONS, type Relation, type RouteStyle } from '@aifig/shared'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -47,6 +50,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useBoard, useBoardTitle } from '../board-context'
 import { useEditor } from '../canvas/editor-context'
+import { autoType, isTypeable, setBlocksType, TYPE_ICONS, useAutoType } from '../canvas/types-ui'
 import { callCore } from '../lib/core'
 import { copySnapshot, downloadDocument, downloadSnapshot } from '../lib/export'
 import { runAssistant, useAssistant } from '../lib/assistant'
@@ -65,6 +69,7 @@ export function ContextMenu() {
   const title = useBoardTitle()
   const [menu, setMenu] = useState<MenuState | null>(null)
   const assistant = useAssistant()
+  const autoTypeOn = useAutoType()
 
   useEffect(() => {
     editor.options.onContextMenu = ({ screen, page }) => setMenu({ screen, page })
@@ -162,6 +167,32 @@ export function ContextMenu() {
             <DropdownMenuItem onSelect={run(() => editor.duplicate())}>
               <CopyPlus /> Duplicate <DropdownMenuShortcut>{mod}D</DropdownMenuShortcut>
             </DropdownMenuItem>
+            {blocks.some(isTypeable) && (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger data-set-as>
+                  <Tags /> Set as…
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-56" data-ui>
+                  {BLOCK_TYPE_IDS.map((t) => {
+                    const Icon = TYPE_ICONS[t]
+                    const all = blocks.filter(isTypeable).every((b) => b.type === t)
+                    return (
+                      <DropdownMenuItem key={t} data-set-type={t} onSelect={run(() => setBlocksType(editor, ids, t))}>
+                        <Icon style={{ color: COLORS[BLOCK_TYPES[t].color].light.accent }} /> {BLOCK_TYPES[t].label}
+                        {all ? <Check className="ml-auto size-3.5" /> : <DropdownMenuShortcut>{BLOCK_TYPES[t].prefixes[0]}</DropdownMenuShortcut>}
+                      </DropdownMenuItem>
+                    )
+                  })}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem data-set-type="none" disabled={!blocks.some((b) => b.type)} onSelect={run(() => setBlocksType(editor, ids, null))}>
+                    <Tags className="opacity-40" /> Plain (keeps fields hidden)
+                  </DropdownMenuItem>
+                  <DropdownMenuCheckboxItem checked={autoTypeOn} onCheckedChange={(v) => autoType.set(!!v)} onSelect={(e) => e.preventDefault()} data-auto-type>
+                    Detect from prefix (?, !, “…)
+                  </DropdownMenuCheckboxItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            )}
             {assistant.available && (
               <>
                 <DropdownMenuSeparator />
@@ -269,6 +300,29 @@ export function ContextMenu() {
                 <RotateCcw /> Remove bends (auto-route)
               </DropdownMenuItem>
             )}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger data-relation-menu>
+                <Tags /> Relation{connectors.length === 1 && connectors[0]!.relation ? ` · ${connectors[0]!.relation}` : ''}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-44" data-ui>
+                <DropdownMenuRadioGroup
+                  value={connectors.length === 1 ? (connectors[0]!.relation ?? 'none') : ''}
+                  onValueChange={(v) => {
+                    editor.doc.transact(() => {
+                      for (const c of connectors) editor.connectorsMap.set(c!.id, { ...c!, relation: v === 'none' ? undefined : (v as Relation) })
+                    }, editor.origin)
+                    close()
+                  }}
+                >
+                  {RELATIONS.map((r) => (
+                    <DropdownMenuRadioItem key={r} value={r} data-relation={r}>
+                      {r}
+                    </DropdownMenuRadioItem>
+                  ))}
+                  <DropdownMenuRadioItem value="none">none</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuRadioGroup value={route} onValueChange={(v) => (editor.setRoute(connectors.map((c) => c!.id), v as RouteStyle), close())}>
               <DropdownMenuRadioItem value="curved">Curved</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="elbow">Elbow</DropdownMenuRadioItem>

@@ -2,6 +2,22 @@ import { z } from 'zod'
 import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
 import { fitHeight, imageInfo, maxBlockHeight, measureSticky, stickyContentHeight } from '@aifig/shared'
 import {
+  BLOCK_TYPE_IDS,
+  BLOCK_TYPES,
+  cardContentHeight,
+  coerceFields,
+  measureCard,
+  fieldSummary,
+  isBlockType,
+  matchesQuery,
+  suggestRelation,
+  typeChrome,
+  typeFields,
+  typePatch,
+  type BlockTypeId,
+  type FieldValue,
+} from '@aifig/shared'
+import {
   SPACING,
   snap,
   toColorToken,
@@ -261,6 +277,12 @@ export class CanvasCore {
         return this.undoChanges(a, caller)
       case 'report_layout':
         return this.reportLayout(a)
+      case 'list_types':
+        return this.listTypes()
+      case 'set_type':
+        return this.setType(a, caller)
+      case 'query_blocks':
+        return this.queryBlocks(a, caller)
       case 'get_threads': {
         const board = this.board(a.board)
         this.presence.touch(caller, { boardId: board.id, autoStatus: 'Reading comments…' })
@@ -434,6 +456,93 @@ export class CanvasCore {
     return { board: board.id, updated }
   }
 
+  // ---- block types ---------------------------------------------------------
+
+  private listTypes() {
+    const relations: { from: BlockTypeId; to: BlockTypeId; relation: string }[] = []
+    for (const f of BLOCK_TYPE_IDS) for (const t of BLOCK_TYPE_IDS) {
+      const r = suggestRelation(f, t)
+      if (r) relations.push({ from: f, to: t, relation: r })
+    }
+    return {
+      types: BLOCK_TYPE_IDS.map((id) => {
+        const d = BLOCK_TYPES[id]
+        return { id, label: d.label, description: d.description, color: d.color, prefixes: d.prefixes, fields: d.fields }
+      }),
+      relations,
+      note: 'Types are optional. Promote with set_type (or create_blocks `type`), demote with type "none" — field values are kept. At most a few fields per type; deeper schemas belong to Skills.',
+    }
+  }
+
+  private heightFor(b: Block) {
+    const extra = typeChrome(b)
+    if (b.kind === 'sticky') return fitHeight('sticky', b.w, stickyContentHeight(b.text, b.w, extra), b.expanded)
+    if (b.kind === 'card') return fitHeight('card', b.w, cardContentHeight(b.title ?? '', b.text, b.w, extra), b.expanded)
+    return b.h
+  }
+
+  private setType(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    const type: BlockTypeId | null | undefined = a.type === 'none' ? null : a.type
+    const blocks = (a.ids as string[]).map((id) => {
+      const b = board.blocks.get(id) ?? board.resolve(id)
+      if (!b) throw new ToolError(`No block "${id}"`)
+      if (b.kind !== 'sticky' && b.kind !== 'card') throw new ToolError(`Only stickies and cards can have a type ("${preview(b.text || b.title, 30)}" is a ${b.kind})`)
+      if (type === undefined && !b.type) throw new ToolError(`"${preview(b.text || b.title, 30)}" has no type yet — pass \`type\` to promote it`)
+      return b
+    })
+    let fields: Record<string, FieldValue> = {}
+    if (a.fields && Object.keys(a.fields).length) {
+      const t = type ?? blocks[0].type
+      if (!t) throw new ToolError('Fields need a type')
+      if (blocks.some((b) => (type ?? b.type) !== t)) throw new ToolError('Setting fields on blocks of different types — call set_type once per type')
+      const r = coerceFields(t, a.fields)
+      if (r.errors.length) throw new ToolError(r.errors[0])
+      fields = r.fields
+    }
+    const label = type === null ? 'Make plain' : type ? `Mark as ${BLOCK_TYPES[type].label.toLowerCase()}` : 'Update fields'
+    const { changeSet } = this.edit(board, caller, a.intent, `${label} (${blocks.length})`, (rec) => {
+      const frames = new Set<string>()
+      for (const b of blocks) {
+        const patch = typePatch(b, type, fields)
+        if (!Object.keys(patch).length) continue
+        const next = { ...b, ...patch } as Block
+        const h = this.heightFor(next)
+        rec.updateBlock(b.id, { ...patch, h, contentH: undefined })
+        this.makeRoom(board, b, b.w, h - b.h, new Set(blocks.map((x) => x.id)), (id, y) => rec.updateBlock(id, { y }))
+        if (b.parent) frames.add(b.parent)
+      }
+      for (const f of frames) this.fitFrame(rec, board, f)
+    })
+    return { board: board.id, changeSet, updated: blocks.map((b) => ({ id: b.id, type: type === null ? null : (type ?? b.type), fields: typeFields({ ...b, ...typePatch(b, type, fields) } as Block) })) }
+  }
+
+  private queryBlocks(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    this.presence.touch(caller, { boardId: board.id, autoStatus: 'Looking through the board…' })
+    const frame = a.frame ? this.frame(board, a.frame) : null
+    const type = a.type === 'none' ? null : isBlockType(a.type) ? a.type : undefined
+    if (a.where && Object.keys(a.where).length && type) {
+      const { errors } = coerceFields(type, a.where)
+      if (errors.length) throw new ToolError(errors[0])
+    }
+    const hits = [...board.blocks.values()]
+      .filter((b) => (b.kind === 'sticky' || b.kind === 'card') && (!frame || b.parent === frame.id) && matchesQuery(b, { type, where: a.where }))
+      .sort((p, q) => (p.parent ?? '').localeCompare(q.parent ?? '') || p.y - q.y || p.x - q.x)
+    return {
+      board: board.id,
+      count: hits.length,
+      blocks: hits.map((b) => ({
+        id: b.id,
+        kind: b.kind,
+        type: b.type ?? null,
+        text: b.kind === 'card' ? `${b.title ?? ''}${b.text ? ` — ${b.text}` : ''}` : b.text,
+        fields: typeFields(b),
+        frame: b.parent ? (board.blocks.get(b.parent)?.title ?? null) : null,
+      })),
+    }
+  }
+
   private siblingsRects(board: Board, parent: string | null, exclude: Set<string> = new Set()) {
     return board
       .childrenOf(parent)
@@ -465,7 +574,8 @@ export class CanvasCore {
       const body = b.kind === 'card' ? `**${preview(b.title, 60)}** — ${preview(b.text, 100)}` : `"${preview(b.text, 100)}"`
       const collapsed = b.contentH != null && b.contentH > b.h + 4 && b.h >= maxBlockHeight(b.kind, b.w, b.expanded) - 8
       const flags = [b.kind === 'image' ? '' : b.color, b.size !== 'm' && b.kind !== 'image' ? `size ${b.size}` : '', b.rotation ? `rotated ${b.rotation}°` : '', b.pending ? 'pending review' : '', collapsed ? `long: collapsed, full height ${b.contentH}px` : ''].filter(Boolean).join(', ')
-      return `- ${b.kind} ${body} [${flags}] (id: ${b.id}, ${b.x},${b.y} ${b.w}×${b.h})`
+      const typed = b.type ? ` <${b.type}${fieldSummary(b) ? `: ${fieldSummary(b)}` : ''}>` : ''
+      return `- ${b.kind}${typed} ${body} [${flags}] (id: ${b.id}, ${b.x},${b.y} ${b.w}×${b.h})`
     }
     const out: string[] = []
     out.push(`# ${board.title} (board id: ${board.id})`)
@@ -513,6 +623,9 @@ export class CanvasCore {
       group?: string
       parentRef?: string
       asset?: string
+      type?: BlockTypeId
+      fields?: Record<string, FieldValue>
+      extra: number
     }
     const drafts: Draft[] = a.blocks.map((b: Args, i: number) => {
       const kind: Block['kind'] = b.kind ?? 'sticky'
@@ -520,18 +633,27 @@ export class CanvasCore {
       const color = toColorToken(b.color, kind === 'sticky' ? 'yellow' : kind === 'card' ? 'blue' : 'gray')
       const text = String(b.text ?? '')
       const title = b.title != null ? String(b.title) : undefined
+      const type = isBlockType(b.type) && (kind === 'sticky' || kind === 'card') ? b.type : undefined
+      let fields: Record<string, FieldValue> | undefined
+      if (type) {
+        const r = coerceFields(type, b.fields ?? {})
+        if (r.errors.length) throw new ToolError(r.errors[0])
+        fields = r.fields
+      }
+      const extra = type ? typeChrome({ type, typeData: { [type]: fields } }) : 0
       let dims: { w: number; h: number; size?: SizeToken }
-      if (kind === 'sticky') dims = measureSticky(text, size)
+      if (kind === 'sticky') dims = measureSticky(text, size, false, extra)
       else if (kind === 'image') dims = { w: b.w, h: b.h }
+      else if (kind === 'card') dims = measureCard(title ?? '', text, size, false, extra)
       else dims = measureBlock({ kind, text, title, size, w: 0, h: 0 })
-      return { key: `k${i}`, ref: b.ref, kind, text, title, color, size: dims.size ?? size, w: dims.w, h: dims.h, group: b.group, parentRef: b.parent, asset: b.asset as string | undefined }
+      return { key: `k${i}`, ref: b.ref, kind, text, title, color: type ? BLOCK_TYPES[type].color : color, size: dims.size ?? size, w: dims.w, h: dims.h, group: b.group, parentRef: b.parent, asset: b.asset as string | undefined, type, fields, extra }
     })
     // same kind in one batch → same size
     const stickies = drafts.filter((d) => d.kind === 'sticky')
     if (stickies.length > 1) {
       const side = Math.max(...stickies.map((d) => d.w))
       const sz = stickies.find((d) => d.w === side)!.size
-      const h = Math.max(...stickies.map((d) => fitHeight('sticky', side, stickyContentHeight(d.text, side))))
+      const h = Math.max(...stickies.map((d) => fitHeight('sticky', side, stickyContentHeight(d.text, side, d.extra))))
       for (const d of stickies) Object.assign(d, { w: side, h, size: sz })
     }
     const cards = drafts.filter((d) => d.kind === 'card')
@@ -608,7 +730,7 @@ export class CanvasCore {
       const keyToId = new Map<string, string>()
       for (const d of drafts) {
         const p = res.placed.get(d.key)!
-        const b = rec.createBlock({ id: newId(), kind: d.kind, x: snap(p.x + offset.x), y: snap(p.y + offset.y), w: p.w, h: p.h, parent, text: d.text, title: d.title, color: d.color, size: d.size, ...(d.asset ? { asset: d.asset } : {}) })
+        const b = rec.createBlock({ id: newId(), kind: d.kind, x: snap(p.x + offset.x), y: snap(p.y + offset.y), w: p.w, h: p.h, parent, text: d.text, title: d.title, color: d.color, size: d.size, ...(d.asset ? { asset: d.asset } : {}), ...(d.type ? { type: d.type, typeData: { [d.type]: d.fields ?? {} } } : {}) })
         keyToId.set(d.key, b.id)
         created.push({ id: b.id, ref: d.ref, kind: d.kind, label: preview(d.kind === 'card' ? d.title : d.text, 40) })
       }
@@ -659,9 +781,9 @@ export class CanvasCore {
         const contentChanged = patch.text !== undefined || patch.title !== undefined || patch.size !== undefined
         if (contentChanged) patch.contentH = undefined
         if (cur.kind === 'sticky' && contentChanged) {
-          const m = measureSticky(merged.text, merged.size, cur.expanded)
+          const m = measureSticky(merged.text, merged.size, cur.expanded, typeChrome(merged))
           const w = Math.max(m.w, patch.size ? 0 : cur.w)
-          Object.assign(patch, { w, h: w === m.w ? m.h : fitHeight('sticky', w, m.contentH, cur.expanded), size: m.size })
+          Object.assign(patch, { w, h: w === m.w ? m.h : fitHeight('sticky', w, stickyContentHeight(merged.text, w, typeChrome(merged)), cur.expanded), size: m.size })
         } else if ((cur.kind === 'card' || cur.kind === 'text') && contentChanged) {
           const m = measureBlock(merged)
           patch.w = m.w
@@ -699,14 +821,14 @@ export class CanvasCore {
       if (!from) throw new ToolError(`Can't find block "${c.from}" (use an id from get_board)`)
       if (!to) throw new ToolError(`Can't find block "${c.to}" (use an id from get_board)`)
       if (from.id === to.id) throw new ToolError(`A connector needs two different blocks ("${c.from}")`)
-      return { from: from.id, to: to.id, label: c.label as string | undefined, route: (c.route ?? a.route) as Connector['route'] }
+      return { from: from.id, to: to.id, label: c.label as string | undefined, route: (c.route ?? a.route) as Connector['route'], relation: (c.relation as Connector['relation']) ?? suggestRelation(from.type, to.type) }
     })
     const { result, changeSet } = this.edit(board, caller, a.intent, `Connect ${pairs.length} pair${pairs.length === 1 ? '' : 's'}`, (rec) => {
       const ids: string[] = []
       for (const p of pairs) {
         const dup = [...board.connectors.values()].find((c) => c.from === p.from && c.to === p.to)
         if (dup) continue
-        ids.push(rec.createConnector({ id: newId(), from: p.from, to: p.to, label: p.label, ...(p.route ? { route: p.route } : {}) }).id)
+        ids.push(rec.createConnector({ id: newId(), from: p.from, to: p.to, label: p.label, ...(p.route ? { route: p.route } : {}), ...(p.relation ? { relation: p.relation } : {}) }).id)
         rec.touched.add(p.to)
       }
       return ids
@@ -747,6 +869,7 @@ export class CanvasCore {
         const patch: Partial<Connector> = {}
         if (a.route) patch.route = a.route
         if (a.label !== undefined) patch.label = a.label
+        if (a.relation) patch.relation = a.relation === 'none' ? undefined : a.relation
         if (a.waypoints) {
           patch.waypoints = a.waypoints.length ? a.waypoints.map((p: { x: number; y: number }) => ({ x: snap(p.x), y: snap(p.y) })) : null
           if (a.waypoints.length && !a.route) patch.route = 'elbow'
@@ -804,6 +927,7 @@ export class CanvasCore {
     const board = this.board(a.board)
     const target = a.frame ? this.frame(board, a.frame) : null
     let moved = 0
+    if (a.by === 'type' || a.by === 'matrix') return this.tidyByType(board, target, a, caller)
     const { changeSet } = this.edit(board, caller, a.intent, target ? `Tidy "${target.title}"` : 'Tidy the board', (rec) => {
       const tidyFrame = (f: Block) => {
         const kids = board.childrenOf(f.id)
@@ -835,6 +959,84 @@ export class CanvasCore {
       }
     })
     return { board: board.id, changeSet, moved }
+  }
+
+  /** Group blocks by type (one row band per type), or lay them out as a type × field-value matrix with axis labels. */
+  private tidyByType(board: Board, frame: Block | null, a: Args, caller: CallerInfo) {
+    const parent = frame?.id ?? null
+    const sibs = board.childrenOf(parent).filter((b) => b.kind !== 'frame')
+    const oldAxes = sibs.filter((b) => b.layoutRole === 'axis')
+    const items = sibs.filter((b) => b.layoutRole !== 'axis')
+    if (!items.length) throw new ToolError('Nothing to tidy here')
+    const origin = frame ? { x: PAD, y: PAD } : (() => { const bb = bboxOf(items); return { x: bb.x, y: bb.y } })()
+    const order = [...BLOCK_TYPE_IDS, undefined]
+    const rows = order.map((t) => ({ t, list: items.filter((b) => b.type === t).sort((p, q) => p.y - q.y || p.x - q.x) })).filter((r) => r.list.length)
+    const GAP = 24
+    const BAND = 48
+    const moves = new Map<string, { x: number; y: number }>()
+    const axes: { text: string; x: number; y: number }[] = []
+    const field = a.matrix_field as string | undefined
+    if (a.by === 'matrix') {
+      if (!field) throw new ToolError('matrix needs `matrix_field`, e.g. "status" or "done" (see list_types)')
+      const known = BLOCK_TYPE_IDS.some((t) => BLOCK_TYPES[t].fields.some((f) => f.key === field))
+      if (!known) throw new ToolError(`No type has a field "${field}" (see list_types)`)
+      const valueOf = (b: Block) => {
+        const v = typeFields(b)[field]
+        return v === undefined || v === '' ? '—' : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v)
+      }
+      const declared = BLOCK_TYPE_IDS.flatMap((t) => BLOCK_TYPES[t].fields.filter((f) => f.key === field).flatMap((f) => (f.kind === 'enum' ? [...f.options] : f.kind === 'boolean' ? ['no', 'yes'] : [])))
+      const cols = [...new Set([...declared, ...items.map(valueOf)])].filter((c) => items.some((b) => valueOf(b) === c))
+      const labelW = 160
+      const colW = cols.map((c) => Math.max(...items.filter((b) => valueOf(b) === c).map((b) => b.w)))
+      const colX: number[] = []
+      let x = origin.x + labelW
+      for (const w of colW) {
+        colX.push(x)
+        x += w + GAP * 2
+      }
+      let y = origin.y + 40
+      cols.forEach((c, i) => axes.push({ text: c, x: colX[i], y: origin.y }))
+      for (const r of rows) {
+        let rowH = 0
+        const cursor = cols.map(() => y)
+        for (const b of r.list) {
+          const ci = cols.indexOf(valueOf(b))
+          moves.set(b.id, { x: snap(colX[ci]), y: snap(cursor[ci]) })
+          cursor[ci] += b.h + GAP
+          rowH = Math.max(rowH, cursor[ci] - y)
+        }
+        axes.push({ text: r.t ? BLOCK_TYPES[r.t].plural : 'Other', x: origin.x, y })
+        y += rowH - GAP + BAND
+      }
+    } else {
+      let y = origin.y
+      const maxRowW = 6
+      for (const r of rows) {
+        let x = origin.x
+        let rowH = 0
+        r.list.forEach((b, i) => {
+          if (i && i % maxRowW === 0) {
+            x = origin.x
+            y += rowH + GAP
+            rowH = 0
+          }
+          moves.set(b.id, { x: snap(x), y: snap(y) })
+          x += b.w + GAP
+          rowH = Math.max(rowH, b.h)
+        })
+        y += rowH + BAND
+      }
+    }
+    const { changeSet } = this.edit(board, caller, a.intent, a.by === 'matrix' ? `Matrix: types × ${field}` : 'Group by type', (rec) => {
+      for (const ax of oldAxes) rec.deleteBlock(ax.id)
+      for (const ax of axes) {
+        const m = measureBlock({ kind: 'text', text: ax.text, size: 's', w: 0, h: 0 })
+        rec.createBlock({ id: newId(), kind: 'text', x: snap(ax.x), y: snap(ax.y), w: m.w, h: m.h, parent, text: `**${ax.text}**`, color: 'gray', size: 's', layoutRole: 'axis' })
+      }
+      for (const [id, p] of moves) rec.updateBlock(id, p)
+      if (frame) this.fitFrame(rec, board, frame.id, true)
+    })
+    return { board: board.id, changeSet, moved: moves.size, rows: rows.map((r) => r.t ?? 'untyped') }
   }
 
   private lint(a: Args, caller: CallerInfo) {
@@ -876,7 +1078,8 @@ export class CanvasCore {
     if (a.format === 'json') {
       const assets = [...board.assets.values()].filter((as) => blocks.some((b) => b.asset === as.id)).map(({ bytes, ...meta }) => ({ ...meta, size: bytes.byteLength }))
       const clean = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).filter(([k, v]) => v !== undefined && v !== null && k !== 'changeSet')) as T
-      return { format: 'json', filename: `${slug(board.title)}.json`, content: JSON.stringify({ format: 'aifig-export/1', exportedAt: new Date().toISOString(), board: { id: board.id, title: board.title }, blocks: blocks.map(clean), connectors: connectors.map(clean), threads, assets }, null, 2) }
+      const byType = Object.fromEntries(BLOCK_TYPE_IDS.map((t) => [t, blocks.filter((b) => b.type === t).map((b) => b.id)]).filter(([, v]) => v.length))
+      return { format: 'json', filename: `${slug(board.title)}.json`, content: JSON.stringify({ format: 'aifig-export/1', exportedAt: new Date().toISOString(), board: { id: board.id, title: board.title }, byType, blocks: blocks.map((b) => clean({ ...b, ...(b.type ? { fields: typeFields(b) } : {}) })), connectors: connectors.map(clean), threads, assets }, null, 2) }
     }
     const byY = (p: Block, q: Block) => p.y - q.y || p.x - q.x
     const label = (b: Block | undefined) => (b ? (b.kind === 'card' || b.kind === 'frame' ? b.title || b.text : b.text).replace(/\s+/g, ' ').trim() : '(free end)')
@@ -897,13 +1100,35 @@ export class CanvasCore {
       }
     }
     const out: string[] = [`# ${target ? target.title : board.title}`, '', `_Exported from ai-figma on ${new Date().toISOString().slice(0, 10)}_`, '']
-    const frames = blocks.filter((b) => b.kind === 'frame').sort(byY)
-    for (const f of frames) {
-      out.push(`## ${f.title || 'Frame'}`, '')
-      for (const b of all.filter((k) => k.parent === f.id).sort(byY)) out.push(...line(b))
+    // typed blocks first, one section per type; everything else by frame
+    const where = (b: Block) => (b.parent ? board.blocks.get(b.parent)?.title : '') || ''
+    const typedLine = (b: Block): string[] => {
+      const f = typeFields(b)
+      const text = (b.kind === 'card' ? `**${b.title || 'Untitled'}**${b.text ? ` — ${b.text}` : ''}` : b.text).replace(/\n/g, ' ').trim()
+      const ctx = where(b) ? ` _(${where(b)})_` : ''
+      const comments = threads.filter((t) => t.target === b.id && !t.resolved).flatMap((t) => [`  > 💬 ${t.author.name}: ${t.text}`, ...t.replies.map((r) => `  > ↳ ${r.author.name}: ${r.text}`)])
+      if (b.type === 'todo') return [`- [${f.done ? 'x' : ' '}] ${text}${f.owner ? ` — @${f.owner}` : ''}${ctx}`, ...comments]
+      if (b.type === 'quote') return [`> ${text}${[f.interviewee, f.source].filter(Boolean).length ? ` — ${[f.interviewee, f.source].filter(Boolean).join(', ')}` : ''}${ctx}`, '', ...comments]
+      const sum = fieldSummary(b)
+      return [`- ${text}${sum ? ` — _${sum}_` : ''}${ctx}`, ...comments]
+    }
+    for (const t of BLOCK_TYPE_IDS) {
+      const list = blocks.filter((b) => b.type === t).sort((p, q) => where(p).localeCompare(where(q)) || byY(p, q))
+      if (!list.length) continue
+      out.push(`## ${BLOCK_TYPES[t].plural} (${list.length})`, '')
+      for (const b of list) out.push(...typedLine(b))
       out.push('')
     }
-    const loose = blocks.filter((b) => !b.parent && b.kind !== 'frame').sort(byY)
+    const plain = (b: Block) => !b.type
+    const frames = blocks.filter((b) => b.kind === 'frame').sort(byY)
+    for (const f of frames) {
+      const kids = all.filter((k) => k.parent === f.id && plain(k)).sort(byY)
+      if (!kids.length) continue
+      out.push(`## ${f.title || 'Frame'}`, '')
+      for (const b of kids) out.push(...line(b))
+      out.push('')
+    }
+    const loose = blocks.filter((b) => !b.parent && b.kind !== 'frame' && plain(b)).sort(byY)
     if (loose.length) {
       if (frames.length) out.push('## Other notes', '')
       for (const b of loose) out.push(...line(b))
@@ -911,7 +1136,7 @@ export class CanvasCore {
     }
     if (connectors.length) {
       out.push('## Connections', '')
-      for (const c of connectors) out.push(`- ${label(c.from ? board.blocks.get(c.from) : undefined)} → ${label(c.to ? board.blocks.get(c.to) : undefined)}${c.label ? ` (${c.label})` : ''}`)
+      for (const c of connectors) out.push(`- ${label(c.from ? board.blocks.get(c.from) : undefined)} ${c.relation ? `*${c.relation}*` : '→'} ${label(c.to ? board.blocks.get(c.to) : undefined)}${c.label ? ` (${c.label})` : ''}`)
       out.push('')
     }
     return { format: 'markdown', filename: `${slug(board.title)}.md`, content: out.join('\n').replace(/\n{3,}/g, '\n\n') }

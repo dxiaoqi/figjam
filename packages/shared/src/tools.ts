@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { COLOR_TOKENS, SIZE_TOKENS } from './tokens'
+import { BLOCK_TYPE_IDS, RELATIONS } from './types'
 
 /**
  * Canvas API contract. Every surface (MCP, CLI, UI) calls the core with one of these tools.
@@ -25,6 +26,10 @@ const routeStyle = z
   .optional()
   .describe('Connector routing: curved (default, flows around blocks), elbow (right angles, avoids blocks) or straight.')
 
+const blockType = z.enum(BLOCK_TYPE_IDS)
+const typeFieldsInput = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+const relation = z.enum(RELATIONS).optional().describe('Optional meaning, e.g. a quote "supports" an insight. Suggested automatically between typed blocks.')
+
 const blockInput = z.object({
   kind: z
     .enum(['sticky', 'card', 'text'])
@@ -34,6 +39,8 @@ const blockInput = z.object({
   title: z.string().optional().describe('Card title.'),
   color,
   size,
+  type: blockType.optional().describe('Optional built-in type (see list_types): insight, question, quote, hypothesis, idea, todo. Sets the color and icon.'),
+  fields: typeFieldsInput.optional().describe('Field values for the type, e.g. {"status":"unverified"} for a hypothesis (see list_types).'),
   group: z.string().optional().describe('Group name, used by layout "cluster" (one column per group, with a heading).'),
   ref: z.string().optional().describe('Local name for this block, so other blocks in the same call can reference it as parent.'),
   parent: z
@@ -120,7 +127,7 @@ export const toolDefs = {
     input: {
       board,
       connectors: z
-        .array(z.object({ from: z.string(), to: z.string(), label: z.string().optional(), route: routeStyle }))
+        .array(z.object({ from: z.string(), to: z.string(), label: z.string().optional(), route: routeStyle, relation }))
         .min(1),
       route: routeStyle.describe('Default routing for all connectors in this call.'),
       intent,
@@ -134,6 +141,7 @@ export const toolDefs = {
       ids: z.array(z.string()).min(1),
       route: routeStyle,
       label: z.string().optional(),
+      relation: z.enum([...RELATIONS, 'none']).optional().describe('Set the relation, or "none" to clear it.'),
       waypoints: z
         .array(z.object({ x: z.number(), y: z.number() }))
         .optional()
@@ -179,7 +187,40 @@ export const toolDefs = {
   tidy: {
     title: 'Tidy',
     description: 'Snap to the 8px grid, align rows, even out spacing and remove overlaps in a frame (or the whole board). Frames resize to fit.',
-    input: { board, frame: z.string().optional().describe('Frame id or title; omit for top level.'), intent },
+    input: {
+      board,
+      frame: z.string().optional().describe('Frame id or title; omit for top level.'),
+      by: z.enum(['position', 'type', 'matrix']).optional().describe('position (default): keep rows. type: group blocks by type. matrix: rows = types, columns = values of `matrix_field`.'),
+      matrix_field: z.string().optional().describe('Field for matrix columns, e.g. "status" (hypotheses) or "done" (todos).'),
+      intent,
+    },
+  },
+  list_types: {
+    title: 'List block types',
+    description: 'The built-in block types (insight, question, quote, hypothesis, idea, todo) with their fields, colors, prefixes and suggested connector relations.',
+    input: {},
+  },
+  set_type: {
+    title: 'Set block type',
+    description:
+      'Promote stickies/cards to a type (with optional field values), update fields, or demote with type "none". Demoting keeps field values hidden, so promoting back restores them. Types are optional and small; at most a few fields.',
+    input: {
+      board,
+      ids: z.array(z.string()).min(1),
+      type: z.enum([...BLOCK_TYPE_IDS, 'none']).optional().describe('New type, or "none" to demote to a plain block. Omit to only update fields.'),
+      fields: typeFieldsInput.optional(),
+      intent,
+    },
+  },
+  query_blocks: {
+    title: 'Query blocks',
+    description: 'Find blocks by type and field values, e.g. type "hypothesis" where {"status":"unverified"}. Returns ids, text and fields.',
+    input: {
+      board,
+      type: z.enum([...BLOCK_TYPE_IDS, 'none']).optional().describe('"none" finds untyped stickies/cards.'),
+      where: typeFieldsInput.optional(),
+      frame: z.string().optional(),
+    },
   },
   lint_layout: {
     title: 'Lint layout',

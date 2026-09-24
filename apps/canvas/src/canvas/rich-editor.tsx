@@ -193,8 +193,13 @@ export function RichEditor(props: {
     const host = hostRef.current
     if (!host || !tiptap) return
     const focusEnd = () => tiptap.commands.focus('end')
+    const clear = () => tiptap.chain().clearContent(true).focus('end').run()
     host.addEventListener('aifig-focus-end', focusEnd)
-    return () => host.removeEventListener('aifig-focus-end', focusEnd)
+    host.addEventListener('aifig-clear', clear)
+    return () => {
+      host.removeEventListener('aifig-focus-end', focusEnd)
+      host.removeEventListener('aifig-clear', clear)
+    }
   }, [tiptap])
   if (!tiptap) return null
   return (

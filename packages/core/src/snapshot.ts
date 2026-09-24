@@ -3,6 +3,7 @@ import { CARD_ACCENT, CARD_BODY_SIZE, CARD_TITLE_SIZE, stickyFontSize, wrapText 
 import { COLORS, FONT_SIZES, LINE_HEIGHT, RADII, SPACING, SURFACES } from '@aifig/shared'
 import type { Board } from './board'
 import { bboxOf, contentHeight } from './layout'
+import { BLOCK_TYPES, fieldSummary, typeFields } from '@aifig/shared'
 
 const FONT = `Inter, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', 'DejaVu Sans', sans-serif`
 
@@ -30,6 +31,21 @@ function collapsedFade(b: Block, r: Rect, bg: string, ink: string) {
     `<rect x="${r.x + 1}" y="${r.y + r.h - h}" width="${r.w - 2}" height="${h - 1}" fill="url(#${id})"/>` +
     `<text x="${r.x + SPACING.blockPadding}" y="${r.y + r.h - 12}" font-size="12" font-weight="600" fill="${ink}" opacity="0.7">Show more ⌄</text>`
   )
+}
+
+/** Type header ("✦ INSIGHT") at the top of a typed block; returns the svg and the height it takes. */
+function typeHeader(b: Block, x: number, y: number, ink: string) {
+  if (!b.type) return { svg: '', h: 0 }
+  const d = BLOCK_TYPES[b.type]
+  const done = b.type === 'todo' && typeFields(b).done
+  return { svg: `<text x="${x}" y="${y + 11}" font-size="11" font-weight="650" letter-spacing="0.4" fill="${ink}" opacity="0.72">${done ? '☑' : esc(d.glyph)}  ${esc(d.label.toUpperCase())}</text>`, h: 22 }
+}
+
+/** Collapsed field summary at the bottom of a typed block. */
+function typeFooter(b: Block, r: Rect, ink: string) {
+  const sum = b.type ? fieldSummary(b) : ''
+  if (!sum) return ''
+  return `<text x="${r.x + SPACING.blockPadding}" y="${r.y + r.h - 14}" font-size="11.5" font-weight="550" fill="${ink}" opacity="0.66">${esc(sum)}</text>`
 }
 
 export async function renderSnapshot(
@@ -87,17 +103,24 @@ export async function renderSnapshot(
       parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.sticky}" fill="${c.bg}"/>`)
       const lines = wrapText(b.text, r.w - pad * 2, fs)
       const collapsed = isCollapsed(b)
+      const head = typeHeader(b, r.x + pad, r.y + pad - 2, c.ink)
       parts.push(`<clipPath id="clip-${b.id}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.sticky}"/></clipPath>`)
       parts.push(`<g clip-path="url(#clip-${b.id})">`)
-      parts.push(textLines(lines, r.x + pad, r.y + pad, fs, c.ink, 450, Math.max(1, collapsed ? Math.ceil((r.h - pad) / (fs * LINE_HEIGHT)) : Math.floor((r.h - pad * 2) / (fs * LINE_HEIGHT))), !collapsed))
+      parts.push(head.svg)
+      parts.push(textLines(lines, r.x + pad, r.y + pad + head.h, fs, c.ink, 450, Math.max(1, collapsed ? Math.ceil((r.h - pad) / (fs * LINE_HEIGHT)) : Math.floor((r.h - pad * 2) / (fs * LINE_HEIGHT))), !collapsed))
       parts.push('</g>')
       if (collapsed) parts.push(collapsedFade(b, r, c.bg, c.ink))
+      else parts.push(typeFooter(b, r, c.ink))
     } else if (b.kind === 'card') {
       parts.push(`<rect x="${r.x}" y="${r.y + 1}" width="${r.w}" height="${r.h}" rx="${RADII.card}" fill="#000" opacity="${theme === 'light' ? 0.05 : 0.3}"/>`)
       parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.card}" fill="${surf.surface}" stroke="${surf.border}"/>`)
       parts.push(`<clipPath id="clip-${b.id}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.card}"/></clipPath>`)
       parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${CARD_ACCENT}" fill="${c.accent}" clip-path="url(#clip-${b.id})"/>`)
       let y = r.y + pad + CARD_ACCENT
+      const head = typeHeader(b, r.x + pad, y - 2, c.accent)
+      parts.push(head.svg)
+      y += head.h
+      parts.push(typeFooter(b, r, surf.muted))
       const inner = r.w - pad * 2
       if (b.title) {
         const tl = wrapText(b.title, inner, CARD_TITLE_SIZE, true)

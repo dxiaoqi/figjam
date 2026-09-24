@@ -187,18 +187,18 @@ export function fitHeight(kind: string, w: number, contentH: number, expanded?: 
   return Math.max(h, 24)
 }
 
-export function cardContentHeight(title: string, body: string, w: number) {
+export function cardContentHeight(title: string, body: string, w: number, extra = 0) {
   const inner = w - SPACING.blockPadding * 2
-  let h = SPACING.blockPadding + CARD_ACCENT
+  let h = SPACING.blockPadding + CARD_ACCENT + extra
   if (title) h += richTextHeightRaw(title, inner, CARD_TITLE_SIZE, true)
   if (title && body) h += 6
   if (body) h += richTextHeightRaw(body, inner, CARD_BODY_SIZE)
   return Math.ceil(h + SPACING.blockPadding + 2)
 }
 
-export function measureCard(title: string, body: string, size: SizeToken, expanded?: boolean) {
+export function measureCard(title: string, body: string, size: SizeToken, expanded?: boolean, extra = 0) {
   const w = CARD_WIDTHS[size]
-  const contentH = cardContentHeight(title, body, w)
+  const contentH = cardContentHeight(title, body, w, extra)
   return { w, h: fitHeight('card', w, contentH, expanded), contentH }
 }
 
@@ -211,17 +211,17 @@ export function measureText(text: string, size: SizeToken) {
   return { w, h }
 }
 
-export function stickyContentHeight(text: string, side: number) {
+export function stickyContentHeight(text: string, side: number, extra = 0) {
   const pad = SPACING.blockPadding
-  return richTextHeight(text || ' ', side - pad * 2, stickyFontSize(text, side)) + pad * 2
+  return richTextHeight(text || ' ', side - pad * 2, stickyFontSize(text, side)) + pad * 2 + extra
 }
 
-export function measureSticky(text: string, size: SizeToken, expanded?: boolean) {
+export function measureSticky(text: string, size: SizeToken, expanded?: boolean, extra = 0) {
   let s = size
   // bump to the next size when text is long rather than overflowing
   if (s === 's' && [...text].length > 70) s = 'm'
   if (s === 'm' && [...text].length > 150) s = 'l'
   const side = STICKY_SIZES[s]
-  const contentH = stickyContentHeight(text, side)
+  const contentH = stickyContentHeight(text, side, extra)
   return { w: side, h: fitHeight('sticky', side, contentH, expanded), size: s, contentH }
 }

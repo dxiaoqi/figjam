@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { useBoard } from '../board-context'
 import { reportLayout } from '../lib/layout-report'
 import { RichEditor, RichText } from './rich-editor'
+import { applyPrefix, filterActive, matchesFilter, TypeFooter, TypeHeader, useTypeFilter } from './types-ui'
 
 // ---- next color (shared by the toolbar and creation tools) --------------------
 
@@ -153,18 +154,41 @@ function MoreToggle({ block, editing }: { block: Block; editing: boolean }) {
 
 // ---- renderers ----------------------------------------------------------------
 
+/** Typed-block state shared by stickies and cards: filter dimming, prefix auto-typing when editing ends. */
+function useTypeState(block: Block, editing: boolean, editor: Editor) {
+  const filter = useTypeFilter()
+  const wasEditing = useRef(editing)
+  useEffect(() => {
+    if (wasEditing.current && !editing) applyPrefix(editor, block.id)
+    wasEditing.current = editing
+  }, [editing, editor, block.id])
+  const done = block.type === 'todo' && !!block.typeData?.todo?.done
+  return cn(block.type && `is-typed type-${block.type}`, done && 'is-done', filterActive(filter) && !matchesFilter(block, filter) && 'aifig-dim')
+}
+
 function Sticky({ block, editing, editor }: BlockRenderProps) {
   const fs = stickyFontSize(block.text, block.w)
   const innerRef = useRef<HTMLDivElement>(null)
   useContentFit(block, editing, editor, innerRef)
+  const typeCls = useTypeState(block, editing, editor)
+  const slashOpen = useRef(false)
+  const onChange = (text: string) => {
+    editor.updateBlock(block.id, { text })
+    const slash = !block.type && /^\/[a-z]*$/i.test(text.trim())
+    if (slash) window.dispatchEvent(new CustomEvent('aifig:type-palette', { detail: { ids: [block.id], query: text.trim().slice(1), slash: true } }))
+    else if (slashOpen.current) window.dispatchEvent(new Event('aifig:type-palette-close'))
+    slashOpen.current = slash
+  }
   return (
-    <div className={cn('aifig-sticky', editing && 'is-editing')} style={{ fontSize: fs }} data-scroll={editing || undefined}>
+    <div className={cn('aifig-sticky', editing && 'is-editing', typeCls)} style={{ fontSize: fs }} data-scroll={editing || undefined}>
       <div ref={innerRef} className="aifig-sticky-inner">
+        <TypeHeader block={block} />
         {editing ? (
-          <RichEditor engine={editor} value={block.text} placeholder="Write an idea…" onChange={(text) => editor.updateBlock(block.id, { text })} onTab={() => continueSticky(editor, block)} />
+          <RichEditor engine={editor} value={block.text} placeholder={block.type ? 'Write…' : 'Write an idea… (/ to set a type)'} onChange={onChange} onTab={() => continueSticky(editor, block)} />
         ) : (
           <RichText value={block.text} placeholder="Double-click to write" />
         )}
+        <TypeFooter block={block} editor={editor} />
       </div>
       <MoreToggle block={block} editing={editing} />
     </div>
@@ -175,9 +199,11 @@ function Card({ block, editing, editor }: BlockRenderProps) {
   const titleRef = useFocusOnMount<HTMLInputElement>(editing)
   const innerRef = useRef<HTMLDivElement>(null)
   useContentFit(block, editing, editor, innerRef, 2)
+  const typeCls = useTypeState(block, editing, editor)
   return (
-    <div className={cn('aifig-card', editing && 'is-editing')} data-scroll={editing || undefined}>
+    <div className={cn('aifig-card', editing && 'is-editing', typeCls)} data-scroll={editing || undefined}>
       <div ref={innerRef} className="aifig-card-inner">
+        <TypeHeader block={block} />
         {editing ? (
           <>
             <input
@@ -202,6 +228,7 @@ function Card({ block, editing, editor }: BlockRenderProps) {
             {block.text && <RichText className="body" value={block.text} />}
           </>
         )}
+        <TypeFooter block={block} editor={editor} />
       </div>
       <MoreToggle block={block} editing={editing} />
     </div>

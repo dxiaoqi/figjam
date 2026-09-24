@@ -86,6 +86,7 @@ program
   .option('--right-of <id>', 'place right of a block')
   .option('--below <id>', 'place below a block')
   .option('--at <x,y>', 'explicit top-left position')
+  .option('-t, --type <type>', 'block type: insight | question | quote | hypothesis | idea | todo')
   .option('--from-json <file>', 'read a full create_blocks payload from a JSON file ("-" for stdin)')
   .option('-i, --intent <text>', 'why (shown to the reviewer)')
   .action((texts: string[], o) => {
@@ -100,9 +101,9 @@ program
       const blocks = texts.map((t) => {
         if (o.kind === 'card') {
           const [title, ...rest] = t.split('::')
-          return { kind: 'card', title: title.trim(), text: rest.join('::').trim(), color: o.color, size: o.size }
+          return { kind: 'card', title: title.trim(), text: rest.join('::').trim(), color: o.color, size: o.size, type: o.type }
         }
-        return { kind: o.kind, text: t, color: o.color, size: o.size }
+        return { kind: o.kind, text: t, color: o.color, size: o.size, type: o.type }
       })
       const at = o.at ? (([x, y]) => ({ x, y }))(String(o.at).split(',').map(Number)) : undefined
       args = { blocks, layout: o.layout, columns: o.columns, frame: o.frame, inside: o.inside, right_of: o.rightOf, below: o.below, at, intent: o.intent }
@@ -184,9 +185,70 @@ program
 
 program
   .command('tidy')
-  .description('tidy a frame or the whole board')
+  .description('tidy a frame or the whole board; --by type groups by block type, --by matrix --field status lays out types × values')
   .option('-f, --frame <frame>')
-  .action((o) => run('tidy', { frame: o.frame }, (r) => console.log(`✓ tidied (${r.moved} moved)\n${csLine(r)}`)))
+  .option('--by <mode>', 'position | type | matrix')
+  .option('--field <field>', 'matrix columns, e.g. status or done')
+  .action((o) => run('tidy', { frame: o.frame, by: o.by, matrix_field: o.field }, (r) => console.log(`✓ tidied (${r.moved} moved)\n${csLine(r)}`)))
+
+/** `--status unverified --done` style field flags left over by commander. */
+function fieldFlags(rest: string[]) {
+  const out: Record<string, string | boolean> = {}
+  for (let i = 0; i < rest.length; i++) {
+    const m = rest[i].match(/^--([\w-]+)(?:=(.*))?$/)
+    if (!m) continue
+    if (m[2] !== undefined) out[m[1]] = m[2]
+    else if (rest[i + 1] !== undefined && !rest[i + 1].startsWith('--')) out[m[1]] = rest[++i]
+    else out[m[1]] = true
+  }
+  return out
+}
+
+program
+  .command('types')
+  .description('list the built-in block types and their fields')
+  .action(() =>
+    run('list_types', {}, (r) => {
+      for (const t of r.types) {
+        const fields = t.fields.map((f: any) => (f.kind === 'enum' ? `${f.key}=${f.options.join('|')}` : f.kind === 'boolean' ? `${f.key}=true|false` : f.key)).join('  ')
+        console.log(`${t.id.padEnd(11)} ${t.color.padEnd(7)} ${t.prefixes.map((p: string) => JSON.stringify(p)).join(' ').padEnd(24)} ${fields}`)
+      }
+    }),
+  )
+
+program
+  .command('set-type')
+  .description('promote blocks to a type (fields as flags), update fields, or demote with "none", e.g. aifig set-type <id> hypothesis --status supported')
+  .argument('<ids>', 'comma-separated block ids')
+  .argument('[type]', 'insight | question | quote | hypothesis | idea | todo | none (omit to only update fields)')
+  .option('-i, --intent <text>', 'why (shown to the reviewer)')
+  .allowUnknownOption()
+  .allowExcessArguments()
+  .action(function (this: any, ids: string, _type: string | undefined, o: any) {
+    const rest: string[] = this.args.slice(1)
+    const type = rest[0] && !rest[0].startsWith('--') ? rest[0] : undefined
+    const fields = fieldFlags(type ? rest.slice(1) : rest)
+    return run('set_type', { ids: ids.split(','), type, fields: Object.keys(fields).length ? fields : undefined, intent: o.intent }, (r) => {
+      for (const u of r.updated) console.log(`✓ ${u.id} → ${u.type ?? 'plain'}${Object.keys(u.fields).length ? `  ${JSON.stringify(u.fields)}` : ''}`)
+      const line = csLine(r)
+      if (line) console.log(line)
+    })
+  })
+
+program
+  .command('query')
+  .description('find blocks by type and fields, e.g. aifig query --type hypothesis --status unverified')
+  .option('-t, --type <type>', 'block type, or "none" for untyped')
+  .option('-f, --frame <frame>')
+  .allowUnknownOption()
+  .allowExcessArguments()
+  .action(function (this: any, o: any) {
+    const where = fieldFlags(this.args)
+    return run('query_blocks', { type: o.type, frame: o.frame, where: Object.keys(where).length ? where : undefined }, (r) => {
+      console.log(`${r.count} match${r.count === 1 ? '' : 'es'}`)
+      for (const b of r.blocks) console.log(`  ${b.id}  ${(b.type ?? 'plain').padEnd(10)} ${String(b.text).replace(/\s+/g, ' ').slice(0, 60)}${Object.keys(b.fields).length ? `  ${JSON.stringify(b.fields)}` : ''}`)
+    })
+  })
 
 program
   .command('lint')
