@@ -1,4 +1,4 @@
-import { useCamera, useEditorVersion } from '@aifig/canvas-engine'
+import { edgePoint, intersects, useCamera, useEditorVersion } from '@aifig/canvas-engine'
 import type { Block, ChangeSet, Connector } from '@aifig/shared'
 import { useChangeSets } from '../board-context'
 import { useEditor } from './editor-context'
@@ -61,8 +61,12 @@ export function ReviewGhosts() {
           </marker>
         </defs>
         {moved.map(({ cs, before, now }) => {
-          const a = center(absRect(before))
-          const b = center(editor.pageRect(now.id) ?? absRect(now))
+          const ra = absRect(before)
+          const rb = editor.pageRect(now.id) ?? absRect(now)
+          if (intersects(ra, rb)) return null
+          const mid = (r: typeof ra) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 })
+          const a = editor.pageToScreen(edgePoint(ra, mid(rb), 4))
+          const b = editor.pageToScreen(edgePoint(rb, mid(ra), 6))
           return (
             <line
               key={`m${cs.id}${now.id}`}

@@ -1,4 +1,4 @@
-import type { Block } from '@aifig/shared'
+import { stripMarkdown, type Block } from '@aifig/shared'
 
 export type DiffPart = { kind: 'same' | 'add' | 'del'; text: string }
 
@@ -42,7 +42,10 @@ export type FieldChange =
 export function blockChanges(before: Block, after: Block, frameTitle: (id?: string | null) => string): FieldChange[] {
   const out: FieldChange[] = []
   if ((before.title ?? '') !== (after.title ?? '')) out.push({ field: 'title', parts: diffWords(before.title ?? '', after.title ?? '') })
-  if (before.text !== after.text) out.push({ field: 'text', parts: diffWords(before.text, after.text) })
+  if (before.text !== after.text) {
+    const [a, b] = [stripMarkdown(before.text), stripMarkdown(after.text)]
+    out.push({ field: 'text', parts: a === b ? diffWords(before.text, after.text) : diffWords(a, b) })
+  }
   if ((before.parent ?? null) !== (after.parent ?? null)) out.push({ field: 'frame', from: frameTitle(before.parent), to: frameTitle(after.parent) })
   else if (before.x !== after.x || before.y !== after.y) out.push({ field: 'moved', dx: after.x - before.x, dy: after.y - before.y })
   if (before.w !== after.w || before.h !== after.h) out.push({ field: 'resized', from: `${before.w}×${before.h}`, to: `${after.w}×${after.h}` })
