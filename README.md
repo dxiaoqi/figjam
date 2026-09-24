@@ -6,7 +6,8 @@ ai-figma is a whiteboard that feels good to use by hand and that Claude Code, Cu
 through MCP or a CLI. Whatever an agent adds is laid out by the engine (tokens, 8px grid, layout intents), shows up
 live with the agent's cursor, and waits in a change set for you to accept or reject.
 
-This is the **Phase 0 prototype**: one polished slice — canvas, core, design system, agent access and review. No
+This is **Phase 0** (the MVP in §8 of the product concept): desktop app, canvas, core, design system, agent access
+over MCP (stdio and local HTTP) and the CLI, review, comments, exports and an optional built-in assistant. No
 execution, skills or sync yet.
 
 ## Quick start
@@ -29,6 +30,19 @@ Run them separately with `npm run core` and `npm run ui`. If the browser ever sh
 `504 (Outdated Optimize Dep)` (for example after changing dependencies), run `npm run dev:clean`, which clears
 Vite's dependency cache and re-bundles, then reload the page. For a single process, `npm start` builds the UI and
 the core serves it on port 47821.
+
+### Desktop app
+
+```bash
+npm run desktop          # build the UI and run the Electron app (starts or reuses the core)
+npm run desktop:dev      # same, but load the Vite dev server for hot reload (run `npm run dev` first)
+npm run desktop:build    # package it (electron-builder; add `-- --dir` for an unpacked build)
+```
+
+The desktop app runs the core with Electron's own Node, so nothing else needs to be installed. It has native menus
+and shortcuts (New Board ⌘N, Open… ⌘O, Open Recent, Save As… ⇧⌘S, Export PNG/SVG/JSON/Markdown, Undo/Redo, zoom,
+minimap, Appearance), opens `.aifig` files from anywhere (Save As keeps the chosen file in sync), follows the OS
+light/dark setting, and its **Connect agent** dialog points agents at the bundled CLI/MCP.
 
 Boards live in `~/.aifig/boards/<id>.aifig` (Yjs state) with a readable `<id>.json` next to it. Override the
 location with `AIFIG_HOME`, and ports with `AIFIG_CORE_PORT` / `AIFIG_UI_PORT`.
@@ -57,7 +71,17 @@ claude mcp add ai-figma -- node /absolute/path/to/ai-figma/bin/aifig.mjs mcp
 }
 ```
 
-The **Connect agent** button in the canvas shows both snippets with the correct path filled in. The agent's name
+**Local HTTP** (Streamable HTTP, while the core runs — nothing to launch):
+
+```bash
+claude mcp add --transport http ai-figma http://127.0.0.1:47821/mcp
+```
+
+(Cursor: `{ "mcpServers": { "ai-figma": { "url": "http://127.0.0.1:47821/mcp" } } }`.) The endpoint only answers
+on `127.0.0.1` and rejects other `Host` headers (DNS-rebinding protection).
+
+The **Connect agent** button in the canvas shows all of these with the correct paths filled in (in the desktop app,
+for its bundled CLI). The agent's name
 and color come from its MCP client info (Claude Code, Cursor, Codex); set `AIFIG_AGENT_NAME` to override.
 
 [`skills/ai-figma-canvas/SKILL.md`](skills/ai-figma-canvas/SKILL.md) is an Agent Skill that teaches agents how to
@@ -71,7 +95,8 @@ use the canvas well. Copy it into `~/.claude/skills/` (or your agent's skills fo
 | Write | `create_blocks` (layout intents `grid` / `row` / `stack` / `cluster` / `tree`; placement `inside` / `right_of` / `below` / new `frame`), `update_blocks` (incl. `rotation`), `delete_blocks`, `connect` (routing `curved` / `elbow` / `straight`), `update_connectors` (routing, label, elbow `waypoints`), `add_image` (file path, URL or base64 — stored inside the board), `group_into_frame`, `create_board` |
 | Layout | `arrange`, `tidy`, `lint_layout` |
 | Look | `render_snapshot` (PNG or SVG of the board, a frame or specific blocks, rendered headlessly by the core) |
-| Collaborate | `set_status`, `begin_change_set`, `commit_change_set`, `list_change_sets` |
+| Collaborate | `set_status`, `begin_change_set`, `commit_change_set`, `list_change_sets` (incl. per-item rejections and reasons), `get_threads`, `reply_thread`, `resolve_thread` |
+| Export | `export_board` (Markdown document or JSON structure) |
 
 Also exposed: resource `aifig://design/tokens` and prompt `layout-best-practices`.
 
@@ -93,6 +118,7 @@ aifig image ./sketch.png --width 320 --inside "Inspiration"  # or an https:// UR
 aifig tidy --frame "Principles"
 aifig lint
 aifig snapshot -o board.png                        # --dark, --frame, --ids a,b,c, .svg
+aifig export --format md -o board.md               # md | json | png | svg (md/json print to stdout without -o)
 aifig status "Clustering interview notes…"
 aifig changes                                      # change sets and their review status
 aifig accept | aifig reject [id] --reason "…"      # review from the terminal
@@ -191,39 +217,43 @@ custom semantic blocks and executable edges are ours to extend. The evaluation i
 
 ## Phase 0 status
 
-**Done**
+Phase 0 is complete. The MVP validation run (`scripts/mvp-run.mjs`) records an agent synthesizing six interviews over
+MCP, a person reviewing item by item and commenting, and the agent reading the comment and revising.
 
-- Local core with Yjs boards persisted to `.aifig` files plus JSON export; multiple boards
-- Own canvas engine with token-driven sticky / card / heading blocks, frames and routed connectors; 8px grid,
-  alignment-guide and 24px spacing snapping with distance labels, context menu, minimap, touch gestures,
-  canvas level of detail for large boards, export / copy as image, connect handles, undo/redo, clipboard, light/dark themes, double-click and `Tab` sticky flow, empty, loading, offline and error states
-- Layout engine: intents (grid, row, stack, cluster, tree), free-space placement near the user's viewport, frame
-  auto-grow, size normalization, tidy, lint (overlap, overflow, outside-frame, off-grid, too many colors)
-- MCP server (stdio) with 19 tools, a tokens resource and a best-practices prompt; CLI with the same surface
-- Agent presence: identity-colored cursor that glides to where the agent works, status capsule, breathing
-  work-area highlight, off-screen indicator, agent list; the agent never moves your viewport
-- Suggestion layer: dashed identity-color outlines and staggered entrance for agent blocks, change set cards with
-  accept / reject / show, accept all, `⌥A` / `⌥R`, exact revert on reject
-- Headless PNG/SVG snapshots so agents can check their own work
+**Shipped**
 
-**Deferred (next steps)**
+- Desktop app (Electron) with native menus, files, recents, OS appearance, bundled CLI/MCP and a packaging script
+- Local core with Yjs boards persisted to `.aifig` files; JSON and Markdown exports (UI, CLI, MCP) plus PNG/SVG
+- Own canvas engine: token-driven stickies, cards, headings, images and frames; rich text; routed connectors with
+  waypoints; rotation; snapping with guides and spacing labels; context menu, minimap, touch, level of detail
+- Layout engine: intents, free-space placement, frame auto-grow, making room when blocks grow, tidy, lint
+- MCP over stdio and local Streamable HTTP (23 tools), CLI with the same surface, Agent Skill
+- Agent presence, suggestion layer, change sets; review item by item (`J`/`K`, `A`/`R`, reasons), accept the
+  rest, partly accepted change sets; undo by change set or by author, including accepted work (later edits by people
+  are kept)
+- Comments on blocks (`M`) that agents read and answer (`get_threads`, `reply_thread`, `resolve_thread`)
+- Optional built-in assistant (Extract ideas, Cluster into themes, Tidy up) — hidden unless a provider is set up in
+  Assistant Settings; keys go to the OS keychain via Electron `safeStorage` and never into boards; a deterministic
+  mock provider for tests and demos
+- Agent-output aesthetics regression set (`npm run test:aesthetics`)
 
-- Electron shell (tray, always-on MCP, multi-window). The web app plus local core is the same architecture, so the
-  shell wraps `npm start`
-- MCP over Streamable HTTP (only stdio today), `get_changes_since` / threads / comments
-- Per-item review (`J`/`K` stepping, before/after diff, ghosted deletions), undo by change set after acceptance,
-  trust levels (auto-accept per agent or frame)
-- Waiting for the user to finish dragging or typing before applying agent layout moves; animated tidy
-- Engine gaps vs tldraw: rotating frames and multi-selections as a group, rich text in exports (formatting is
-  flattened to plain text), gesture tuning on real touch devices, image cropping, curved-connector waypoints
-- Images, files, shapes, text formatting, export menu in the UI, semantic zoom
+**Not yet (next phases)**
+
+- Before/after diffs and ghosted deletions while reviewing; trust levels (auto-accept per agent or frame)
+- Holding agent layout moves while a person is dragging or typing; animated tidy and layout pushes
+- Rotating frames and multi-selections as a group, image cropping, curved-connector waypoints, rich text in exports
+- Tray / always-on MCP and multi-window in the desktop app; code signing and auto-update
 - Skills, execution, sync (Phases 1–3)
 
 ## Development
 
 ```bash
 npm run typecheck                                     # every workspace
-node scripts/engine-e2e.mjs                           # drive the canvas engine with real pointer/keyboard input
-node scripts/mcp-smoke.mjs                            # drive the canvas through the real MCP server
+npm run test:e2e                                      # canvas engine + app, real pointer/keyboard input (84 checks)
+npm run test:aesthetics                               # agent-output aesthetics vs baselines (update: test:aesthetics:update)
+node scripts/desktop-e2e.mjs                          # Electron app (window, menus, files, theme, bundled MCP, keychain)
+node scripts/mcp-http-smoke.mjs                       # MCP over local HTTP
+node scripts/mcp-smoke.mjs                            # MCP over stdio
+node scripts/mvp-run.mjs <out-dir>                    # the recorded Phase 0 validation run
 node scripts/shot.mjs out.png [--dark] [--w=390]      # screenshot the running canvas (headless Chrome)
 ```

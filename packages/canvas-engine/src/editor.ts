@@ -1138,6 +1138,18 @@ export class Editor {
     for (const f of touchedFrames) this.growFrame(f)
   }
 
+  /** When a block grows, push the siblings stacked below it down by the same amount (then grow the frame). */
+  makeRoomBelow(id: string, prev: { y: number; h: number }) {
+    const b = this.blocksMap.get(id)
+    if (!b || b.h <= prev.h) return
+    const grow = b.h - prev.h
+    const patches = this.childrenOf(b.parent ?? null)
+      .filter((s) => s.id !== id && s.kind !== 'frame' && s.y >= prev.y + prev.h - 1 && s.x < b.x + b.w && s.x + s.w > b.x)
+      .map((s) => ({ id: s.id, patch: { y: snapTo(s.y + grow + this.grid - 1, this.grid) } }))
+    if (patches.length) this.transact(() => patches.forEach(({ id: sid, patch }) => this.blocksMap.set(sid, this.stamp(this.blocksMap.get(sid)!, patch))))
+    if (b.parent) this.growFrame(b.parent)
+  }
+
   /** Grow a frame so its children fit with padding (never shrinks). */
   growFrame(frameId: string) {
     const f = this.blocksMap.get(frameId)

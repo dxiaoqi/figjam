@@ -714,6 +714,15 @@ check('Markdown export downloads a readable document incl. comments', mdText.inc
 const jsonOut = JSON.parse(cli('--board', board, 'export', '--format', 'json'))
 check('CLI JSON export has blocks, connectors and threads', jsonOut.format === 'aifig-export/1' && jsonOut.blocks.length > 10 && jsonOut.threads.length >= 1)
 
+// growing a block pushes the ones stacked below it (no overlap after an agent edit)
+const stackRes = JSON.parse(cli('--json', '--board', board, '--human', 'add', 'Top::short', 'Below::short', '--kind', 'card', '--layout', 'stack', '--frame', 'Stack', '--at', '14400,12000'))
+const [topId, belowId] = stackRes.created.filter((c) => c.kind === 'card').map((c) => c.id)
+cli('--board', board, '--human', 'update', topId, '--text', 'A much longer body that wraps over several lines so the card has to grow a lot taller than it was before, pushing the next card down.')
+await wait(300)
+const lintStack = JSON.parse(cli('--json', '--board', board, 'lint', '--frame', stackRes.frame))
+const pos = await ed(({ a, b }) => [window.editor.block(a), window.editor.block(b)].map((x) => [x.y, x.h]), { a: topId, b: belowId })
+check('a growing block pushes the blocks below it', pos[1][0] >= pos[0][0] + pos[0][1] && !lintStack.issues.some((i) => i.rule === 'overlap'), JSON.stringify(pos))
+
 // built-in assistant: hidden without a provider, works with the mock provider, never writes keys to the board
 const aiMenu = async () => {
   await ed((id) => window.editor.select([id]), cm)

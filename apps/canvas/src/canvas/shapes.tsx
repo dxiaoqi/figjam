@@ -107,7 +107,11 @@ function Card({ block, editing, editor }: BlockRenderProps) {
     const el = boxRef.current
     if (!editing || !el) return
     const need = snapUp(el.scrollHeight)
-    if (need > block.h && need < 4000) editor.updateBlock(block.id, { h: need })
+    if (need > block.h && need < 4000) {
+      const prev = { y: block.y, h: block.h }
+      editor.updateBlock(block.id, { h: need })
+      editor.makeRoomBelow(block.id, prev)
+    }
   }, [editing, block.text, block.title, block.w])
   const update = (patch: Partial<Block>) => {
     const next = { ...block, ...patch }

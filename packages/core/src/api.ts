@@ -614,6 +614,15 @@ export class CanvasCore {
         rec.updateBlock(u.id, patch)
         updated.push(u.id)
         if (cur.parent) frames.add(cur.parent)
+        // make room: when a block grows, push the siblings stacked below it down by the same amount
+        const grow = (patch.h ?? cur.h) - cur.h
+        if (grow > 0) {
+          const w = patch.w ?? cur.w
+          for (const s of board.childrenOf(cur.parent ?? null)) {
+            if (s.id === cur.id || updated.includes(s.id) || s.kind === 'frame') continue
+            if (s.y >= cur.y + cur.h - 1 && s.x < cur.x + w && s.x + s.w > cur.x) rec.updateBlock(s.id, { y: snap(s.y + grow + 7) })
+          }
+        }
       }
       for (const f of frames) this.fitFrame(rec, board, f)
       return updated
