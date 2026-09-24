@@ -23,8 +23,13 @@ type Side = 'top' | 'right' | 'bottom' | 'left'
 export interface RouteInput {
   from: R | null
   fromPoint?: P | null
+  /** Rotation of the `from` block in degrees (around its center). */
+  fromRotation?: number
   to: R | null
   toPoint?: P | null
+  toRotation?: number
+  /** Manual waypoints (page space) for elbow routes. */
+  waypoints?: P[] | null
   style?: RouteStyle | null
   /** Blocks the route should avoid (curved / elbow). Endpoints' own blocks are excluded by the caller. */
   obstacles?: R[]
@@ -48,6 +53,33 @@ const STUB = 20
 const MARGIN = 14
 
 const center = (r: R): P => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 })
+
+export function rotatePoint(p: P, c: P, deg: number): P {
+  if (!deg) return p
+  const a = (deg * Math.PI) / 180
+  const cos = Math.cos(a)
+  const sin = Math.sin(a)
+  const dx = p.x - c.x
+  const dy = p.y - c.y
+  return { x: c.x + dx * cos - dy * sin, y: c.y + dx * sin + dy * cos }
+}
+
+/** Axis-aligned bounds of a rect rotated around its center. */
+export function rotatedBounds(r: R, deg?: number): R {
+  if (!deg) return r
+  const c = center(r)
+  const pts = [
+    { x: r.x, y: r.y },
+    { x: r.x + r.w, y: r.y },
+    { x: r.x, y: r.y + r.h },
+    { x: r.x + r.w, y: r.y + r.h },
+  ].map((p) => rotatePoint(p, c, deg))
+  const xs = pts.map((p) => p.x)
+  const ys = pts.map((p) => p.y)
+  const x = Math.min(...xs)
+  const y = Math.min(...ys)
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+}
 
 function sideAnchor(r: R, side: Side, gap: number): P {
   const c = center(r)
@@ -306,25 +338,37 @@ export function routeConnector(input: RouteInput): Route | null {
   if (!fromC || !toC) return null
   const obstacles = input.obstacles ?? []
 
+  const fromRot = input.fromRotation ?? 0
+  const toRot = input.toRotation ?? 0
+  const rotEdge = (r: R, rot: number, toward: P, gap: number) => {
+    const c = center(r)
+    return rotatePoint(edgePoint(r, rotatePoint(toward, c, -rot), gap), c, rot)
+  }
+
   if (style === 'straight') {
-    const a = from ? edgePoint(from, toC, START_GAP) : fromC
-    const b = to ? edgePoint(to, fromC, END_GAP) : toC
+    const a = from ? rotEdge(from, fromRot, toC, START_GAP) : fromC
+    const b = to ? rotEdge(to, toRot, fromC, END_GAP) : toC
     const points = [a, b]
     return { d: `M${f(a.x)} ${f(a.y)} L${f(b.x)} ${f(b.y)}`, points, start: a, end: b, mid: midpointOf(points) }
   }
 
   let sa: Side
   let sb: Side
-  if (from && to) [sa, sb] = pickSides(from, to)
+  if (from && to && !fromRot && !toRot) [sa, sb] = pickSides(from, to)
   else {
-    sa = from ? sideToward(from, toC) : 'right'
-    sb = to ? sideToward(to, fromC) : 'left'
+    sa = from ? sideToward(from, rotatePoint(toC, fromC, -fromRot)) : 'right'
+    sb = to ? sideToward(to, rotatePoint(fromC, toC, -toRot)) : 'left'
   }
-  const a = from ? sideAnchor(from, sa, START_GAP) : fromC
-  const b = to ? sideAnchor(to, sb, END_GAP) : toC
+  const rotN = (n: P, rot: number) => rotatePoint(n, { x: 0, y: 0 }, rot)
+  const a = from ? rotatePoint(sideAnchor(from, sa, START_GAP), fromC, fromRot) : fromC
+  const b = to ? rotatePoint(sideAnchor(to, sb, END_GAP), toC, toRot) : toC
   const dirToward = (p: P, q: P): P => (Math.abs(q.x - p.x) >= Math.abs(q.y - p.y) ? { x: Math.sign(q.x - p.x) || 1, y: 0 } : { x: 0, y: Math.sign(q.y - p.y) || 1 })
-  const na = from ? NORMAL[sa] : dirToward(a, b)
-  const nb = to ? NORMAL[sb] : dirToward(b, a)
+  const axisOf = (n: P): P => (Math.abs(n.x) >= Math.abs(n.y) ? { x: Math.sign(n.x) || 1, y: 0 } : { x: 0, y: Math.sign(n.y) || 1 })
+  const naTrue = from ? rotN(NORMAL[sa], fromRot) : dirToward(a, b)
+  const nbTrue = to ? rotN(NORMAL[sb], toRot) : dirToward(b, a)
+  // orthogonal routing needs axis-aligned normals; curves keep the true (rotated) ones
+  const na = style === 'elbow' ? axisOf(naTrue) : naTrue
+  const nb = style === 'elbow' ? axisOf(nbTrue) : nbTrue
 
   if (style === 'curved') {
     const dist = Math.hypot(b.x - a.x, b.y - a.y)
@@ -339,8 +383,66 @@ export function routeConnector(input: RouteInput): Route | null {
     return { d: roundedPath(route, 28), points: route, start: a, end: b, mid: midpointOf(route) }
   }
 
-  const route = orthogonalRoute(a, na, b, nb, obstacles)
+  const wps = input.waypoints ?? []
+  const route = wps.length ? waypointRoute(a, na, b, nb, wps) : orthogonalRoute(a, na, b, nb, obstacles)
   return { d: roundedPath(route, 8), points: route, start: a, end: b, mid: midpointOf(route) }
+}
+
+/** Orthogonal path through manual waypoints (the user overrides obstacle avoidance). */
+function waypointRoute(s: P, ns: P, e: P, ne: P, wps: P[]): P[] {
+  const s1 = { x: s.x + ns.x * STUB, y: s.y + ns.y * STUB }
+  const e1 = { x: e.x + ne.x * STUB, y: e.y + ne.y * STUB }
+  const pts: P[] = [s, s1]
+  let horizontal = ns.x !== 0
+  let cur = s1
+  for (const q of [...wps, e1]) {
+    if (Math.abs(q.x - cur.x) > 0.01 && Math.abs(q.y - cur.y) > 0.01) {
+      // turn once: continue along the current axis, then switch
+      pts.push(horizontal ? { x: q.x, y: cur.y } : { x: cur.x, y: q.y })
+      horizontal = !horizontal
+    } else horizontal = Math.abs(q.y - cur.y) <= 0.01
+    pts.push(q)
+    cur = q
+  }
+  pts.push(e)
+  return simplify(pts)
+}
+
+/** Control polyline of a connector: its ends plus manual waypoints (for waypoint handles). */
+export function controlPoints(route: Route, waypoints?: P[] | null): P[] {
+  return [route.start, ...(waypoints ?? []), route.end]
+}
+
+/** Label anchor along the route that avoids overlapping blocks, preferring the middle. */
+export function placeLabel(route: Route, w: number, h: number, obstacles: R[]): P {
+  const pts = route.points
+  const lengths = [0]
+  for (let i = 1; i < pts.length; i++) lengths.push(lengths[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y))
+  const total = lengths[lengths.length - 1]
+  if (!total || !obstacles.length) return route.mid
+  const at = (t: number): P => {
+    const d = t * total
+    for (let i = 1; i < pts.length; i++) {
+      if (d <= lengths[i]) {
+        const seg = lengths[i] - lengths[i - 1] || 1
+        const k = (d - lengths[i - 1]) / seg
+        return { x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * k, y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * k }
+      }
+    }
+    return pts[pts.length - 1]
+  }
+  const hits = (p: P) => obstacles.some((o) => p.x + w / 2 > o.x && p.x - w / 2 < o.x + o.w && p.y + h / 2 > o.y && p.y - h / 2 < o.y + o.h)
+  for (let k = 0; k <= 9; k++) {
+    for (const t of k === 0 ? [0.5] : [0.5 - k * 0.05, 0.5 + k * 0.05]) {
+      const p = at(t)
+      if (!hits(p)) return p
+    }
+  }
+  return route.mid
+}
+
+export function estimateLabelSize(label: string) {
+  return { w: [...label].reduce((n, ch) => n + (/[\u2E80-\u9FFF]/.test(ch) ? 13 : 7), 0) + 16, h: 22 }
 }
 
 export function distanceToRoute(p: P, route: Route) {

@@ -30,7 +30,7 @@ const blockInput = z.object({
     .enum(['sticky', 'card', 'text'])
     .optional()
     .describe('sticky (default): short thought. card: title + body, for structured items. text: headings and labels.'),
-  text: z.string().optional().describe('Sticky/text content, or the card body.'),
+  text: z.string().optional().describe('Sticky/text content, or the card body. Markdown subset allowed: **bold**, *italic*, `code`, [link](url), "- " and "1. " lists.'),
   title: z.string().optional().describe('Card title.'),
   color,
   size,
@@ -102,6 +102,7 @@ export const toolDefs = {
             size,
             x: z.number().optional().describe('Only when explicitly asked to move a block.'),
             y: z.number().optional(),
+            rotation: z.number().optional().describe('Rotation in degrees (snapped to 15° unless precise values are needed).'),
           }),
         )
         .min(1),
@@ -133,6 +134,29 @@ export const toolDefs = {
       ids: z.array(z.string()).min(1),
       route: routeStyle,
       label: z.string().optional(),
+      waypoints: z
+        .array(z.object({ x: z.number(), y: z.number() }))
+        .optional()
+        .describe('Manual waypoints (page coordinates) for elbow connectors; pass [] to go back to automatic routing.'),
+      intent,
+    },
+  },
+  add_image: {
+    title: 'Add image',
+    description:
+      'Place an image (PNG, JPEG, GIF or WebP) on the board. It is stored inside the board file. Provide a local file path, an http(s) URL, or base64 data. Placement works like create_blocks.',
+    input: {
+      board,
+      path: z.string().optional().describe('Absolute path to a local image file.'),
+      url: z.string().optional().describe('http(s) URL to download.'),
+      data: z.string().optional().describe('Base64-encoded image bytes (with mime).'),
+      mime: z.string().optional(),
+      width: z.number().optional().describe('Display width in px (default: natural size, max 480).'),
+      caption: z.string().optional(),
+      inside: z.string().optional(),
+      right_of: z.string().optional(),
+      below: z.string().optional(),
+      at: z.object({ x: z.number(), y: z.number() }).optional(),
       intent,
     },
   },

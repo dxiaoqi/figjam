@@ -120,10 +120,30 @@ program
   .option('--title <title>')
   .option('-c, --color <color>')
   .option('-s, --size <size>')
+  .option('--rotate <degrees>', 'rotation in degrees', (v) => Number(v))
   .option('-i, --intent <text>')
   .action((id, o) =>
-    run('update_blocks', { updates: [{ id, text: o.text, title: o.title, color: o.color, size: o.size }], intent: o.intent }, (r) => console.log(`✓ updated ${r.updated.join(', ')}\n${csLine(r)}`)),
+    run('update_blocks', { updates: [{ id, text: o.text, title: o.title, color: o.color, size: o.size, rotation: o.rotate }], intent: o.intent }, (r) => console.log(`✓ updated ${r.updated.join(', ')}\n${csLine(r)}`)),
   )
+
+program
+  .command('image <source>')
+  .description('add an image from a file path or URL, e.g. aifig image ./sketch.png --frame Inspiration')
+  .option('--width <px>', 'display width', (v) => Number(v))
+  .option('--caption <text>')
+  .option('--inside <frame>')
+  .option('--right-of <id>')
+  .option('--below <id>')
+  .option('-i, --intent <text>')
+  .action((source: string, o) => {
+    const isUrl = /^https?:\/\//.test(source)
+    const abs = isUrl ? undefined : fs.realpathSync(source)
+    return run('add_image', { path: abs, url: isUrl ? source : undefined, width: o.width, caption: o.caption, inside: o.inside, right_of: o.rightOf, below: o.below, intent: o.intent }, (r) => {
+      console.log(`✓ added image ${r.created.find((c: { kind: string }) => c.kind === 'image')?.id}`)
+      const l = csLine(r)
+      if (l) console.log(l)
+    })
+  })
 
 program
   .command('delete <ids...>')
@@ -142,10 +162,18 @@ program
 program
   .command('route <ids...>')
   .description('change connector routing, e.g. aifig route <id> --style elbow')
-  .requiredOption('-s, --style <style>', 'curved | elbow | straight')
+  .option('-s, --style <style>', 'curved | elbow | straight')
   .option('--label <label>')
+  .option('-w, --waypoints <points>', 'elbow waypoints as "x,y;x,y"')
+  .option('--clear-waypoints', 'return to automatic routing')
   .option('-i, --intent <text>')
-  .action((ids, o) => run('update_connectors', { ids, route: o.style, label: o.label, intent: o.intent }, (r) => console.log(`✓ restyled ${r.updated.length}\n${csLine(r)}`)))
+  .action((ids, o) => run('update_connectors', {
+    ids,
+    route: o.style,
+    label: o.label,
+    waypoints: o.clearWaypoints ? [] : o.waypoints ? String(o.waypoints).split(';').map((p: string) => { const [x, y] = p.split(',').map(Number); return { x, y } }) : undefined,
+    intent: o.intent,
+  }, (r) => console.log(`✓ restyled ${r.updated.length}\n${csLine(r)}`)))
 
 program
   .command('frame <title> <ids...>')

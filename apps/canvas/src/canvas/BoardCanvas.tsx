@@ -14,7 +14,8 @@ import { TopRight } from '../chrome/TopRight'
 import { ZoomControls } from '../chrome/ZoomControls'
 import { AgentLayer } from './AgentLayer'
 import { EditorContext } from './editor-context'
-import { draftForPastedText, draftForTool, nextColor, shapeDefs } from './shapes'
+import { draftForPastedText, draftForTool, importImages, nextColor, shapeDefs } from './shapes'
+import { toast } from 'sonner'
 
 const ME: Author = { kind: 'human', id: 'human:ui', name: 'You' }
 
@@ -30,6 +31,8 @@ function lodStyle(b: Block) {
       return { fill: s.surface, stroke: s.border, accent: c[mode].accent }
     case 'text':
       return { fill: 'rgba(0,0,0,0)', accent: s.muted }
+    case 'image':
+      return { fill: s.border, stroke: s.border }
     default:
       return { fill: c[mode].bg, accent: c[mode].accent }
   }
@@ -49,6 +52,9 @@ function createEditor(doc: Editor['doc']) {
       return from.kind === 'sticky' ? { ...d, color: from.color } : { ...d, color: nextColor.get() }
     },
     onDoubleClickCanvas: (at) => editor.createWithTool('sticky', at),
+    onFiles: (files, at) => {
+      importImages(editor, files, at).catch(() => toast.error('Couldn’t read that image — try PNG, JPEG, GIF or WebP.'))
+    },
     onPasteText: (text, at) => {
       if (!text.trim()) return
       const id = editor.placeDraft(draftForPastedText(text), at)

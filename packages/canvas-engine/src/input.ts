@@ -38,6 +38,15 @@ export class InputController {
     on(window, 'blur', () => {
       this.editor.spaceDown = false
     })
+    on(el, 'dragover', (e) => {
+      if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === 'file')) e.preventDefault()
+    })
+    on(el, 'drop', (e) => {
+      const files = [...(e.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith('image/'))
+      if (!files.length) return
+      e.preventDefault()
+      this.editor.options.onFiles?.(files, this.page(e))
+    })
     // Safari trackpad pinch
     on(el, 'gesturestart' as any, (e: any) => {
       e.preventDefault()
@@ -66,6 +75,24 @@ export class InputController {
   private gestureZ = 1
   private touches = new Map<number, Vec>()
   private rightClick: { screen: Vec; page: Vec; target: string | null } | null = null
+  private longPress: { timer: ReturnType<typeof setTimeout>; screen: Vec } | null = null
+
+  private cancelLongPress() {
+    if (this.longPress) clearTimeout(this.longPress.timer)
+    this.longPress = null
+  }
+
+  /** Block, connector, frame label or frame under a point (context menu priority). */
+  private menuTarget(target: HTMLElement, page: Vec): string | null {
+    const ed = this.editor
+    const labelId = target.closest<HTMLElement>('[data-frame-label]')?.dataset.frameLabel ?? null
+    if (labelId) return labelId
+    const block = ed.hitTest(page)
+    if (block) return block.id
+    const conn = ed.connectorAt(page)
+    if (conn) return conn.id
+    return ed.hitTest(page, { frames: true })?.id ?? null
+  }
 
   private startPinch() {
     const ed = this.editor
@@ -83,6 +110,24 @@ export class InputController {
     if (e.pointerType === 'touch') {
       this.touches.set(e.pointerId, this.local(e))
       this.el.setPointerCapture(e.pointerId)
+      this.cancelLongPress()
+      if (this.touches.size === 1) {
+        // long-press opens the context menu
+        const screen = this.local(e)
+        const page = ed.screenToPage(screen)
+        const menuTarget = this.menuTarget(target, page)
+        this.longPress = {
+          screen,
+          timer: setTimeout(() => {
+            this.longPress = null
+            ed.endInteraction()
+            if (menuTarget && !ed.selection.has(menuTarget)) ed.select([menuTarget])
+            if (!menuTarget) ed.selectNone()
+            navigator.vibrate?.(8)
+            ed.options.onContextMenu?.({ screen, page, target: menuTarget })
+          }, 520),
+        }
+      }
       if (this.touches.size === 2) {
         // a second finger cancels whatever the first one started and becomes pinch/pan
         if (ed.editingId) ed.stopEditing()
@@ -91,7 +136,7 @@ export class InputController {
       if (this.touches.size > 2) return
     }
     const editing = ed.editingId
-    if (editing && target.closest(`[data-block-id="${editing}"] textarea, [data-block-id="${editing}"] input, [data-editing-input]`)) return
+    if (editing && target.closest(`[data-block-id="${editing}"] textarea, [data-block-id="${editing}"] input, [data-block-id="${editing}"] [contenteditable="true"], [data-editing-input], [data-ui]`)) return
     if (editing) ed.stopEditing()
     ;(document.activeElement as HTMLElement | null)?.blur?.()
 
@@ -112,13 +157,11 @@ export class InputController {
     this.el.setPointerCapture(e.pointerId)
     this.pointerId = e.pointerId
 
-    if (e.button === 2) {
-      // priority: blocks, then connectors, then frames (label or body)
-      const labelId = target.closest<HTMLElement>('[data-frame-label]')?.dataset.frameLabel ?? null
-      const block = labelId ? null : ed.hitTest(page)
-      const conn = labelId || block ? null : ed.connectorAt(page)
-      const frame = labelId || block || conn ? null : ed.hitTest(page, { frames: true })
-      this.rightClick = { screen, page, target: labelId ?? block?.id ?? conn?.id ?? frame?.id ?? null }
+    if (e.button === 2) this.rightClick = { screen, page, target: this.menuTarget(target, page) }
+    const link = target.closest<HTMLAnchorElement>('a[href]')
+    if (link && e.button === 0 && (e.metaKey || e.ctrlKey)) {
+      window.open(link.href, '_blank', 'noopener')
+      return
     }
     if (e.button === 1 || e.button === 2 || ed.spaceDown || ed.tool === 'hand') {
       ed.interaction = { type: 'pan', startScreen: screen, cam: { ...ed.camera } }
@@ -131,6 +174,10 @@ export class InputController {
     const connectFrom = target.closest<HTMLElement>('[data-connect-from]')?.dataset.connectFrom
     const endpointEl = target.closest<HTMLElement>('[data-connector-endpoint]')
     if (endpointEl) return ed.beginEndpoint(endpointEl.dataset.connectorEndpoint!, endpointEl.dataset.endpoint as 'start' | 'end', page)
+    const rotateEl = target.closest<HTMLElement>('[data-rotate]')
+    if (rotateEl) return ed.beginRotate(rotateEl.dataset.rotate!, page)
+    const wpEl = target.closest<HTMLElement>('[data-waypoint]')
+    if (wpEl) return ed.beginWaypoint(wpEl.dataset.waypoint!, Number(wpEl.dataset.index), wpEl.dataset.insert === 'true', page)
     const blockEl = target.closest<HTMLElement>('[data-block-id]')
     const labelEl = target.closest<HTMLElement>('[data-frame-label]')
     const connectorEl = target.closest<HTMLElement>('[data-connector-id]')
@@ -168,7 +215,17 @@ export class InputController {
       ed.bump()
       return
     }
-    const frameBody = !hitId ? (ed.frameAt(page)?.id ?? null) : null
+    let frameBody = !hitId ? (ed.frameAt(page)?.id ?? null) : null
+    if (frameBody) {
+      // tldraw/FigJam: the header strip always grabs the frame; its empty area moves it once selected,
+      // otherwise dragging there draws a marquee
+      const fr = ed.pageRect(frameBody)!
+      const inHeader = page.y - fr.y <= 28 / ed.camera.z
+      if (inHeader || (ed.selection.has(frameBody) && !e.shiftKey)) {
+        hitId = frameBody
+        frameBody = null
+      }
+    }
     const wasSelected = !!hitId && ed.selection.has(hitId)
     if (hitId && !wasSelected) ed.select(e.shiftKey ? [...ed.selection, hitId] : [hitId])
     ed.interaction = { type: 'pending', startScreen: screen, startPage: page, target: hitId, frameBody, shift: e.shiftKey, wasSelected }
@@ -181,8 +238,13 @@ export class InputController {
     const page = ed.screenToPage(screen)
     this.lastPointer = page
     if (e.pointerType === 'touch' && this.touches.has(e.pointerId)) this.touches.set(e.pointerId, screen)
+    if (this.longPress && Math.hypot(screen.x - this.longPress.screen.x, screen.y - this.longPress.screen.y) > 8) this.cancelLongPress()
     const it = ed.interaction
     switch (it.type) {
+      case 'rotate':
+        return ed.updateRotate(page, e.altKey || e.metaKey || e.ctrlKey)
+      case 'waypoint':
+        return ed.updateWaypoint(page)
       case 'pinch': {
         if (this.touches.size < 2) return
         const [a, b] = [...this.touches.values()]
@@ -243,9 +305,14 @@ export class InputController {
     if (this.pointerId !== null && this.el.hasPointerCapture(this.pointerId)) this.el.releasePointerCapture(this.pointerId)
     this.pointerId = null
     if (e.pointerType === 'touch') this.touches.delete(e.pointerId)
+    this.cancelLongPress()
     const page = this.page(e)
     const it = ed.interaction
     switch (it.type) {
+      case 'rotate':
+        return ed.endRotate()
+      case 'waypoint':
+        return ed.endWaypoint()
       case 'pinch':
         if (this.touches.size < 2) ed.endInteraction()
         return
@@ -315,8 +382,13 @@ export class InputController {
   /** Returns true when the double-click was handled. */
   private onDoubleClick(target: HTMLElement, page: Vec): boolean {
     const ed = this.editor
-    if (target.closest('[data-ui],textarea,input')) return false
+    if (target.closest('[data-ui],textarea,input,[contenteditable="true"]')) return false
     if (ed.tool !== 'select') return false
+    const wp = target.closest<HTMLElement>('[data-waypoint]')
+    if (wp) {
+      if (wp.dataset.insert !== 'true') ed.removeWaypoint(wp.dataset.waypoint!, Number(wp.dataset.index))
+      return true
+    }
     const label = target.closest<HTMLElement>('[data-frame-label]')?.dataset.frameLabel
     if (label) {
       ed.startEditing(label)
@@ -452,6 +524,12 @@ export class InputController {
 
   private onPaste = (e: ClipboardEvent) => {
     if (isEditableTarget(e.target)) return
+    const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'))
+    if (files.length) {
+      e.preventDefault()
+      this.editor.options.onFiles?.(files, this.lastPointer ?? this.editor.screenToPage({ x: this.editor.viewport.w / 2, y: this.editor.viewport.h / 2 }))
+      return
+    }
     const text = e.clipboardData?.getData('text/plain') ?? ''
     if (!text.trim()) return
     e.preventDefault()

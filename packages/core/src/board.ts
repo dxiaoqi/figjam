@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { customAlphabet } from 'nanoid'
 import * as Y from 'yjs'
-import type { Block, BoardSummary, ChangeSet, Connector, Rect } from '@aifig/shared'
+import type { Asset, Block, BoardSummary, ChangeSet, Connector, Rect } from '@aifig/shared'
 
 export const newId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 10)
 
@@ -22,6 +22,7 @@ export class Board {
   readonly blocks = this.doc.getMap<Block>('blocks')
   readonly connectors = this.doc.getMap<Connector>('connectors')
   readonly changeSets = this.doc.getMap<ChangeSet>('changeSets')
+  readonly assets = this.doc.getMap<Asset>('assets')
   private saveTimer: NodeJS.Timeout | null = null
   deleted = false
 
@@ -92,6 +93,7 @@ export class Board {
       blocks: [...this.blocks.values()],
       connectors: [...this.connectors.values()],
       changeSets: [...this.changeSets.values()],
+      assets: [...this.assets.values()].map(({ bytes, ...meta }) => ({ ...meta, size: bytes.byteLength })),
     }
   }
 

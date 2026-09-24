@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect } from '@aifig/shared'
-import { measureSticky } from '@aifig/shared'
+import { imageInfo, measureSticky } from '@aifig/shared'
 import {
   SPACING,
   snap,
@@ -219,6 +219,8 @@ export class CanvasCore {
         return this.connect(a, caller)
       case 'update_connectors':
         return this.updateConnectors(a, caller)
+      case 'add_image':
+        return this.addImage(a, caller)
       case 'group_into_frame':
         return this.groupIntoFrame(a, caller)
       case 'arrange':
@@ -357,7 +359,7 @@ export class CanvasCore {
     }
     const line = (b: Block) => {
       const body = b.kind === 'card' ? `**${preview(b.title, 60)}** — ${preview(b.text, 100)}` : `"${preview(b.text, 100)}"`
-      const flags = [b.color, b.size !== 'm' ? `size ${b.size}` : '', b.pending ? 'pending review' : ''].filter(Boolean).join(', ')
+      const flags = [b.kind === 'image' ? '' : b.color, b.size !== 'm' && b.kind !== 'image' ? `size ${b.size}` : '', b.rotation ? `rotated ${b.rotation}°` : '', b.pending ? 'pending review' : ''].filter(Boolean).join(', ')
       return `- ${b.kind} ${body} [${flags}] (id: ${b.id}, ${b.x},${b.y} ${b.w}×${b.h})`
     }
     const out: string[] = []
@@ -405,6 +407,7 @@ export class CanvasCore {
       h: number
       group?: string
       parentRef?: string
+      asset?: string
     }
     const drafts: Draft[] = a.blocks.map((b: Args, i: number) => {
       const kind: Block['kind'] = b.kind ?? 'sticky'
@@ -414,8 +417,9 @@ export class CanvasCore {
       const title = b.title != null ? String(b.title) : undefined
       let dims: { w: number; h: number; size?: SizeToken }
       if (kind === 'sticky') dims = measureSticky(text, size)
+      else if (kind === 'image') dims = { w: b.w, h: b.h }
       else dims = measureBlock({ kind, text, title, size, w: 0, h: 0 })
-      return { key: `k${i}`, ref: b.ref, kind, text, title, color, size: dims.size ?? size, w: dims.w, h: dims.h, group: b.group, parentRef: b.parent }
+      return { key: `k${i}`, ref: b.ref, kind, text, title, color, size: dims.size ?? size, w: dims.w, h: dims.h, group: b.group, parentRef: b.parent, asset: b.asset as string | undefined }
     })
     // same kind in one batch → same size
     const stickies = drafts.filter((d) => d.kind === 'sticky')
@@ -498,7 +502,7 @@ export class CanvasCore {
       const keyToId = new Map<string, string>()
       for (const d of drafts) {
         const p = res.placed.get(d.key)!
-        const b = rec.createBlock({ id: newId(), kind: d.kind, x: snap(p.x + offset.x), y: snap(p.y + offset.y), w: p.w, h: p.h, parent, text: d.text, title: d.title, color: d.color, size: d.size })
+        const b = rec.createBlock({ id: newId(), kind: d.kind, x: snap(p.x + offset.x), y: snap(p.y + offset.y), w: p.w, h: p.h, parent, text: d.text, title: d.title, color: d.color, size: d.size, ...(d.asset ? { asset: d.asset } : {}) })
         keyToId.set(d.key, b.id)
         created.push({ id: b.id, ref: d.ref, kind: d.kind, label: preview(d.kind === 'card' ? d.title : d.text, 40) })
       }
@@ -544,6 +548,7 @@ export class CanvasCore {
         if (u.size !== undefined) patch.size = toSizeToken(u.size, cur.size)
         if (u.x !== undefined) patch.x = snap(u.x)
         if (u.y !== undefined) patch.y = snap(u.y)
+        if (u.rotation !== undefined) patch.rotation = ((Math.round(u.rotation) % 360) + 360) % 360
         const merged = { ...cur, ...patch }
         if (cur.kind === 'sticky' && (patch.text !== undefined || patch.size !== undefined)) {
           const m = measureSticky(merged.text, merged.size)
@@ -601,6 +606,30 @@ export class CanvasCore {
     return { board: board.id, changeSet, connectors: result }
   }
 
+  private async addImage(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    let bytes: Uint8Array
+    if (a.path) {
+      const fs = await import('node:fs')
+      if (!fs.existsSync(a.path)) throw new ToolError(`No file at ${a.path}`)
+      bytes = new Uint8Array(fs.readFileSync(a.path))
+    } else if (a.url) {
+      const r = await fetch(a.url, { signal: AbortSignal.timeout(15000) })
+      if (!r.ok) throw new ToolError(`Download failed (${r.status}) for ${a.url}`)
+      bytes = new Uint8Array(await r.arrayBuffer())
+    } else if (a.data) {
+      bytes = new Uint8Array(Buffer.from(String(a.data).replace(/^data:[^,]+,/, ''), 'base64'))
+    } else throw new ToolError('Provide path, url or data')
+    if (bytes.byteLength > 12 * 1024 * 1024) throw new ToolError('Images are limited to 12 MB')
+    const info = imageInfo(bytes)
+    if (!info || !info.w || !info.h) throw new ToolError('Unsupported image — use PNG, JPEG, GIF or WebP')
+    const assetId = `a${newId()}`
+    board.doc.transact(() => board.assets.set(assetId, { id: assetId, mime: info.mime, w: info.w, h: info.h, bytes, name: a.path?.split('/').pop(), createdAt: Date.now() }), 'api')
+    const w = snap(Math.min(a.width ?? Math.min(info.w, 480), 1600))
+    const h = snap((w * info.h) / info.w)
+    return this.createBlocks({ ...a, blocks: [{ kind: 'image', w, h, asset: assetId, text: a.caption ?? '' }], intent: a.intent ?? 'Add an image' }, caller)
+  }
+
   private updateConnectors(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
     const missing = (a.ids as string[]).filter((id) => !board.connectors.get(id))
@@ -610,6 +639,10 @@ export class CanvasCore {
         const patch: Partial<Connector> = {}
         if (a.route) patch.route = a.route
         if (a.label !== undefined) patch.label = a.label
+        if (a.waypoints) {
+          patch.waypoints = a.waypoints.length ? a.waypoints.map((p: { x: number; y: number }) => ({ x: snap(p.x), y: snap(p.y) })) : null
+          if (a.waypoints.length && !a.route) patch.route = 'elbow'
+        }
         rec.updateConnector(id, patch)
       }
     })

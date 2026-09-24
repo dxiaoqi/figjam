@@ -1,6 +1,7 @@
 // End-to-end checks for the in-house canvas engine, driven through real pointer/keyboard input.
 // usage: node scripts/engine-e2e.mjs [screenshot-dir]   (expects `npm run dev` running)
 import { execFileSync } from 'node:child_process'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
@@ -17,6 +18,7 @@ const page = await context.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push(e.message))
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+const cdp = await page.context().newCDPSession(page)
 await page.goto(`${base}/?board=${board}`)
 await page.waitForTimeout(2000)
 
@@ -407,7 +409,6 @@ const md = JSON.parse(cli('--json', '--board', board, 'read')).markdown
 check('CLI/MCP set connector routing', md.includes(`[elbow] (id: ${ca})`))
 
 // touch: two-finger pinch zooms, one finger on empty canvas pans
-const cdp = await page.context().newCDPSession(page)
 const zBefore = await ed(() => window.editor.camera.z)
 const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], i) => ({ x, y, id: i + 1 })) })
 await touch('touchStart', [[680, 450], [760, 450]])
@@ -423,6 +424,209 @@ for (let i = 1; i <= 6; i++) await touch('touchMove', [[300 + i * 20, 300]])
 await touch('touchEnd', [])
 await wait(100)
 check('one-finger drag on empty canvas pans', (await ed(() => window.editor.camera.x)) - xBefore > 80)
+
+// ---- v3: frame moving, rotation, long-press, label avoidance, waypoints, rich text, images ----
+await ed(() => window.editor.setCamera({ x: 0, y: 0, z: 1 }))
+const fm = await ed(() => {
+  const ed = window.editor
+  const f = ed.createBlock({ kind: 'frame', x: 8000, y: 8000, w: 520, h: 320, title: 'Movable', text: '', color: 'gray', size: 'm' })
+  const k1 = ed.createBlock({ kind: 'sticky', parent: f, x: 40, y: 80, w: 160, h: 160, text: 'Inside 1', color: 'green' })
+  const k2 = ed.createBlock({ kind: 'sticky', parent: f, x: 240, y: 80, w: 160, h: 160, text: 'Inside 2', color: 'green' })
+  const target = ed.createBlock({ kind: 'sticky', x: 8800, y: 8200, w: 160, h: 160, text: 'Align me', color: 'blue' })
+  ed.selectNone()
+  ed.zoomToBounds({ x: 7900, y: 7900, w: 1200, h: 700 }, { animate: false })
+  return { f, k1, k2, target }
+})
+await wait(250)
+const frameAt = () => ed(({ f, k1 }) => ({ f: { ...window.editor.block(f) }, kid: window.editor.pageRect(k1) }), fm)
+const f0 = await frameAt()
+const flabel = await page.locator(`[data-frame-label="${fm.f}"]`).boundingBox()
+await page.mouse.move(flabel.x + 10, flabel.y + flabel.height / 2)
+await page.mouse.down()
+let sawGuides = false
+for (let i = 1; i <= 10; i++) {
+  await page.mouse.move(flabel.x + 10 + i * 12, flabel.y + flabel.height / 2 + i * 13)
+  if ((await ed(() => window.editor.guides.length + window.editor.spacing.length)) > 0) sawGuides = true
+}
+await page.mouse.up()
+await wait(250)
+const f1 = await frameAt()
+check('dragging a frame title moves the frame with its children', f1.f.x !== f0.f.x && Math.round(f1.kid.x - f0.kid.x) === f1.f.x - f0.f.x, `Δ${f1.f.x - f0.f.x},${f1.f.y - f0.f.y}`)
+check('frame drag snaps to the grid and shows guides', f1.f.x % 8 === 0 && f1.f.y % 8 === 0 && sawGuides)
+check('frame move persists to the core', JSON.parse(cli('--json', '--board', board, 'read', '--frame', fm.f)).markdown.includes(`${f1.f.x},${f1.f.y}`))
+await page.keyboard.press('Control+z')
+await wait(200)
+check('frame move is undoable', (await frameAt()).f.x === f0.f.x)
+// empty-area conventions: unselected → marquee, selected → move
+await ed(() => window.editor.selectNone())
+const fr0 = await ed(({ f }) => { const r = window.editor.pageRect(f); return { a: window.editor.pageToScreen({ x: r.x + r.w - 30, y: r.y + r.h - 20 }), b: window.editor.pageToScreen({ x: r.x + 60, y: r.y + 120 }) } }, fm)
+await page.mouse.move(fr0.a.x, fr0.a.y)
+await page.mouse.down()
+await page.mouse.move(fr0.b.x, fr0.b.y, { steps: 8 })
+await page.mouse.up()
+await wait(150)
+const marq = await ed(({ f }) => ({ sel: [...window.editor.selection], x: window.editor.block(f).x }), fm)
+check('drag on an unselected frame’s empty area draws a marquee', marq.sel.length >= 1 && !marq.sel.includes(fm.f) && marq.x === f0.f.x, marq.sel.join(','))
+await page.mouse.click(fr0.a.x, fr0.a.y)
+await wait(100)
+check('click on a frame’s empty area selects it', (await ed(() => [...window.editor.selection].join(','))) === fm.f)
+await page.mouse.move(fr0.a.x, fr0.a.y)
+await page.mouse.down()
+await page.mouse.move(fr0.a.x + 80, fr0.a.y + 40, { steps: 8 })
+await page.mouse.up()
+await wait(150)
+check('drag on a selected frame’s empty area moves it', (await frameAt()).f.x > f0.f.x)
+await page.keyboard.press('Control+z')
+
+// rotation: handle snaps to 15°, hit-testing follows, CLI/MCP and export know about it
+await ed((id) => window.editor.select([id]), fm.target)
+await wait(150)
+const rh = await page.locator('.ae-rotate-handle').boundingBox()
+const tc = await screenOf(fm.target)
+await page.mouse.move(rh.x + rh.width / 2, rh.y + rh.height / 2)
+await page.mouse.down()
+const ang = (40 * Math.PI) / 180
+const rad = Math.hypot(rh.x + rh.width / 2 - tc.x, rh.y + rh.height / 2 - tc.y)
+for (let i = 1; i <= 8; i++) {
+  const a = -Math.PI / 2 + (ang * i) / 8
+  await page.mouse.move(tc.x + Math.cos(a) * rad, tc.y + Math.sin(a) * rad)
+}
+await page.mouse.up()
+await wait(150)
+const rot = await ed((id) => window.editor.block(id).rotation, fm.target)
+check('rotation handle snaps to 15°', rot === 45, `${rot}°`)
+await ed(() => window.editor.selectNone())
+const corner = await ed((id) => { const r = window.editor.pageRect(id); return window.editor.pageToScreen({ x: r.x + 6, y: r.y + 6 }) }, fm.target)
+await page.mouse.click(corner.x, corner.y)
+await wait(100)
+check('rotated blocks hit-test by their real shape', !(await ed((id) => window.editor.selection.has(id), fm.target)))
+cli('--board', board, 'update', fm.target, '--rotate', '30', '--human')
+await wait(200)
+const svgRot = await ed(async ({ board, id }) => (await (await fetch(`/api/boards/${board}/snapshot.svg?ids=${id}`)).text()).includes('rotate(30'), { board, id: fm.target })
+check('CLI rotation applies and export renders it', (await ed((id) => window.editor.block(id).rotation, fm.target)) === 30 && svgRot)
+
+// touch long-press opens the context menu
+const lp = await screenOf(fm.k1)
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: lp.x, y: lp.y, id: 1 }] })
+await wait(750)
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+await wait(250)
+check('touch long-press opens the context menu', await page.getByRole('menuitem', { name: /Duplicate/ }).isVisible())
+await page.keyboard.press('Escape')
+await wait(150)
+
+// labels avoid blocks; elbow waypoints add / move / remove
+const lab = await ed(() => {
+  const ed = window.editor
+  const a = ed.createBlock({ kind: 'sticky', x: 10000, y: 8000, w: 120, h: 120, text: 'From', color: 'yellow' })
+  const mid = ed.createBlock({ kind: 'card', x: 10260, y: 7990, w: 160, h: 140, title: 'In the way', text: '', color: 'red' })
+  const b = ed.createBlock({ kind: 'sticky', x: 10560, y: 8000, w: 120, h: 120, text: 'To', color: 'yellow' })
+  const c = ed.addConnector({ from: a, to: b, route: 'straight', label: 'depends on' })
+  ed.zoomToBounds({ x: 9900, y: 7700, w: 900, h: 700 }, { animate: false })
+  const p = ed.labelPosition(ed.connector(c))
+  const r = ed.pageRect(mid)
+  return { a, b, c, clear: !(p.x > r.x - 40 && p.x < r.x + r.w + 40 && p.y > r.y - 11 && p.y < r.y + r.h + 11) }
+})
+check('connector labels avoid blocks', lab.clear)
+await ed(({ c }) => { window.editor.setRoute([c], 'elbow'); window.editor.select([c]) }, lab)
+await wait(200)
+const ins = await page.locator('.ae-waypoint.is-insert').first().boundingBox()
+await page.mouse.move(ins.x + 4, ins.y + 4)
+await page.mouse.down()
+await page.mouse.move(ins.x + 4, ins.y + 200, { steps: 8 })
+await page.mouse.up()
+await wait(150)
+let wps = await ed(({ c }) => window.editor.connector(c).waypoints ?? [], lab)
+check('dragging a segment handle adds an elbow waypoint', wps.length === 1)
+const wpEl = await page.locator('.ae-waypoint:not(.is-insert)').first().boundingBox()
+await page.mouse.move(wpEl.x + 5, wpEl.y + 5)
+await page.mouse.down()
+await page.mouse.move(wpEl.x + 5, wpEl.y + 60, { steps: 5 })
+await page.mouse.up()
+await wait(150)
+const wps2 = await ed(({ c }) => window.editor.connector(c).waypoints ?? [], lab)
+check('dragging a waypoint moves it', wps2.length === 1 && wps2[0].y > wps[0].y)
+const wpEl2 = await page.locator('.ae-waypoint:not(.is-insert)').first().boundingBox()
+await page.mouse.dblclick(wpEl2.x + 5, wpEl2.y + 5)
+await wait(150)
+check('double-clicking a waypoint removes it', ((await ed(({ c }) => window.editor.connector(c).waypoints ?? [], lab)).length) === 0)
+cli('--board', board, 'route', lab.c, '--waypoints', '10360,8300', '--as', 'Claude Code')
+await wait(200)
+wps = await ed(({ c }) => window.editor.connector(c).waypoints ?? [], lab)
+check('CLI/MCP set elbow waypoints', wps.length === 1 && Math.abs(wps[0].y - 8300) <= 8, JSON.stringify(wps))
+
+// rich text: WYSIWYG formatting stored as Markdown, links rendered, IME composition
+await page.keyboard.press('Escape')
+await ed(({ a }) => window.editor.startEditing(a), lab)
+await wait(300)
+await page.keyboard.press('Control+a')
+await page.keyboard.type('Plain ')
+await page.keyboard.press('Control+b')
+await page.keyboard.type('bold')
+await page.keyboard.press('Control+b')
+await page.keyboard.type(' ')
+await page.keyboard.press('Control+i')
+await page.keyboard.type('soft')
+await page.keyboard.press('Control+i')
+await page.keyboard.press('Enter')
+await page.keyboard.type('- first')
+await page.keyboard.press('Enter')
+await page.keyboard.type('second')
+await page.keyboard.press('Enter')
+await page.keyboard.press('Enter')
+await cdp.send('Input.imeSetComposition', { text: 'ni', selectionStart: 2, selectionEnd: 2 })
+await wait(80)
+await cdp.send('Input.imeSetComposition', { text: '你', selectionStart: 1, selectionEnd: 1 })
+await cdp.send('Input.insertText', { text: '你好' })
+await wait(150)
+await page.keyboard.press('Escape')
+await wait(250)
+const md2 = await ed(({ a }) => window.editor.block(a).text, lab)
+check('rich text: bold / italic / lists stored as Markdown', md2.includes('**bold**') && md2.includes('*soft*') && md2.includes('- first') && md2.includes('- second'), JSON.stringify(md2))
+check('rich text: IME composition commits cleanly', md2.includes('你好') && !md2.includes('ni你'))
+check('rich text renders formatted when not editing', (await page.locator(`[data-block-id="${lab.a}"] strong`).count()) === 1 && (await page.locator(`[data-block-id="${lab.a}"] li`).count()) === 2)
+cli('--board', board, 'update', lab.b, '--text', 'See [the spec](https://example.com) and `code`', '--human')
+await wait(250)
+check('agent Markdown renders links and code', (await page.locator(`[data-block-id="${lab.b}"] a[href="https://example.com"]`).count()) === 1 && (await page.locator(`[data-block-id="${lab.b}"] code`).count()) === 1)
+
+// images: CLI add, paste, drop, aspect-locked resize, export
+fs.writeFileSync('/tmp/aifig-e2e.png', Buffer.from(await ed(async ({ board, id }) => {
+  const b = await (await fetch(`/api/boards/${board}/snapshot.png?ids=${id}`)).arrayBuffer()
+  return [...new Uint8Array(b)]
+}, { board, id: lab.a })))
+const imgRes = JSON.parse(cli('--json', '--board', board, 'image', '/tmp/aifig-e2e.png', '--width', '240', '--human'))
+const imgId = imgRes.created.find((c) => c.kind === 'image').id
+await ed((id) => { const r = window.editor.pageRect(id); window.editor.zoomToBounds({ x: r.x - 200, y: r.y - 200, w: r.w + 400, h: r.h + 400 }, { animate: false }) }, imgId)
+await wait(500)
+const natural = await ed((id) => document.querySelector(`[data-block-id="${id}"] img`)?.naturalWidth ?? 0, imgId)
+check('CLI/MCP add_image stores and renders the image', natural > 0)
+const beforeImg = await ed((id) => ({ ...window.editor.block(id) }), imgId)
+await ed((id) => window.editor.select([id]), imgId)
+await wait(150)
+const se = await page.locator('.ae-handle-se').boundingBox()
+await page.mouse.move(se.x + 4, se.y + 4)
+await page.mouse.down()
+await page.mouse.move(se.x + 120, se.y + 20, { steps: 6 })
+await page.mouse.up()
+await wait(150)
+const afterImg = await ed((id) => ({ ...window.editor.block(id) }), imgId)
+check('image resize keeps the aspect ratio', afterImg.w > beforeImg.w && Math.abs(afterImg.w / afterImg.h - beforeImg.w / beforeImg.h) < 0.02, `${beforeImg.w}×${beforeImg.h} → ${afterImg.w}×${afterImg.h}`)
+const pasted = await ed(async (id) => {
+  const bytes = await (await fetch(document.querySelector(`[data-block-id="${id}"] img`).src)).blob()
+  const before = window.editor.blocks().filter((b) => b.kind === 'image').length
+  const dt = new DataTransfer()
+  dt.items.add(new File([bytes], 'pasted.png', { type: 'image/png' }))
+  window.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true }))
+  await new Promise((r) => setTimeout(r, 600))
+  const dt2 = new DataTransfer()
+  dt2.items.add(new File([bytes], 'dropped.png', { type: 'image/png' }))
+  document.querySelector('.ae-canvas').dispatchEvent(new DragEvent('drop', { dataTransfer: dt2, bubbles: true, cancelable: true, clientX: 300, clientY: 300 }))
+  await new Promise((r) => setTimeout(r, 600))
+  return window.editor.blocks().filter((b) => b.kind === 'image').length - before
+}, imgId)
+check('pasting and dropping image files creates image blocks', pasted === 2, `+${pasted}`)
+const svgImg = await ed(async ({ board, id }) => (await (await fetch(`/api/boards/${board}/snapshot.svg?ids=${id}`)).text()).includes('<image'), { board, id: imgId })
+check('images are included in export', svgImg)
 
 // level of detail + 2,000-block performance
 const many = { blocks: Array.from({ length: 2000 }, (_, i) => ({ text: `Note ${i + 1}`, color: ['yellow', 'blue', 'green', 'pink', 'purple'][i % 5], size: 's' })), layout: 'grid', columns: 50, at: { x: 0, y: 6000 } }

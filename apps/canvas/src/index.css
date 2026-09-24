@@ -305,3 +305,84 @@
   color: currentColor;
   opacity: 0.45;
 }
+
+/* rich text (Markdown subset rendered / edited with TipTap) */
+.aifig-rich-host,
+.aifig-rich-host .ProseMirror {
+  height: 100%;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.aifig-rich p {
+  margin: 0;
+  min-height: 1.45em;
+}
+.aifig-rich ul,
+.aifig-rich ol {
+  margin: 0.15em 0;
+  padding-left: 1.25em;
+}
+.aifig-rich ul {
+  list-style: disc;
+}
+.aifig-rich ol {
+  list-style: decimal;
+}
+.aifig-rich li p {
+  min-height: 0;
+}
+.aifig-rich strong {
+  font-weight: 650;
+}
+.aifig-rich code {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.86em;
+  padding: 0.05em 0.3em;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.aifig-rich a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 2px;
+}
+.aifig-rich-host .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  opacity: 0.45;
+  pointer-events: none;
+}
+.aifig-card .body.aifig-rich,
+.aifig-card .body .ProseMirror {
+  margin-top: 6px;
+}
+
+/* images */
+.aifig-image {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--frame-bg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.06);
+}
+.aifig-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.aifig-image-loading {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--muted-c);
+}

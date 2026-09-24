@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
-import type { Block, Connector } from '@aifig/shared'
+import { rotatePoint, type Block, type Connector } from '@aifig/shared'
 import type { Editor, HandleId, ShapeDef } from './editor'
 import { center, containsBox, expand, intersects, type Box, type Vec } from './geometry'
 import { InputController } from './input'
@@ -32,6 +32,7 @@ interface BlockViewProps {
   y: number
   w: number
   h: number
+  rotation: number
   editing: boolean
   selected: boolean
   enterDelay: number | undefined
@@ -39,7 +40,7 @@ interface BlockViewProps {
   editor: Editor
 }
 
-const BlockView = memo(function BlockView({ block, def, x, y, w, h, editing, selected, enterDelay, accepted, editor }: BlockViewProps) {
+const BlockView = memo(function BlockView({ block, def, x, y, w, h, rotation, editing, selected, enterDelay, accepted, editor }: BlockViewProps) {
   const Render = def.render
   const cls = [
     'ae-block',
@@ -52,7 +53,7 @@ const BlockView = memo(function BlockView({ block, def, x, y, w, h, editing, sel
     selected ? 'is-selected' : '',
   ].join(' ')
   const style: CSSProperties = {
-    transform: `translate(${x}px, ${y}px)`,
+    transform: rotation ? `translate(${x}px, ${y}px) rotate(${rotation}deg)` : `translate(${x}px, ${y}px)`,
     width: w,
     height: h,
     ['--agent' as string]: block.author?.kind === 'agent' ? (block.author.color ?? '#6E56CF') : '#6E56CF',
@@ -107,9 +108,8 @@ function ConnectorLabels({ editor, connectors }: { editor: Editor; connectors: C
       {connectors.map((c) => {
         const editing = editor.editingId === c.id
         if (!c.label && !editing) return null
-        const route = editor.connectorRoute(c)
-        if (!route) return null
-        const m = route.mid
+        const m = editor.labelPosition(c)
+        if (!m) return null
         return (
           <div key={c.id} className="ae-connector-label" style={{ transform: `translate(${m.x}px, ${m.y}px) translate(-50%, -50%)` }} data-connector-id={c.id}>
             {editing ? <LabelInput editor={editor} connector={c} /> : c.label}
@@ -167,9 +167,17 @@ function drawLod(editor: Editor, canvas: HTMLCanvasElement, host: HTMLElement) {
   for (const b of editor.blocks()) {
     if (b.id === editing) continue
     const r = editor.pageRect(b.id)
-    if (!r || !intersects(vp, r)) continue
+    const vr = editor.visualRect(b.id)
+    if (!r || !vr || !intersects(vp, vr)) continue
     const s = style(b)
     const radius = editor.shape(b.kind)?.radius ?? 4
+    const rot = editor.rotationOf(b.id)
+    if (rot) {
+      ctx.save()
+      ctx.translate(r.x + r.w / 2, r.y + r.h / 2)
+      ctx.rotate((rot * Math.PI) / 180)
+      ctx.translate(-(r.x + r.w / 2), -(r.y + r.h / 2))
+    }
     ctx.beginPath()
     ctx.roundRect(r.x, r.y, r.w, r.h, radius)
     ctx.fillStyle = s.fill
@@ -195,6 +203,7 @@ function drawLod(editor: Editor, canvas: HTMLCanvasElement, host: HTMLElement) {
       ctx.strokeRect(r.x - 4 / z, r.y - 4 / z, r.w + 8 / z, r.h + 8 / z)
       ctx.setLineDash([])
     }
+    if (rot) ctx.restore()
   }
   ctx.lineWidth = 1.2 / z
   ctx.strokeStyle = connectorColor
@@ -213,6 +222,17 @@ const HANDLES_X: HandleId[] = ['e', 'w']
 function toScreen(editor: Editor, r: Box): Box {
   const p = editor.pageToScreen(r)
   return { x: p.x, y: p.y, w: r.w * editor.camera.z, h: r.h * editor.camera.z }
+}
+
+/** CSS for a screen-space box rotated around its center. */
+function boxStyle(s: Box, rot: number, radius?: number): CSSProperties {
+  return {
+    transform: rot ? `translate(${s.x}px, ${s.y}px) rotate(${rot}deg)` : `translate(${s.x}px, ${s.y}px)`,
+    transformOrigin: `${s.w / 2}px ${s.h / 2}px`,
+    width: s.w,
+    height: s.h,
+    borderRadius: radius,
+  }
 }
 
 function FrameLabel({ editor, frame }: { editor: Editor; frame: Block }) {
@@ -295,18 +315,14 @@ function Overlay({ editor }: { editor: Editor }) {
           const r = editor.pageRect(hover.id)
           if (!r) return null
           const s = toScreen(editor, r)
-          return <div className="ae-hover" style={{ transform: `translate(${s.x}px, ${s.y}px)`, width: s.w, height: s.h, borderRadius: (editor.shape(hover.kind)?.radius ?? 4) * z }} />
+          return <div className="ae-hover" style={boxStyle(s, editor.rotationOf(hover.id), (editor.shape(hover.kind)?.radius ?? 4) * z)} />
         })()}
       {selected.map((b) => {
         const r = editor.pageRect(b.id)
         if (!r) return null
         const s = toScreen(editor, r)
         return (
-          <div
-            key={b.id}
-            className={`ae-selection ${selBounds ? 'is-multi' : ''}`}
-            style={{ transform: `translate(${s.x}px, ${s.y}px)`, width: s.w, height: s.h, borderRadius: (editor.shape(b.kind)?.radius ?? 4) * z }}
-          />
+          <div key={b.id} className={`ae-selection ${selBounds ? 'is-multi' : ''}`} style={boxStyle(s, editor.rotationOf(b.id), (editor.shape(b.kind)?.radius ?? 4) * z)} />
         )
       })}
       {selBounds &&
@@ -318,12 +334,35 @@ function Overlay({ editor }: { editor: Editor }) {
       {showHandles &&
         (() => {
           const s = toScreen(editor, editor.pageRect(single.id)!)
-          return (def.resize === 'xy' ? HANDLES_XY : HANDLES_X).map((h) => {
-            const x = h.includes('w') ? s.x : h.includes('e') ? s.x + s.w : s.x + s.w / 2
-            const y = h.includes('n') ? s.y : h.includes('s') ? s.y + s.h : s.y + s.h / 2
+          const rot = editor.rotationOf(single.id)
+          const c = { x: s.x + s.w / 2, y: s.y + s.h / 2 }
+          const list = def.lockAspect ? HANDLES_XY.filter((h) => h.length === 2) : def.resize === 'xy' ? HANDLES_XY : HANDLES_X
+          return list.map((h) => {
+            const p = rotatePoint({ x: h.includes('w') ? s.x : h.includes('e') ? s.x + s.w : c.x, y: h.includes('n') ? s.y : h.includes('s') ? s.y + s.h : c.y }, c, rot)
             const edge = h.length === 1
-            return <div key={h} data-handle={h} className={`ae-handle ae-handle-${h} ${edge ? 'is-edge' : ''}`} style={{ transform: `translate(${x}px, ${y}px) translate(-50%, -50%)` }} />
+            return <div key={h} data-handle={h} className={`ae-handle ae-handle-${h} ${edge ? 'is-edge' : ''}`} style={{ transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%) rotate(${rot}deg)` }} />
           })
+        })()}
+      {single &&
+        def?.rotatable &&
+        !busy &&
+        editor.editingId !== single.id &&
+        editor.tool === 'select' &&
+        (() => {
+          const s = toScreen(editor, editor.pageRect(single.id)!)
+          const rot = editor.rotationOf(single.id)
+          const c = { x: s.x + s.w / 2, y: s.y + s.h / 2 }
+          const p = rotatePoint({ x: c.x, y: s.y - 26 }, c, rot)
+          return <div data-rotate={single.id} className="ae-rotate-handle" title="Rotate (snaps to 15°, hold ⌥ for free)" style={{ transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%)` }} />
+        })()}
+      {it.type === 'rotate' &&
+        (() => {
+          const p = editor.pageToScreen(it.center)
+          return (
+            <div className="ae-rotate-readout" style={{ transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%)` }}>
+              {Math.round(it.angle)}°
+            </div>
+          )
         })()}
       {selConnector &&
         it.type !== 'endpoint' &&
@@ -343,6 +382,26 @@ function Overlay({ editor }: { editor: Editor }) {
               />
             )
           })
+        })()}
+      {selConnector &&
+        selConnector.route === 'elbow' &&
+        (it.type === 'idle' || it.type === 'pending' || it.type === 'waypoint') &&
+        (() => {
+          const route = editor.connectorRoute(selConnector)
+          if (!route) return null
+          const wps = editor.waypointsOf(selConnector) ?? []
+          const ctrl = [route.start, ...wps, route.end]
+          const out: ReactNode[] = []
+          wps.forEach((w, i) => {
+            const p = editor.pageToScreen(w)
+            out.push(<div key={`w${i}`} data-waypoint={selConnector.id} data-index={i} className="ae-waypoint" title="Drag to move · double-click to remove" style={{ transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%)` }} />)
+          })
+          if (it.type !== 'waypoint')
+            for (let i = 0; i < ctrl.length - 1; i++) {
+              const m = editor.pageToScreen({ x: (ctrl[i].x + ctrl[i + 1].x) / 2, y: (ctrl[i].y + ctrl[i + 1].y) / 2 })
+              out.push(<div key={`m${i}`} data-waypoint={selConnector.id} data-index={i} data-insert="true" className="ae-waypoint is-insert" title="Drag to add a bend" style={{ transform: `translate(${m.x}px, ${m.y}px) translate(-50%, -50%)` }} />)
+            }
+          return out
         })()}
       {connectHost &&
         (() => {
@@ -494,7 +553,7 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
   region.current = reg
   let visible = all.filter((b) => {
     if (editor.selection.has(b.id) || editor.editingId === b.id) return true
-    const r = editor.pageRect(b.id)
+    const r = editor.visualRect(b.id)
     return r && intersects(reg, r)
   })
   const inView = visible.filter((b) => {
@@ -532,6 +591,7 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
         y={r.y}
         w={r.w}
         h={r.h}
+        rotation={editor.rotationOf(b.id)}
         editing={editor.editingId === b.id}
         selected={editor.selection.has(b.id)}
         enterDelay={editor.entering.get(b.id)}

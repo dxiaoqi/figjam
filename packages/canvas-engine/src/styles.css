@@ -278,3 +278,48 @@
   cursor: pointer;
   touch-action: none;
 }
+
+.ae-rotate-handle {
+  pointer-events: all;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: white;
+  border: 1.5px solid var(--ae-accent);
+  cursor: grab;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+.ae-rotate-readout {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--ae-accent);
+  color: white;
+  font: 600 11px/16px system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+/* elbow waypoints: filled squares are bends, hollow dots add one */
+.ae-waypoint {
+  pointer-events: all;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--ae-accent);
+  border: 1.5px solid white;
+  box-shadow: 0 0 0 1px var(--ae-accent);
+  cursor: move;
+}
+.ae-waypoint.is-insert {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: white;
+  border: 1.5px solid var(--ae-accent);
+  box-shadow: none;
+  opacity: 0.8;
+  cursor: copy;
+}
+.ae-waypoint.is-insert:hover {
+  opacity: 1;
+  background: var(--ae-accent);
+}

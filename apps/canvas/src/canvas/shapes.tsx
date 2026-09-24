@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef, useSyncExternalStore, type CSSProperties } from 'react'
-import type { BlockDraft, BlockRenderProps, Editor, ShapeDef } from '@aifig/canvas-engine'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { randomId, snapTo, type BlockDraft, type BlockRenderProps, type Editor, type ShapeDef, type Vec } from '@aifig/canvas-engine'
 import {
   CARD_ACCENT,
   CARD_BODY_SIZE,
@@ -14,10 +14,12 @@ import {
   snapUp,
   stickyFontSize,
   textBlockHeight,
+  type Asset,
   type Block,
   type ColorToken,
   type SizeToken,
 } from '@aifig/shared'
+import { RichEditor, RichText } from './rich-editor'
 
 // ---- next color (shared by the toolbar and creation tools) --------------------
 
@@ -59,27 +61,6 @@ function useFocusOnMount<T extends HTMLInputElement | HTMLTextAreaElement>(enabl
   return ref
 }
 
-function EditArea(props: { value: string; placeholder: string; onChange: (v: string) => void; className?: string; style?: CSSProperties; autoFocus?: boolean; onTab?: () => void }) {
-  const ref = useFocusOnMount<HTMLTextAreaElement>(props.autoFocus !== false)
-  return (
-    <textarea
-      ref={ref}
-      className={props.className}
-      style={props.style}
-      value={props.value}
-      placeholder={props.placeholder}
-      onChange={(e) => props.onChange(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Tab' && props.onTab && !e.shiftKey) {
-          e.preventDefault()
-          props.onTab()
-        }
-      }}
-      spellCheck={false}
-    />
-  )
-}
-
 /** Tab while writing a sticky: start the next one to the right, same color and size. */
 function continueSticky(editor: Editor, b: Block) {
   editor.stopEditing()
@@ -110,11 +91,9 @@ function Sticky({ block, editing, editor }: BlockRenderProps) {
   return (
     <div className="aifig-sticky" style={{ fontSize: fs }}>
       {editing ? (
-        <EditArea value={block.text} placeholder="Write an idea…" onChange={(text) => editor.updateBlock(block.id, { text })} onTab={() => continueSticky(editor, block)} />
-      ) : block.text ? (
-        <div style={{ whiteSpace: 'pre-wrap' }}>{block.text}</div>
+        <RichEditor engine={editor} value={block.text} placeholder="Write an idea…" onChange={(text) => editor.updateBlock(block.id, { text })} onTab={() => continueSticky(editor, block)} />
       ) : (
-        <div className="aifig-placeholder">Double-click to write</div>
+        <RichText value={block.text} placeholder="Double-click to write" />
       )}
     </div>
   )
@@ -131,12 +110,12 @@ function Card({ block, editing, editor }: BlockRenderProps) {
       {editing ? (
         <>
           <input ref={titleRef} className="title" value={block.title ?? ''} placeholder="Title" onChange={(e) => update({ title: e.target.value })} />
-          <EditArea className="body" autoFocus={false} value={block.text} placeholder="Details…" onChange={(text) => update({ text })} />
+          <RichEditor engine={editor} className="body" autoFocus={false} value={block.text} placeholder="Details…" onChange={(text) => update({ text })} />
         </>
       ) : (
         <>
           <div className={`title ${block.title ? '' : 'aifig-placeholder'}`}>{block.title || 'Untitled card'}</div>
-          {block.text && <div className="body">{block.text}</div>}
+          {block.text && <RichText className="body" value={block.text} />}
         </>
       )}
     </div>
@@ -150,7 +129,8 @@ function Text({ block, editing, editor }: BlockRenderProps) {
   return (
     <div className="aifig-text" style={style}>
       {editing ? (
-        <EditArea
+        <RichEditor
+          engine={editor}
           value={block.text}
           placeholder="Heading"
           onChange={(text) => {
@@ -160,7 +140,7 @@ function Text({ block, editing, editor }: BlockRenderProps) {
           }}
         />
       ) : (
-        block.text || <span className="aifig-placeholder">Heading</span>
+        <RichText value={block.text} placeholder="Heading" />
       )}
     </div>
   )
@@ -170,20 +150,97 @@ function Frame() {
   return <div className="aifig-frame" />
 }
 
+// ---- images --------------------------------------------------------------------
+
+const assetUrls = new Map<string, string>()
+
+function assetUrl(editor: Editor, id: string | undefined) {
+  if (!id) return null
+  const cached = assetUrls.get(id)
+  if (cached) return cached
+  const a = editor.doc.getMap<Asset>('assets').get(id)
+  if (!a) return null
+  const url = URL.createObjectURL(new Blob([a.bytes as BlobPart], { type: a.mime }))
+  assetUrls.set(id, url)
+  return url
+}
+
+function useAssetUrl(editor: Editor, id: string | undefined) {
+  const [url, setUrl] = useState(() => assetUrl(editor, id))
+  useEffect(() => {
+    if (url) return
+    const assets = editor.doc.getMap<Asset>('assets')
+    const check = () => {
+      const u = assetUrl(editor, id)
+      if (u) setUrl(u)
+    }
+    assets.observe(check)
+    check()
+    return () => assets.unobserve(check)
+  }, [editor, id, url])
+  return url
+}
+
+function ImageBlock({ block, editor }: BlockRenderProps) {
+  const url = useAssetUrl(editor, block.asset)
+  return (
+    <div className="aifig-image">
+      {url ? <img src={url} alt={block.text || 'Image'} draggable={false} /> : <div className="aifig-image-loading">Loading image…</div>}
+    </div>
+  )
+}
+
+const MAX_SIDE = 2048
+
+/** Import image files into the board: downscale large ones, store bytes in the board's asset map, place blocks. */
+export async function importImages(editor: Editor, files: File[], at: Vec) {
+  const placed: string[] = []
+  let x = at.x
+  for (const file of files) {
+    let bytes = new Uint8Array(await file.arrayBuffer())
+    let mime = file.type || 'image/png'
+    const bmp = await createImageBitmap(file)
+    let w = bmp.width
+    let h = bmp.height
+    if (mime !== 'image/gif' && (w > MAX_SIDE || h > MAX_SIDE || bytes.byteLength > 1_500_000)) {
+      const k = Math.min(1, MAX_SIDE / Math.max(w, h))
+      w = Math.round(w * k)
+      h = Math.round(h * k)
+      const canvas = new OffscreenCanvas(w, h)
+      canvas.getContext('2d')!.drawImage(bmp, 0, 0, w, h)
+      const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.86 })
+      bytes = new Uint8Array(await blob.arrayBuffer())
+      mime = 'image/webp'
+    }
+    bmp.close()
+    const asset = `a${randomId()}`
+    editor.doc.getMap<Asset>('assets').set(asset, { id: asset, mime, w, h, bytes, name: file.name, createdAt: Date.now() })
+    const dw = snapTo(Math.min(480, w), 8)
+    const dh = Math.round((dw * h) / w)
+    const id = editor.placeDraft({ kind: 'image', w: dw, h: dh, asset, text: '', color: 'gray', size: 'm' }, { x: x + dw / 2, y: at.y })
+    placed.push(id)
+    x += dw + SPACING.gap
+  }
+  if (placed.length) editor.select(placed)
+  return placed
+}
+
 export const shapeDefs: ShapeDef[] = [
-  { kind: 'sticky', resize: 'none', canEdit: true, radius: RADII.sticky, render: Sticky, isEmpty: (b) => !b.text.trim() },
+  { kind: 'sticky', resize: 'none', canEdit: true, rotatable: true, radius: RADII.sticky, render: Sticky, isEmpty: (b) => !b.text.trim() },
   {
     kind: 'card',
     resize: 'x',
     canEdit: true,
+    rotatable: true,
     radius: RADII.card,
     minW: 200,
     render: Card,
     fit: (b, w) => ({ w, h: cardHeight(b.title ?? '', b.text, w) }),
     isEmpty: (b) => !b.text.trim() && !(b.title ?? '').trim(),
   },
-  { kind: 'text', resize: 'x', canEdit: true, radius: 4, minW: 48, render: Text, fit: (b, w) => ({ w, h: textHeight(b.text, b.size, w) }), isEmpty: (b) => !b.text.trim() },
+  { kind: 'text', resize: 'x', canEdit: true, rotatable: true, radius: 4, minW: 48, render: Text, fit: (b, w) => ({ w, h: textHeight(b.text, b.size, w) }), isEmpty: (b) => !b.text.trim() },
   { kind: 'frame', resize: 'xy', canEdit: true, container: true, radius: RADII.frame, minW: 160, minH: 120, render: Frame },
+  { kind: 'image', resize: 'xy', canEdit: false, rotatable: true, lockAspect: true, radius: 6, minW: 48, minH: 32, render: ImageBlock },
 ]
 
 export function draftForTool(tool: string): BlockDraft | null {

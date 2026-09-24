@@ -1,4 +1,4 @@
-import { routeConnector, type Block, type Connector, type Rect } from '@aifig/shared'
+import { bytesToBase64, estimateLabelSize, placeLabel, rotatedBounds, routeConnector, type Block, type Connector, type Rect } from '@aifig/shared'
 import { CARD_ACCENT, CARD_BODY_SIZE, CARD_TITLE_SIZE, stickyFontSize, wrapText } from '@aifig/shared'
 import { COLORS, FONT_SIZES, LINE_HEIGHT, RADII, SPACING, SURFACES } from '@aifig/shared'
 import type { Board } from './board'
@@ -34,7 +34,8 @@ export async function renderSnapshot(
   }
   const rects = new Map<string, Rect>(scope.map((b) => [b.id, board.pageRect(b)]))
   const margin = 48
-  const bb = scope.length ? bboxOf([...rects.values()]) : { x: 0, y: 0, w: 480, h: 280 }
+  const visual = (b: Block) => rotatedBounds(rects.get(b.id)!, b.rotation)
+  const bb = scope.length ? bboxOf(scope.map(visual)) : { x: 0, y: 0, w: 480, h: 280 }
   const vx = bb.x - margin
   const vy = bb.y - margin - 24
   const W = Math.ceil(bb.w + margin * 2)
@@ -58,7 +59,13 @@ export async function renderSnapshot(
     const r = rects.get(b.id)!
     const c = COLORS[b.color]?.[theme] ?? COLORS.gray[theme]
     const pad = SPACING.blockPadding
-    if (b.kind === 'frame') {
+    if (b.rotation) parts.push(`<g transform="rotate(${b.rotation} ${r.x + r.w / 2} ${r.y + r.h / 2})">`)
+    if (b.kind === 'image') {
+      const asset = b.asset ? board.assets.get(b.asset) : undefined
+      parts.push(`<clipPath id="clip-${b.id}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="6"/></clipPath>`)
+      if (asset) parts.push(`<image x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${b.id})" href="data:${asset.mime};base64,${bytesToBase64(asset.bytes)}"/>`)
+      else parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="6" fill="${surf.frame}" stroke="${surf.border}"/>`)
+    } else if (b.kind === 'frame') {
       parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.frame}" fill="${surf.frame}" stroke="${surf.border}" stroke-width="1"/>`)
       parts.push(`<text x="${r.x + 2}" y="${r.y - 10}" font-size="14" font-weight="600" fill="${surf.muted}">${esc(b.title ?? '')}</text>`)
     } else if (b.kind === 'sticky') {
@@ -90,6 +97,7 @@ export async function renderSnapshot(
       parts.push(textLines(wrapText(b.text, r.w - 8, fs, bold), r.x, r.y, fs, surf.ink, bold ? 650 : 400))
     }
     parts.push(pendingOutline(b, r, b.kind === 'card' ? RADII.card : b.kind === 'frame' ? RADII.frame : RADII.sticky))
+    if (b.rotation) parts.push('</g>')
   }
 
   const markers = `<marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9" fill="none" stroke="${surf.connector}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>`
@@ -99,20 +107,24 @@ export async function renderSnapshot(
     const tr = c.to ? rects.get(c.to) : null
     if ((c.from && !fr) || (c.to && !tr)) continue
     if (!fr && !tr && opts.ids?.length) continue
+    const obs = obstacles.filter((b) => b.id !== c.from && b.id !== c.to).map(visual)
     const route = routeConnector({
       from: fr ?? null,
       fromPoint: c.fromPoint,
+      fromRotation: c.from ? board.blocks.get(c.from)?.rotation : 0,
       to: tr ?? null,
       toPoint: c.toPoint,
+      toRotation: c.to ? board.blocks.get(c.to)?.rotation : 0,
       style: c.route,
-      obstacles: obstacles.filter((b) => b.id !== c.from && b.id !== c.to).map((b) => rects.get(b.id)!),
+      waypoints: c.waypoints,
+      obstacles: obs,
     })
     if (!route) continue
     const stroke = c.pending ? (c.author?.color ?? surf.connector) : surf.connector
     parts.push(`<path d="${route.d}" stroke="${stroke}" stroke-width="1.6" fill="none" stroke-linecap="round" marker-end="url(#ah)" ${c.pending ? 'stroke-dasharray="5 4"' : ''}/>`)
     if (c.label) {
-      const { x: mx, y: my } = route.mid
-      const w = c.label.length * 7 + 16
+      const { w } = estimateLabelSize(c.label)
+      const { x: mx, y: my } = placeLabel(route, w, 22, obs)
       parts.push(`<rect x="${mx - w / 2}" y="${my - 11}" width="${w}" height="22" rx="6" fill="${surf.canvas}"/>`)
       parts.push(`<text x="${mx}" y="${my + 4.5}" text-anchor="middle" font-size="13" fill="${surf.muted}">${esc(c.label)}</text>`)
     }

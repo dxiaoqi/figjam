@@ -32,6 +32,9 @@ export default defineConfig({
       'tailwind-merge',
       'class-variance-authority',
       'zod',
+      '@tiptap/react',
+      '@tiptap/starter-kit',
+      '@tiptap/extensions',
     ],
   },
   server: {

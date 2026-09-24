@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react'
 import * as Y from 'yjs'
-import { distanceToRoute, routeConnector, type Author, type Block, type Connector, type Route, type RouteStyle } from '@aifig/shared'
+import { distanceToRoute, estimateLabelSize, placeLabel, rotatePoint, rotatedBounds, routeConnector, type Author, type Block, type Connector, type Route, type RouteStyle } from '@aifig/shared'
 import {
   box,
   boxFromPoints,
@@ -43,6 +43,10 @@ export interface ShapeDef {
   fit?: (block: Block, w: number, h: number) => { w: number; h: number }
   /** Blocks that are empty when editing ends are removed. */
   isEmpty?: (block: Block) => boolean
+  /** Shows a rotation handle (snaps to 15°). */
+  rotatable?: boolean
+  /** Corner resizing keeps the aspect ratio (images). */
+  lockAspect?: boolean
 }
 
 export type BlockDraft = Pick<Block, 'kind' | 'w' | 'h'> & Partial<Block>
@@ -62,6 +66,8 @@ export interface EditorOptions {
   lodStyle?: (block: Block) => { fill: string; stroke?: string; accent?: string }
   /** Right-click without dragging. `target` is the block/connector under the pointer, if any. */
   onContextMenu?: (info: { screen: Vec; page: Vec; target: string | null }) => void
+  /** Image files pasted or dropped onto the canvas (page point where they landed). */
+  onFiles?: (files: File[], at: Vec) => void
   /** Extra single-key tool shortcuts, e.g. { s: 'sticky' }. */
   toolKeys?: Record<string, string>
 }
@@ -79,6 +85,8 @@ export type Interaction =
   | { type: 'endpoint'; id: string; which: 'start' | 'end'; point: Vec; target: string | null }
   | { type: 'frame'; startPage: Vec; rect: Box }
   | { type: 'pinch'; startDist: number; startMid: Vec; cam: Camera }
+  | { type: 'rotate'; id: string; center: Vec; startAngle: number; orig: number; angle: number }
+  | { type: 'waypoint'; id: string; index: number; point: Vec; insert: boolean }
 
 export interface Guide {
   axis: 'x' | 'y'
@@ -322,8 +330,34 @@ export class Editor {
     return { x, y, w: b.w, h: b.h }
   }
 
+  rotationOf(id: string): number {
+    const it = this.interaction
+    if (it.type === 'rotate' && it.id === id) return it.angle
+    return this.blocksMap.get(id)?.rotation ?? 0
+  }
+
+  /** Axis-aligned bounds including rotation (and previews). */
+  visualRect(id: string): Box | null {
+    const r = this.pageRect(id)
+    return r ? rotatedBounds(r, this.rotationOf(id)) : null
+  }
+
+  private baseVisual(id: string): Box | null {
+    const r = this.baseRect(id)
+    return r ? rotatedBounds(r, this.blocksMap.get(id)?.rotation) : null
+  }
+
+  /** Is a page point inside the (possibly rotated) block? */
+  containsPage(id: string, p: Vec, pad = 0): boolean {
+    const r = this.pageRect(id)
+    if (!r) return false
+    const rot = this.rotationOf(id)
+    const q = rot ? rotatePoint(p, center(r), -rot) : p
+    return containsPoint(r, q, pad)
+  }
+
   contentBounds(): Box | null {
-    return union(this.blocks().map((b) => this.baseRect(b.id)!).filter(Boolean))
+    return union(this.blocks().map((b) => this.baseVisual(b.id)!).filter(Boolean))
   }
 
   /** Topmost block under a page point. Non-frames win over frames. */
@@ -333,8 +367,7 @@ export class Editor {
       const b = list[i]
       if (opts.exclude?.has(b.id)) continue
       if (b.kind === 'frame' && !opts.frames) continue
-      const r = this.pageRect(b.id)
-      if (r && containsPoint(r, p)) return b
+      if (this.containsPage(b.id, p)) return b
     }
     return null
   }
@@ -390,7 +423,10 @@ export class Editor {
     if ((e.from && !fr) || (e.to && !tr)) return null
     const rk = (r: Box | null) => (r ? `${r.x},${r.y},${r.w},${r.h}` : '-')
     const pk = (p: Vec | null) => (p ? `${p.x},${p.y}` : '-')
-    const key = `${rk(fr)}|${rk(tr)}|${pk(e.fromPoint)}|${pk(e.toPoint)}|${c.route ?? ''}|${this.docVersion}`
+    const wps = this.waypointsOf(c)
+    const fRot = e.from ? this.rotationOf(e.from) : 0
+    const tRot = e.to ? this.rotationOf(e.to) : 0
+    const key = `${rk(fr)}|${rk(tr)}|${pk(e.fromPoint)}|${pk(e.toPoint)}|${c.route ?? ''}|${fRot}|${tRot}|${wps ? wps.map(pk).join(';') : ''}|${this.docVersion}`
     const hit = this.routeCache.get(c.id)
     if (hit && hit.key === key) return hit.route
     const a = fr ?? (e.fromPoint ? box(e.fromPoint.x, e.fromPoint.y, 0, 0) : null)
@@ -405,14 +441,109 @@ export class Editor {
       const y2 = area.y + area.h + pad
       for (const blk of this.blocks()) {
         if (blk.kind === 'frame' || blk.id === e.from || blk.id === e.to) continue
-        const r = this.baseRect(blk.id)!
+        const r = this.baseVisual(blk.id)!
         if (r.x < x2 && r.x + r.w > x1 && r.y < y2 && r.y + r.h > y1) obstacles.push(r)
       }
       if (obstacles.length > 60) obstacles = obstacles.slice(0, 60)
     }
-    const route = routeConnector({ from: fr, fromPoint: e.fromPoint, to: tr, toPoint: e.toPoint, style: c.route, obstacles })
+    const route = routeConnector({ from: fr, fromPoint: e.fromPoint, fromRotation: fRot, to: tr, toPoint: e.toPoint, toRotation: tRot, style: c.route, waypoints: wps, obstacles })
     this.routeCache.set(c.id, { key, route })
     return route
+  }
+
+  /** Waypoints including an in-progress waypoint drag. */
+  waypointsOf(c: Connector): Vec[] | null {
+    if (c.route !== 'elbow') return null
+    const it = this.interaction
+    const base = c.waypoints ?? []
+    if (it.type === 'waypoint' && it.id === c.id) {
+      const next = [...base]
+      if (it.insert) next.splice(it.index, 0, it.point)
+      else next[it.index] = it.point
+      return next
+    }
+    return base.length ? base : null
+  }
+
+  /** Where a connector's label sits: along the route, clear of blocks. */
+  labelPosition(c: Connector): Vec | null {
+    const route = this.connectorRoute(c)
+    if (!route) return null
+    if (!c.label) return route.mid
+    const { w, h } = estimateLabelSize(c.label)
+    const area = union(route.points.map((p) => box(p.x, p.y, 0, 0)))!
+    const obstacles: Box[] = []
+    for (const b of this.blocks()) {
+      if (b.kind === 'frame') continue
+      const r = this.visualRect(b.id)!
+      if (r.x < area.x + area.w + w && r.x + r.w > area.x - w && r.y < area.y + area.h + h && r.y + r.h > area.y - h) obstacles.push(r)
+    }
+    return placeLabel(route, w, h, obstacles)
+  }
+
+  // ---- rotation ------------------------------------------------------------
+
+  beginRotate(id: string, page: Vec) {
+    const r = this.pageRect(id)
+    if (!r) return
+    const c = center(r)
+    this.interaction = { type: 'rotate', id, center: c, startAngle: (Math.atan2(page.y - c.y, page.x - c.x) * 180) / Math.PI, orig: this.blocksMap.get(id)?.rotation ?? 0, angle: this.blocksMap.get(id)?.rotation ?? 0 }
+    this.bump()
+  }
+
+  updateRotate(page: Vec, free: boolean) {
+    const it = this.interaction
+    if (it.type !== 'rotate') return
+    const a = (Math.atan2(page.y - it.center.y, page.x - it.center.x) * 180) / Math.PI
+    let angle = it.orig + a - it.startAngle
+    angle = free ? Math.round(angle) : Math.round(angle / 15) * 15
+    angle = ((angle % 360) + 360) % 360
+    this.interaction = { ...it, angle }
+    this.bump()
+  }
+
+  endRotate() {
+    const it = this.interaction
+    if (it.type !== 'rotate') return
+    this.interaction = { type: 'idle' }
+    if (it.angle !== it.orig) this.updateBlocks([{ id: it.id, patch: { rotation: it.angle } }])
+    else this.bump()
+  }
+
+  // ---- waypoints -------------------------------------------------------------
+
+  beginWaypoint(id: string, index: number, insert: boolean, point: Vec) {
+    this.interaction = { type: 'waypoint', id, index, insert, point }
+    this.bump()
+  }
+
+  updateWaypoint(point: Vec) {
+    const it = this.interaction
+    if (it.type !== 'waypoint') return
+    this.interaction = { ...it, point: { x: snapTo(point.x, this.grid), y: snapTo(point.y, this.grid) } }
+    this.bump()
+  }
+
+  endWaypoint() {
+    const it = this.interaction
+    if (it.type !== 'waypoint') return
+    const next = this.waypointsOf(this.connectorsMap.get(it.id)!) ?? []
+    this.interaction = { type: 'idle' }
+    this.setWaypoints(it.id, next)
+  }
+
+  setWaypoints(id: string, waypoints: Vec[]) {
+    const c = this.connectorsMap.get(id)
+    if (!c) return
+    this.undoManager.stopCapturing()
+    this.transact(() => this.connectorsMap.set(id, this.stamp(c, { waypoints: waypoints.length ? waypoints : null, route: 'elbow' })))
+    this.bump()
+  }
+
+  removeWaypoint(id: string, index: number) {
+    const c = this.connectorsMap.get(id)
+    if (!c?.waypoints) return
+    this.setWaypoints(id, c.waypoints.filter((_, i) => i !== index))
   }
 
   // ---- camera ---------------------------------------------------------------
@@ -547,7 +678,7 @@ export class Editor {
   selectionBounds(): Box | null {
     return union(
       [...this.selection]
-        .map((id) => this.pageRect(id))
+        .map((id) => this.visualRect(id))
         .filter(Boolean) as Box[],
     )
   }
@@ -881,7 +1012,7 @@ export class Editor {
     let dy = page.y - it.startPage.y
     this.guides = []
     this.spacing = []
-    const moving = union(it.ids.map((id) => this.baseRect(id)!).filter(Boolean))
+    const moving = union(it.ids.map((id) => this.baseVisual(id)!).filter(Boolean))
     if (moving && snap) {
       const moved = { ...moving, x: moving.x + dx, y: moving.y + dy }
       const exclude = new Set(it.ids)
@@ -889,7 +1020,7 @@ export class Editor {
       const vp = this.viewportPageBounds()
       const others = this.blocks()
         .filter((b) => !exclude.has(b.id))
-        .map((b) => this.baseRect(b.id)!)
+        .map((b) => this.baseVisual(b.id)!)
         .filter((r) => r.x < vp.x + vp.w && r.x + r.w > vp.x && r.y < vp.y + vp.h && r.y + r.h > vp.y)
       const tol = SNAP_PX / this.camera.z
       const sx = this.bestSnap([moved.x, moved.x + moved.w / 2, moved.x + moved.w], others.flatMap((r) => [r.x, r.x + r.w / 2, r.x + r.w]), tol)
@@ -1039,6 +1170,8 @@ export class Editor {
     const b = this.blocksMap.get(it.id)
     const def = b && this.shape(b.kind)
     if (!b || !def) return
+    const rot = b.rotation ?? 0
+    if (rot || def.lockAspect) return this.updateResizeLocal(page, b, def, rot)
     const dx = page.x - it.startPage.x
     const dy = page.y - it.startPage.y
     let { x, y, w, h } = it.orig
@@ -1069,6 +1202,61 @@ export class Editor {
     this.bump()
   }
 
+  /** Resize in the block's own (rotated) frame, keeping the opposite edge fixed; optional aspect lock. */
+  private updateResizeLocal(page: Vec, b: Block, def: ShapeDef, rot: number) {
+    const it = this.interaction
+    if (it.type !== 'resize') return
+    const d = rotatePoint({ x: page.x - it.startPage.x, y: page.y - it.startPage.y }, { x: 0, y: 0 }, -rot)
+    const W = it.orig.w
+    const H = it.orig.h
+    const minW = def.minW ?? 48
+    const minH = def.minH ?? 32
+    let x0 = 0
+    let y0 = 0
+    let w = W
+    let h = H
+    const hd = it.handle
+    if (hd.includes('e')) w = Math.max(minW, W + d.x)
+    if (hd.includes('w')) {
+      w = Math.max(minW, W - d.x)
+      x0 = W - w
+    }
+    if (def.resize === 'xy') {
+      if (hd.includes('s')) h = Math.max(minH, H + d.y)
+      if (hd.includes('n')) {
+        h = Math.max(minH, H - d.y)
+        y0 = H - h
+      }
+    }
+    if (def.lockAspect) {
+      const aspect = W / H
+      if (hd.length === 2) {
+        // corners: follow the dominant axis
+        if (Math.abs(w - W) / W >= Math.abs(h - H) / H) h = w / aspect
+        else w = h * aspect
+      } else if (hd === 'e' || hd === 'w') h = w / aspect
+      else w = h * aspect
+      w = Math.max(minW, w)
+      h = Math.max(minH, w / aspect)
+      x0 = hd.includes('w') ? W - w : hd === 'n' || hd === 's' ? (W - w) / 2 : 0
+      y0 = hd.includes('n') ? H - h : hd === 'e' || hd === 'w' ? (H - h) / 2 : 0
+    }
+    if (!rot) {
+      w = Math.round(w)
+      h = Math.round(h)
+    }
+    if (def.fit && !def.lockAspect) {
+      const f = def.fit(b, w, h)
+      if (hd.includes('n')) y0 += h - f.h
+      w = f.w
+      h = f.h
+    }
+    const shift = rotatePoint({ x: x0 + w / 2 - W / 2, y: y0 + h / 2 - H / 2 }, { x: 0, y: 0 }, rot)
+    const c = { x: it.orig.x + W / 2 + shift.x, y: it.orig.y + H / 2 + shift.y }
+    this.interaction = { ...it, rect: { x: c.x - w / 2, y: c.y - h / 2, w, h } }
+    this.bump()
+  }
+
   endResize() {
     const it = this.interaction
     if (it.type !== 'resize') return
@@ -1091,7 +1279,7 @@ export class Editor {
     const rect = boxFromPoints(it.startPage, page)
     const hits = this.blocks()
       .filter((b) => {
-        const r = this.pageRect(b.id)!
+        const r = this.visualRect(b.id)!
         if (b.kind === 'frame') return containsBox(rect, r)
         if (b.parent && containsBox(rect, this.pageRect(b.parent)!)) return false
         return r.x < rect.x + rect.w && r.x + r.w > rect.x && r.y < rect.y + rect.h && r.y + r.h > rect.y

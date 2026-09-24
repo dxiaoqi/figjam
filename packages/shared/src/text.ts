@@ -8,6 +8,7 @@ import {
   snapUp,
   type SizeToken,
 } from './tokens'
+import { stripMarkdown } from './media'
 
 const CJK = /[\u2E80-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF\uFF00-\uFFEF\u3000-\u303F]/
 
@@ -33,7 +34,7 @@ export function measureWidth(text: string, fontSize: number, bold = false) {
 /** Greedy word wrap. CJK characters can break anywhere. */
 export function wrapText(text: string, maxWidth: number, fontSize: number, bold = false): string[] {
   const out: string[] = []
-  for (const para of (text ?? '').split('\n')) {
+  for (const para of stripMarkdown(text ?? '').split('\n')) {
     if (!para) {
       out.push('')
       continue
@@ -84,7 +85,7 @@ export function textBlockHeight(text: string, width: number, fontSize: number, b
 
 /** Font size a sticky note uses for its text, shrinking with length. */
 export function stickyFontSize(text: string, side: number) {
-  const len = [...(text ?? '')].reduce((n, ch) => n + (CJK.test(ch) ? 1.8 : 1), 0)
+  const len = [...stripMarkdown(text ?? '')].reduce((n, ch) => n + (CJK.test(ch) ? 1.8 : 1), 0)
   const scale = side / 200
   if (len <= 44) return Math.round(20 * scale)
   if (len <= 90) return Math.round(17 * scale)

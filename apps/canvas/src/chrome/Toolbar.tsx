@@ -1,10 +1,12 @@
-import { Frame, Hand, MousePointer2, PanelTop, Spline, StickyNote, Type, type LucideIcon } from 'lucide-react'
+import { Frame, Hand, ImagePlus, MousePointer2, PanelTop, Spline, StickyNote, Type, type LucideIcon } from 'lucide-react'
+import { useRef } from 'react'
+import { toast } from 'sonner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { COLOR_TOKENS, COLORS } from '@aifig/shared'
 import { useBoard } from '../board-context'
 import { useEditorState } from '../canvas/editor-context'
-import { nextColor, useNextColor } from '../canvas/shapes'
+import { importImages, nextColor, useNextColor } from '../canvas/shapes'
 
 const TOOLS: { id: string; label: string; kbd: string; icon: LucideIcon }[] = [
   { id: 'select', label: 'Select', kbd: 'V', icon: MousePointer2 },
@@ -22,6 +24,18 @@ export function Toolbar() {
   const color = useNextColor()
   const current = editor.tool
   const showColors = current === 'sticky' || current === 'card'
+  const fileRef = useRef<HTMLInputElement>(null)
+  const onPick = async (files: FileList | null) => {
+    const list = [...(files ?? [])].filter((f) => f.type.startsWith('image/'))
+    if (!list.length) return
+    const vp = editor.viewportPageBounds()
+    try {
+      await importImages(editor, list, { x: vp.x + vp.w / 2 - 240, y: vp.y + vp.h / 2 })
+    } catch {
+      toast.error('Couldn’t read that image — try PNG, JPEG, GIF or WebP.')
+    }
+    if (fileRef.current) fileRef.current.value = ''
+  }
 
   return (
     <div className="pointer-events-auto mb-3 flex flex-col items-center gap-2">
@@ -65,6 +79,20 @@ export function Toolbar() {
             </Tooltip>
           </div>
         ))}
+        <div className="mx-1 h-6 w-px bg-border" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              aria-label="Image"
+              onClick={() => fileRef.current?.click()}
+              className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <ImagePlus className="size-[18px]" strokeWidth={1.75} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Image — or paste / drop one on the canvas</TooltipContent>
+        </Tooltip>
+        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => onPick(e.target.files)} />
       </div>
     </div>
   )

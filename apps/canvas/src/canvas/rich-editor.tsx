@@ -1,0 +1,187 @@
+import { Bold, Code, Italic, Link2, List, ListOrdered } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
+import { EditorContent, useEditor, useEditorState, type Editor as TipTap } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import { Placeholder } from '@tiptap/extensions'
+import { useCamera, type Editor } from '@aifig/canvas-engine'
+import { cn } from '@/lib/utils'
+import { docToMarkdown, mdToHtml, renderMarkdown } from './markdown'
+
+/** Rendered (read-only) rich text, same typography as the editor. */
+export function RichText({ value, placeholder, className, style }: { value: string; placeholder?: string; className?: string; style?: CSSProperties }) {
+  if (!value) return <div className={cn('aifig-rich aifig-placeholder', className)} style={style}>{placeholder}</div>
+  return (
+    <div className={cn('aifig-rich', className)} style={style}>
+      {renderMarkdown(value)}
+    </div>
+  )
+}
+
+function ToolButton({ active, label, onClick, children }: { active?: boolean; label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onMouseDown={(e) => {
+        e.preventDefault()
+        onClick()
+      }}
+      className={cn('flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground', active && 'bg-accent text-foreground')}
+    >
+      {children}
+    </button>
+  )
+}
+
+function Toolbar({ tiptap, engine, linkOpen, setLinkOpen }: { tiptap: TipTap; engine: Editor; linkOpen: boolean; setLinkOpen: (v: boolean) => void }) {
+  const cam = useCamera(engine)
+  const state = useEditorState({
+    editor: tiptap,
+    selector: ({ editor }) => ({
+      bold: editor.isActive('bold'),
+      italic: editor.isActive('italic'),
+      code: editor.isActive('code'),
+      link: editor.isActive('link'),
+      bullet: editor.isActive('bulletList'),
+      ordered: editor.isActive('orderedList'),
+      href: (editor.getAttributes('link').href as string) ?? '',
+    }),
+  })
+  const [href, setHref] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (linkOpen) {
+      setHref(state.href || 'https://')
+      requestAnimationFrame(() => inputRef.current?.select())
+    }
+  }, [linkOpen, state.href])
+  const applyLink = () => {
+    const chain = tiptap.chain().focus().extendMarkRange('link')
+    if (!href.trim() || href === 'https://') chain.unsetLink().run()
+    else chain.setLink({ href: /^[a-z]+:/i.test(href) ? href : `https://${href}` }).run()
+    setLinkOpen(false)
+  }
+  return (
+    <div
+      data-ui
+      className="chrome absolute bottom-full left-0 z-10 flex items-center gap-0.5 rounded-lg p-1 text-foreground"
+      style={{ transform: `translateY(-${8 / cam.z}px) scale(${1 / cam.z})`, transformOrigin: 'bottom left' }}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      {linkOpen ? (
+        <form
+          className="flex items-center gap-1"
+          onSubmit={(e) => {
+            e.preventDefault()
+            applyLink()
+          }}
+        >
+          <input
+            ref={inputRef}
+            value={href}
+            onChange={(e) => setHref(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                e.stopPropagation()
+                setLinkOpen(false)
+                tiptap.commands.focus()
+              }
+            }}
+            placeholder="Paste a link"
+            className="h-7 w-52 rounded-md bg-muted px-2 text-xs outline-none"
+          />
+          <button type="submit" className="h-7 rounded-md px-2 text-xs font-medium hover:bg-accent">
+            {href && href !== 'https://' ? 'Apply' : 'Remove'}
+          </button>
+        </form>
+      ) : (
+        <>
+          <ToolButton label="Bold (⌘B)" active={state.bold} onClick={() => tiptap.chain().focus().toggleBold().run()}>
+            <Bold className="size-3.5" />
+          </ToolButton>
+          <ToolButton label="Italic (⌘I)" active={state.italic} onClick={() => tiptap.chain().focus().toggleItalic().run()}>
+            <Italic className="size-3.5" />
+          </ToolButton>
+          <ToolButton label="Code (⌘E)" active={state.code} onClick={() => tiptap.chain().focus().toggleCode().run()}>
+            <Code className="size-3.5" />
+          </ToolButton>
+          <ToolButton label="Link (⌘K)" active={state.link} onClick={() => setLinkOpen(true)}>
+            <Link2 className="size-3.5" />
+          </ToolButton>
+          <div className="mx-0.5 h-4 w-px bg-border" />
+          <ToolButton label="Bulleted list" active={state.bullet} onClick={() => tiptap.chain().focus().toggleBulletList().run()}>
+            <List className="size-3.5" />
+          </ToolButton>
+          <ToolButton label="Numbered list" active={state.ordered} onClick={() => tiptap.chain().focus().toggleOrderedList().run()}>
+            <ListOrdered className="size-3.5" />
+          </ToolButton>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** WYSIWYG editor for a block's Markdown text (TipTap / ProseMirror, IME-safe). */
+export function RichEditor(props: {
+  value: string
+  placeholder: string
+  onChange: (md: string) => void
+  engine: Editor
+  onTab?: () => void
+  className?: string
+  style?: CSSProperties
+  toolbar?: boolean
+  autoFocus?: boolean
+}) {
+  const onTab = useRef(props.onTab)
+  onTab.current = props.onTab
+  const [linkOpen, setLinkOpen] = useState(false)
+  const tiptap = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: false,
+        blockquote: false,
+        codeBlock: false,
+        horizontalRule: false,
+        strike: false,
+        underline: false,
+        link: { openOnClick: false, autolink: true, protocols: ['mailto'] },
+      }),
+      Placeholder.configure({ placeholder: props.placeholder }),
+    ],
+    content: mdToHtml(props.value),
+    autofocus: props.autoFocus === false ? false : 'end',
+    editorProps: {
+      attributes: { class: cn('aifig-rich', props.className), spellcheck: 'false' },
+      handleKeyDown: (_view, event) => {
+        if (event.isComposing) return false
+        if (event.key === 'Tab' && onTab.current && !event.shiftKey && !tiptap?.isActive('listItem')) {
+          event.preventDefault()
+          onTab.current()
+          return true
+        }
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+          event.preventDefault()
+          setLinkOpen(true)
+          return true
+        }
+        return false
+      },
+    },
+    onUpdate: ({ editor }) => props.onChange(docToMarkdown(editor.getJSON() as never)),
+  })
+  // blocks clip their content, so the toolbar is portaled onto the block wrapper
+  const hostRef = useRef<HTMLDivElement>(null)
+  const [blockEl, setBlockEl] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => setBlockEl(hostRef.current?.closest<HTMLElement>('.ae-block') ?? null), [])
+  if (!tiptap) return null
+  return (
+    <>
+      {props.toolbar !== false && blockEl && createPortal(<Toolbar tiptap={tiptap} engine={props.engine} linkOpen={linkOpen} setLinkOpen={setLinkOpen} />, blockEl)}
+      <EditorContent ref={hostRef} editor={tiptap} className="aifig-rich-host" style={props.style} />
+    </>
+  )
+}

@@ -19,6 +19,7 @@ import {
   MousePointerSquareDashed,
   PanelTop,
   Pencil,
+  RotateCcw,
   Scissors,
   StickyNote,
   Trash2,
@@ -171,6 +172,11 @@ export function ContextMenu() {
                 <DropdownMenuItem onSelect={run(tidy)} disabled={!sameParent}>
                   <LayoutGrid /> Tidy into grid
                 </DropdownMenuItem>
+                {blocks.some((b) => b.rotation) && (
+                  <DropdownMenuItem onSelect={run(() => editor.updateBlocks(blocks.filter((b) => b.rotation).map((b) => ({ id: b.id, patch: { rotation: 0 } }))))}>
+                    <RotateCcw /> Reset rotation
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSub>
@@ -234,6 +240,11 @@ export function ContextMenu() {
             )}
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Routing</DropdownMenuLabel>
+            {connectors.some((c) => c!.waypoints?.length) && (
+              <DropdownMenuItem onSelect={run(() => connectors.forEach((c) => c!.waypoints?.length && editor.setWaypoints(c!.id, [])))}>
+                <RotateCcw /> Remove bends (auto-route)
+              </DropdownMenuItem>
+            )}
             <DropdownMenuRadioGroup value={route} onValueChange={(v) => (editor.setRoute(connectors.map((c) => c!.id), v as RouteStyle), close())}>
               <DropdownMenuRadioItem value="curved">Curved</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="elbow">Elbow</DropdownMenuRadioItem>

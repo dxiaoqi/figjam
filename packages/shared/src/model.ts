@@ -1,8 +1,8 @@
 import type { RouteStyle } from './routing'
 import type { ColorToken, SizeToken } from './tokens'
 
-export type BlockKind = 'sticky' | 'card' | 'text' | 'frame'
-export const BLOCK_KINDS: BlockKind[] = ['sticky', 'card', 'text', 'frame']
+export type BlockKind = 'sticky' | 'card' | 'text' | 'frame' | 'image'
+export const BLOCK_KINDS: BlockKind[] = ['sticky', 'card', 'text', 'frame', 'image']
 
 export interface Author {
   kind: 'human' | 'agent'
@@ -23,12 +23,16 @@ export interface Block {
   w: number
   h: number
   parent?: string | null
-  /** Body text (sticky / card body / text). */
+  /** Body text (sticky / card body / text / image caption). Supports a Markdown subset: **bold**, *italic*, `code`, [links](url), - lists, 1. lists. */
   text: string
   /** Card title or frame title. */
   title?: string
   color: ColorToken
   size: SizeToken
+  /** Degrees clockwise around the block center. */
+  rotation?: number
+  /** Image blocks: id of an entry in the board's `assets` map. */
+  asset?: string
   /** Fractional z-index from the canvas; optional for agent-created blocks. */
   index?: string
   author?: Author
@@ -54,6 +58,8 @@ export interface Connector {
   label?: string
   /** Routing style; defaults to curved. */
   route?: RouteStyle
+  /** Manual waypoints (page space) for elbow routes. */
+  waypoints?: Point[] | null
   author?: Author
   changeSet?: string | null
   pending?: boolean
@@ -78,6 +84,17 @@ export interface ChangeSet {
   updatedAt: number
   resolvedAt?: number
   resolvedReason?: string
+}
+
+/** Binary asset stored inside the board document (`assets` map). */
+export interface Asset {
+  id: string
+  mime: string
+  w: number
+  h: number
+  bytes: Uint8Array
+  name?: string
+  createdAt: number
 }
 
 export interface BoardSummary {
