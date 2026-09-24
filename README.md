@@ -25,7 +25,9 @@ Open **http://127.0.0.1:47820**. `npm run dev` starts two processes:
 | core | 47821 | Owns every board as a Yjs document, persists to disk, serves the Canvas API (HTTP) and live sync (WebSocket) |
 | ui | 47820 | The canvas (Vite + React + tldraw), a client of the core. `/api` and `/sync` are proxied to the core |
 
-Run them separately with `npm run core` and `npm run ui`. For a single process, `npm start` builds the UI and
+Run them separately with `npm run core` and `npm run ui`. If the browser ever shows
+`504 (Outdated Optimize Dep)` (for example after changing dependencies), run `npm run dev:clean`, which clears
+Vite's dependency cache and re-bundles, then reload the page. For a single process, `npm start` builds the UI and
 the core serves it on port 47821.
 
 Boards live in `~/.aifig/boards/<id>.aifig` (Yjs state) with a readable `<id>.json` next to it. Override the
@@ -145,12 +147,28 @@ src/
 
 ## tldraw license
 
-The canvas uses the [tldraw SDK](https://tldraw.dev) (v5). tldraw is free for development: on localhost it runs
-without a key and shows a small "Get a license for production" watermark, which you'll see in the bottom-right
-corner. **Any production or commercial deployment needs a tldraw license key** (see
-[tldraw.dev/pricing](https://tldraw.dev/pricing)). Put it in `.env.local` as `VITE_TLDRAW_LICENSE_KEY=…`; it's passed
-to `<Tldraw licenseKey>`. Because the document model, layout, change sets and snapshots live in the core, replacing
-the renderer later only touches `src/ui/canvas/`.
+The canvas uses the [tldraw SDK](https://tldraw.dev) (v5), which is source-available, not open source. Without a
+key it only runs in development (http, `localhost`/`127.x`) and shows a "Get a license for production" watermark in
+the bottom-right corner. The watermark is part of tldraw's license — don't hide or patch it out; use a key instead.
+
+| License | Cost | Watermark | Notes |
+|---|---|---|---|
+| None | free | "Get a license for production" | development only; stops rendering in production |
+| [Trial](https://tldraw.dev/get-a-license/trial) | free, 100 days | none | key emailed immediately; one per project; no grace period |
+| [Hobby](https://tldraw.dev/get-a-license/hobby) | free, discretionary | "made with tldraw" (required) | non-commercial projects; reviewed by the tldraw team |
+| [Commercial](https://tldraw.dev/get-a-license/plans) | paid, annual | none | required for commercial production use |
+
+To use a key, put it in a gitignored `.env.local` (see [`.env.example`](.env.example)) and restart `npm run dev`:
+
+```bash
+cp .env.example .env.local
+# edit .env.local: VITE_TLDRAW_LICENSE_KEY=tldraw-…
+```
+
+The key is passed to `<Tldraw licenseKey>` (tldraw also reads `VITE_TLDRAW_LICENSE_KEY` on its own). Keys are
+public by design, but keeping them in `.env.local` keeps them out of the repo. Keys are bound to the domains you
+register; loopback hosts are always treated as development. Because the document model, layout, change sets and
+snapshots live in the core, replacing the renderer later only touches `src/ui/canvas/`.
 
 ## Phase 0 status
 

@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "concurrently -k -n core,ui -c magenta,cyan \"npm:core\" \"npm:ui\"",
     "core": "node bin/aifig.mjs core",
-    "ui": "vite",
+    "ui": "vite --clearScreen false",
     "mcp": "node bin/aifig.mjs mcp",
     "aifig": "node bin/aifig.mjs",
     "build": "vite build",
     "start": "npm run build && node bin/aifig.mjs core",
     "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node-app.json",
-    "lint": "oxlint src"
+    "lint": "oxlint src",
+    "dev:clean": "concurrently -k -n core,ui -c magenta,cyan \"npm:core\" \"npm:ui:clean\"",
+    "ui:clean": "rm -rf node_modules/.vite && vite --force --clearScreen false"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
