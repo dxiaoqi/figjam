@@ -1,5 +1,7 @@
-import { Maximize, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
-import { useCamera } from '@aifig/canvas-engine'
+import { Map as MapIcon, Maximize, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
+import { useState } from 'react'
+import { Minimap, useCamera } from '@aifig/canvas-engine'
+import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useEditorState } from '../canvas/editor-context'
 
@@ -27,8 +29,19 @@ function IconButton({ label, kbd, onClick, disabled, children }: { label: string
 export function ZoomControls() {
   const editor = useEditorState()
   const cam = useCamera(editor)
+  const [showMap, setShowMap] = useState(() => localStorage.getItem('aifig:minimap') !== 'off')
+  const toggleMap = () => {
+    localStorage.setItem('aifig:minimap', showMap ? 'off' : 'on')
+    setShowMap(!showMap)
+  }
   return (
-    <div className="pointer-events-auto absolute bottom-3 left-3 z-[300] hidden items-center gap-1 sm:flex">
+    <div className="pointer-events-auto absolute bottom-3 left-3 z-[300] hidden flex-col items-start gap-2 sm:flex">
+      {showMap && (
+        <div className="chrome aifig-canvas rounded-xl p-1" style={{ backgroundImage: 'none' }}>
+          <Minimap editor={editor} width={208} height={136} />
+        </div>
+      )}
+      <div className="flex items-center gap-1">
       <div className="chrome flex items-center rounded-xl p-1">
         <IconButton label="Undo" kbd="⌘Z" onClick={() => editor.undo()} disabled={!editor.undoManager.canUndo()}>
           <Undo2 className="size-4" strokeWidth={1.75} />
@@ -55,6 +68,11 @@ export function ZoomControls() {
         <IconButton label="Zoom to fit" kbd="⇧1" onClick={() => editor.zoomToFit()}>
           <Maximize className="size-3.5" strokeWidth={1.75} />
         </IconButton>
+        <div className="mx-0.5 h-5 w-px bg-border" />
+        <IconButton label={showMap ? 'Hide minimap' : 'Show minimap'} onClick={toggleMap}>
+          <MapIcon className={cn('size-4', showMap && 'text-foreground')} strokeWidth={1.75} />
+        </IconButton>
+      </div>
       </div>
     </div>
   )

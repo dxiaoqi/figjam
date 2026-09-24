@@ -135,8 +135,17 @@ program
   .command('connect <from> <to>')
   .description('draw a connector (ids or exact text)')
   .option('--label <label>')
+  .option('-r, --route <style>', 'curved (default) | elbow | straight')
   .option('-i, --intent <text>')
-  .action((from, to, o) => run('connect', { connectors: [{ from, to, label: o.label }], intent: o.intent }, (r) => console.log(`✓ connected\n${csLine(r)}`)))
+  .action((from, to, o) => run('connect', { connectors: [{ from, to, label: o.label, route: o.route }], intent: o.intent }, (r) => console.log(`✓ connected\n${csLine(r)}`)))
+
+program
+  .command('route <ids...>')
+  .description('change connector routing, e.g. aifig route <id> --style elbow')
+  .requiredOption('-s, --style <style>', 'curved | elbow | straight')
+  .option('--label <label>')
+  .option('-i, --intent <text>')
+  .action((ids, o) => run('update_connectors', { ids, route: o.style, label: o.label, intent: o.intent }, (r) => console.log(`✓ restyled ${r.updated.length}\n${csLine(r)}`)))
 
 program
   .command('frame <title> <ids...>')
@@ -164,11 +173,12 @@ program
   .command('snapshot')
   .description('render the board to PNG or SVG')
   .option('-f, --frame <frame>')
+  .option('--ids <ids>', 'comma-separated block ids to render')
   .option('-o, --out <file>', 'output file', 'board.png')
   .option('--dark', 'dark theme')
   .action(async (o) => {
     const format = o.out.endsWith('.svg') ? 'svg' : 'png'
-    const r = await callCore('render_snapshot', { board: program.opts().board, frame: o.frame, format, theme: o.dark ? 'dark' : 'light' }, caller())
+    const r = await callCore('render_snapshot', { board: program.opts().board, frame: o.frame, ids: o.ids ? String(o.ids).split(',') : undefined, format, theme: o.dark ? 'dark' : 'light' }, caller())
     if (!r.ok) {
       console.error(`✗ ${r.error}`)
       process.exit(1)

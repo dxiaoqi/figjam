@@ -104,7 +104,13 @@ export async function startCore(port = CORE_PORT) {
       if (snap) {
         const r = await core.call({
           tool: 'render_snapshot',
-          args: { board: snap[1], format: snap[2], theme: url.searchParams.get('theme') ?? 'light', frame: url.searchParams.get('frame') ?? undefined },
+          args: {
+            board: snap[1],
+            format: snap[2],
+            theme: url.searchParams.get('theme') ?? 'light',
+            frame: url.searchParams.get('frame') ?? undefined,
+            ids: url.searchParams.get('ids')?.split(',').filter(Boolean) || undefined,
+          },
           caller: { id: 'http', name: 'Viewer', client: 'http', kind: 'human' },
         })
         if (!r.ok) return json(res, 404, r)

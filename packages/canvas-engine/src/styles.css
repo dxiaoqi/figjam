@@ -184,3 +184,95 @@
   border-radius: 12px;
   background: color-mix(in srgb, var(--ae-accent) 4%, transparent);
 }
+
+.ae-lod {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* connector endpoints: hollow when floating, filled when bound to a block */
+.ae-endpoint {
+  pointer-events: all;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: white;
+  border: 2px solid var(--ae-accent);
+  cursor: grab;
+}
+.ae-endpoint.is-bound {
+  background: var(--ae-accent);
+  border-color: white;
+  box-shadow: 0 0 0 1.5px var(--ae-accent);
+}
+
+/* distance labels while dragging */
+.ae-spacing {
+  --c: var(--ae-guide);
+}
+.ae-spacing.is-snapped {
+  --c: var(--ae-accent);
+}
+.ae-spacing-x {
+  height: 1px;
+  background: var(--c);
+}
+.ae-spacing-y {
+  width: 1px;
+  background: var(--c);
+}
+.ae-spacing-x::before,
+.ae-spacing-x::after,
+.ae-spacing-y::before,
+.ae-spacing-y::after {
+  content: "";
+  position: absolute;
+  background: var(--c);
+}
+.ae-spacing-x::before,
+.ae-spacing-x::after {
+  top: -4px;
+  width: 1px;
+  height: 9px;
+}
+.ae-spacing-x::before {
+  left: 0;
+}
+.ae-spacing-x::after {
+  right: 0;
+}
+.ae-spacing-y::before,
+.ae-spacing-y::after {
+  left: -4px;
+  height: 1px;
+  width: 9px;
+}
+.ae-spacing-y::before {
+  top: 0;
+}
+.ae-spacing-y::after {
+  bottom: 0;
+}
+.ae-spacing-label {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--c);
+  color: white;
+  font: 600 10px/14px system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ae-minimap {
+  display: block;
+  border-radius: 10px;
+  cursor: pointer;
+  touch-action: none;
+}

@@ -1,4 +1,4 @@
-import type { Block, Connector, Rect } from '@aifig/shared'
+import { routeConnector, type Block, type Connector, type Rect } from '@aifig/shared'
 import { CARD_ACCENT, CARD_BODY_SIZE, CARD_TITLE_SIZE, stickyFontSize, wrapText } from '@aifig/shared'
 import { COLORS, FONT_SIZES, LINE_HEIGHT, RADII, SPACING, SURFACES } from '@aifig/shared'
 import type { Board } from './board'
@@ -19,27 +19,19 @@ function textLines(lines: string[], x: number, y: number, fs: number, fill: stri
     .join('')
 }
 
-/** Point where the segment from the rect center toward `to` exits the rect. */
-function edgePoint(r: Rect, to: { x: number; y: number }, pad = 4) {
-  const cx = r.x + r.w / 2
-  const cy = r.y + r.h / 2
-  const dx = to.x - cx
-  const dy = to.y - cy
-  if (!dx && !dy) return { x: cx, y: cy }
-  const sx = (r.w / 2 + pad) / Math.abs(dx || 1e-9)
-  const sy = (r.h / 2 + pad) / Math.abs(dy || 1e-9)
-  const s = Math.min(sx, sy)
-  return { x: cx + dx * s, y: cy + dy * s }
-}
-
 export async function renderSnapshot(
   board: Board,
-  opts: { frameId?: string; theme: 'light' | 'dark'; format: 'png' | 'svg' },
+  opts: { frameId?: string; ids?: string[]; theme: 'light' | 'dark'; format: 'png' | 'svg' },
 ) {
   const theme = opts.theme
   const surf = SURFACES[theme]
   const all = [...board.blocks.values()]
-  const scope = opts.frameId ? all.filter((b) => b.id === opts.frameId || b.parent === opts.frameId) : all
+  let scope = opts.frameId ? all.filter((b) => b.id === opts.frameId || b.parent === opts.frameId) : all
+  if (opts.ids?.length) {
+    const want = new Set(opts.ids)
+    for (const b of all) if (b.parent && want.has(b.parent)) want.add(b.id)
+    scope = all.filter((b) => want.has(b.id))
+  }
   const rects = new Map<string, Rect>(scope.map((b) => [b.id, board.pageRect(b)]))
   const margin = 48
   const bb = scope.length ? bboxOf([...rects.values()]) : { x: 0, y: 0, w: 480, h: 280 }
@@ -101,20 +93,25 @@ export async function renderSnapshot(
   }
 
   const markers = `<marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9" fill="none" stroke="${surf.connector}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>`
+  const obstacles = scope.filter((b) => b.kind !== 'frame')
   for (const c of board.connectors.values()) {
     const fr = c.from ? rects.get(c.from) : null
     const tr = c.to ? rects.get(c.to) : null
     if ((c.from && !fr) || (c.to && !tr)) continue
-    const fc = fr ? { x: fr.x + fr.w / 2, y: fr.y + fr.h / 2 } : c.fromPoint
-    const tc = tr ? { x: tr.x + tr.w / 2, y: tr.y + tr.h / 2 } : c.toPoint
-    if (!fc || !tc) continue
-    const p1 = fr ? edgePoint(fr, tc) : fc
-    const p2 = tr ? edgePoint(tr, fc, 6) : tc
+    if (!fr && !tr && opts.ids?.length) continue
+    const route = routeConnector({
+      from: fr ?? null,
+      fromPoint: c.fromPoint,
+      to: tr ?? null,
+      toPoint: c.toPoint,
+      style: c.route,
+      obstacles: obstacles.filter((b) => b.id !== c.from && b.id !== c.to).map((b) => rects.get(b.id)!),
+    })
+    if (!route) continue
     const stroke = c.pending ? (c.author?.color ?? surf.connector) : surf.connector
-    parts.push(`<path d="M${p1.x.toFixed(1)} ${p1.y.toFixed(1)} L${p2.x.toFixed(1)} ${p2.y.toFixed(1)}" stroke="${stroke}" stroke-width="1.6" fill="none" marker-end="url(#ah)" ${c.pending ? 'stroke-dasharray="5 4"' : ''}/>`)
+    parts.push(`<path d="${route.d}" stroke="${stroke}" stroke-width="1.6" fill="none" stroke-linecap="round" marker-end="url(#ah)" ${c.pending ? 'stroke-dasharray="5 4"' : ''}/>`)
     if (c.label) {
-      const mx = (p1.x + p2.x) / 2
-      const my = (p1.y + p2.y) / 2
+      const { x: mx, y: my } = route.mid
       const w = c.label.length * 7 + 16
       parts.push(`<rect x="${mx - w / 2}" y="${my - 11}" width="${w}" height="22" rx="6" fill="${surf.canvas}"/>`)
       parts.push(`<text x="${mx}" y="${my + 4.5}" text-anchor="middle" font-size="13" fill="${surf.muted}">${esc(c.label)}</text>`)

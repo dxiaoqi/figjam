@@ -1,9 +1,10 @@
 import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { CanvasView, Editor } from '@aifig/canvas-engine'
-import type { Author } from '@aifig/shared'
+import { COLORS, SURFACES, type Author, type Block } from '@aifig/shared'
 import { useBoard, useProviderState } from '../board-context'
 import { BoardMenu } from '../chrome/BoardMenu'
+import { ContextMenu } from '../chrome/ContextMenu'
 import { EmptyState } from '../chrome/EmptyState'
 import { ReviewPanel } from '../chrome/ReviewPanel'
 import { StatusBanner } from '../chrome/StatusBanner'
@@ -17,6 +18,23 @@ import { draftForPastedText, draftForTool, nextColor, shapeDefs } from './shapes
 
 const ME: Author = { kind: 'human', id: 'human:ui', name: 'You' }
 
+/** Flat colors for the far-zoom canvas and minimap, from the same tokens as the blocks. */
+function lodStyle(b: Block) {
+  const mode = document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+  const s = SURFACES[mode]
+  const c = COLORS[b.color] ?? COLORS.gray
+  switch (b.kind) {
+    case 'frame':
+      return { fill: s.frame, stroke: s.border }
+    case 'card':
+      return { fill: s.surface, stroke: s.border, accent: c[mode].accent }
+    case 'text':
+      return { fill: 'rgba(0,0,0,0)', accent: s.muted }
+    default:
+      return { fill: c[mode].bg, accent: c[mode].accent }
+  }
+}
+
 function createEditor(doc: Editor['doc']) {
   const editor: Editor = new Editor({
     doc,
@@ -24,6 +42,7 @@ function createEditor(doc: Editor['doc']) {
     author: ME,
     gridSize: 8,
     toolKeys: { s: 'sticky', c: 'card', t: 'text' },
+    lodStyle,
     createForTool: (tool) => draftForTool(tool),
     createForConnectorDrop: (from) => {
       const d = draftForTool('sticky')!
@@ -101,6 +120,7 @@ export function BoardCanvas() {
           </div>
           <ZoomControls />
           <ReviewPanel />
+          <ContextMenu />
           <StatusBanner />
         </EditorContext.Provider>
       ) : (

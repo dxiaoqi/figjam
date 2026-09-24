@@ -20,6 +20,11 @@ const color = z
   .describe(`Color token: ${COLOR_TOKENS.join(', ')}. Hex values are quantized to the nearest token.`)
 const size = z.enum(SIZE_TOKENS).optional().describe('Size token: s, m (default), l, xl.')
 
+const routeStyle = z
+  .enum(['curved', 'elbow', 'straight'])
+  .optional()
+  .describe('Connector routing: curved (default, flows around blocks), elbow (right angles, avoids blocks) or straight.')
+
 const blockInput = z.object({
   kind: z
     .enum(['sticky', 'card', 'text'])
@@ -72,7 +77,7 @@ export const toolDefs = {
       board,
       blocks: z.array(blockInput).min(1).describe('Blocks to create, in reading order.'),
       layout: z.enum(['grid', 'row', 'stack', 'cluster', 'tree']).optional(),
-      columns: z.number().int().min(1).max(12).optional().describe('Columns for grid layout.'),
+      columns: z.number().int().min(1).max(60).optional().describe('Columns for grid layout.'),
       direction: z.enum(['right', 'down']).optional().describe('Tree direction (default right).'),
       frame: z.string().optional().describe('Wrap the new blocks in a new frame with this title.'),
       inside: z.string().optional().describe('Existing frame id or title to place blocks in (frame grows to fit).'),
@@ -114,8 +119,20 @@ export const toolDefs = {
     input: {
       board,
       connectors: z
-        .array(z.object({ from: z.string(), to: z.string(), label: z.string().optional() }))
+        .array(z.object({ from: z.string(), to: z.string(), label: z.string().optional(), route: routeStyle }))
         .min(1),
+      route: routeStyle.describe('Default routing for all connectors in this call.'),
+      intent,
+    },
+  },
+  update_connectors: {
+    title: 'Update connectors',
+    description: 'Change the routing style or label of existing connectors (ids from get_board).',
+    input: {
+      board,
+      ids: z.array(z.string()).min(1),
+      route: routeStyle,
+      label: z.string().optional(),
       intent,
     },
   },
@@ -147,10 +164,11 @@ export const toolDefs = {
   },
   render_snapshot: {
     title: 'Render snapshot',
-    description: 'Render the board (or one frame) to an image so you can visually review your work.',
+    description: 'Render the board (or one frame, or specific blocks) to an image so you can visually review your work.',
     input: {
       board,
       frame: z.string().optional(),
+      ids: z.array(z.string()).optional().describe('Only render these blocks (and connectors between them).'),
       format: z.enum(['png', 'svg']).optional().describe('png (default) or svg'),
       theme: z.enum(['light', 'dark']).optional(),
     },

@@ -38,6 +38,15 @@ export class InputController {
     on(window, 'blur', () => {
       this.editor.spaceDown = false
     })
+    // Safari trackpad pinch
+    on(el, 'gesturestart' as any, (e: any) => {
+      e.preventDefault()
+      this.gestureZ = this.editor.camera.z
+    })
+    on(el, 'gesturechange' as any, (e: any) => {
+      e.preventDefault()
+      this.editor.zoomAt(this.local(e), this.gestureZ * e.scale)
+    })
   }
 
   dispose() {
@@ -54,11 +63,33 @@ export class InputController {
   }
 
   private lastPointer: Vec | null = null
+  private gestureZ = 1
+  private touches = new Map<number, Vec>()
+  private rightClick: { screen: Vec; page: Vec; target: string | null } | null = null
+
+  private startPinch() {
+    const ed = this.editor
+    const [a, b] = [...this.touches.values()]
+    ed.interaction = { type: 'pinch', startDist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), startMid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, cam: { ...ed.camera } }
+    ed.guides = []
+    ed.spacing = []
+    ed.bump()
+  }
 
   private onPointerDown = (e: PointerEvent) => {
     const ed = this.editor
     const target = e.target as HTMLElement
     if (target.closest('[data-ui]')) return
+    if (e.pointerType === 'touch') {
+      this.touches.set(e.pointerId, this.local(e))
+      this.el.setPointerCapture(e.pointerId)
+      if (this.touches.size === 2) {
+        // a second finger cancels whatever the first one started and becomes pinch/pan
+        if (ed.editingId) ed.stopEditing()
+        return this.startPinch()
+      }
+      if (this.touches.size > 2) return
+    }
     const editing = ed.editingId
     if (editing && target.closest(`[data-block-id="${editing}"] textarea, [data-block-id="${editing}"] input, [data-editing-input]`)) return
     if (editing) ed.stopEditing()
@@ -81,6 +112,13 @@ export class InputController {
     this.el.setPointerCapture(e.pointerId)
     this.pointerId = e.pointerId
 
+    if (e.button === 2) {
+      const blockEl = target.closest<HTMLElement>('[data-block-id]')
+      const hit = ed.hitTest(page) ?? (blockEl ? ed.block(blockEl.dataset.blockId!) : null) ?? ed.hitTest(page, { frames: true })
+      const labelId = target.closest<HTMLElement>('[data-frame-label]')?.dataset.frameLabel
+      const conn = !hit && !labelId ? ed.connectorAt(page) : null
+      this.rightClick = { screen, page, target: labelId ?? hit?.id ?? conn?.id ?? null }
+    }
     if (e.button === 1 || e.button === 2 || ed.spaceDown || ed.tool === 'hand') {
       ed.interaction = { type: 'pan', startScreen: screen, cam: { ...ed.camera } }
       ed.bump()
@@ -90,6 +128,8 @@ export class InputController {
 
     const handle = target.closest<HTMLElement>('[data-handle]')?.dataset.handle as HandleId | undefined
     const connectFrom = target.closest<HTMLElement>('[data-connect-from]')?.dataset.connectFrom
+    const endpointEl = target.closest<HTMLElement>('[data-connector-endpoint]')
+    if (endpointEl) return ed.beginEndpoint(endpointEl.dataset.connectorEndpoint!, endpointEl.dataset.endpoint as 'start' | 'end', page)
     const blockEl = target.closest<HTMLElement>('[data-block-id]')
     const labelEl = target.closest<HTMLElement>('[data-frame-label]')
     const connectorEl = target.closest<HTMLElement>('[data-connector-id]')
@@ -111,7 +151,7 @@ export class InputController {
       if (b) hitId = b.id
     }
     if (tool === 'connector') {
-      if (hitId && ed.block(hitId)?.kind !== 'frame') ed.beginConnect(hitId, page)
+      ed.beginConnect(hitId && ed.block(hitId)?.kind !== 'frame' ? hitId : null, page)
       return
     }
     if (!hitId) {
@@ -120,6 +160,12 @@ export class InputController {
         ed.select(e.shiftKey ? [...ed.selection, c.id] : [c.id])
         return
       }
+    }
+    if (!hitId && e.pointerType === 'touch') {
+      // one finger on empty canvas pans
+      ed.interaction = { type: 'pan', startScreen: screen, cam: { ...ed.camera } }
+      ed.bump()
+      return
     }
     const frameBody = !hitId ? (ed.frameAt(page)?.id ?? null) : null
     const wasSelected = !!hitId && ed.selection.has(hitId)
@@ -133,8 +179,21 @@ export class InputController {
     const screen = this.local(e)
     const page = ed.screenToPage(screen)
     this.lastPointer = page
+    if (e.pointerType === 'touch' && this.touches.has(e.pointerId)) this.touches.set(e.pointerId, screen)
     const it = ed.interaction
     switch (it.type) {
+      case 'pinch': {
+        if (this.touches.size < 2) return
+        const [a, b] = [...this.touches.values()]
+        const dist = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y))
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+        const z = Math.min(4, Math.max(0.1, it.cam.z * (dist / it.startDist)))
+        const anchor = { x: (it.startMid.x - it.cam.x) / it.cam.z, y: (it.startMid.y - it.cam.y) / it.cam.z }
+        ed.setCamera({ x: mid.x - anchor.x * z, y: mid.y - anchor.y * z, z })
+        return
+      }
+      case 'endpoint':
+        return ed.updateEndpoint(page)
       case 'idle': {
         if (ed.tool !== 'select' && ed.tool !== 'connector') return
         const target = e.target as HTMLElement
@@ -182,11 +241,27 @@ export class InputController {
     const ed = this.editor
     if (this.pointerId !== null && this.el.hasPointerCapture(this.pointerId)) this.el.releasePointerCapture(this.pointerId)
     this.pointerId = null
+    if (e.pointerType === 'touch') this.touches.delete(e.pointerId)
     const page = this.page(e)
     const it = ed.interaction
     switch (it.type) {
-      case 'pan':
-        return ed.endInteraction()
+      case 'pinch':
+        if (this.touches.size < 2) ed.endInteraction()
+        return
+      case 'endpoint':
+        return ed.endEndpoint()
+      case 'pan': {
+        const rc = this.rightClick
+        this.rightClick = null
+        const moved = Math.hypot(ed.camera.x - it.cam.x, ed.camera.y - it.cam.y)
+        ed.endInteraction()
+        if (e.button === 2 && rc && moved < 3) {
+          if (rc.target && !ed.selection.has(rc.target)) ed.select([rc.target])
+          if (!rc.target) ed.selectNone()
+          ed.options.onContextMenu?.(rc)
+        }
+        return
+      }
       case 'pending':
         ed.endInteraction()
         if (it.target) {

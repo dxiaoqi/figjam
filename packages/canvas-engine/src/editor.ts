@@ -1,14 +1,12 @@
 import type { ComponentType } from 'react'
 import * as Y from 'yjs'
-import type { Author, Block, Connector } from '@aifig/shared'
+import { distanceToRoute, routeConnector, type Author, type Block, type Connector, type Route, type RouteStyle } from '@aifig/shared'
 import {
   box,
   boxFromPoints,
   center,
   containsBox,
   containsPoint,
-  distToSegment,
-  edgePoint,
   randomId,
   snapTo,
   union,
@@ -60,6 +58,10 @@ export interface EditorOptions {
   createForConnectorDrop?: (from: Block, at: Vec) => BlockDraft | null
   onDoubleClickCanvas?: (at: Vec) => void
   onPasteText?: (text: string, at: Vec) => void
+  /** Colors for the far-zoom (level-of-detail) canvas and the minimap. */
+  lodStyle?: (block: Block) => { fill: string; stroke?: string; accent?: string }
+  /** Right-click without dragging. `target` is the block/connector under the pointer, if any. */
+  onContextMenu?: (info: { screen: Vec; page: Vec; target: string | null }) => void
   /** Extra single-key tool shortcuts, e.g. { s: 'sticky' }. */
   toolKeys?: Record<string, string>
 }
@@ -73,8 +75,10 @@ export type Interaction =
   | { type: 'move'; startPage: Vec; ids: string[]; dx: number; dy: number }
   | { type: 'resize'; id: string; handle: HandleId; startPage: Vec; orig: Box; rect: Box }
   | { type: 'marquee'; startPage: Vec; rect: Box; base: string[] }
-  | { type: 'connect'; from: string; point: Vec; target: string | null }
+  | { type: 'connect'; from: string | null; start: Vec; point: Vec; target: string | null }
+  | { type: 'endpoint'; id: string; which: 'start' | 'end'; point: Vec; target: string | null }
   | { type: 'frame'; startPage: Vec; rect: Box }
+  | { type: 'pinch'; startDist: number; startMid: Vec; cam: Camera }
 
 export interface Guide {
   axis: 'x' | 'y'
@@ -83,6 +87,19 @@ export interface Guide {
   to: number
 }
 
+/** A measured gap between the moving selection and a neighbor, shown while dragging. */
+export interface Spacing {
+  axis: 'x' | 'y'
+  /** Gap start/end along `axis`. */
+  from: number
+  to: number
+  /** Position on the cross axis. */
+  at: number
+  snapped: boolean
+}
+
+export type AlignMode = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+
 type Listener = () => void
 
 const ZOOM_STEPS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4]
@@ -90,6 +107,12 @@ const MIN_Z = 0.1
 const MAX_Z = 4
 const SNAP_PX = 6
 const FRAME_PAD = 32
+const SPACING_GAP = 24
+
+/** Stacking key: explicit y…/z… indexes from bring-to-front / send-to-back, else creation time. */
+function zKey(b: Block) {
+  return b.index && /^[yz]/.test(b.index) ? b.index : `z${b.createdAt.toString(36).padStart(10, '0')}`
+}
 
 /** Whiteboard editor over a board's Yjs document. The document is the source of truth. */
 export class Editor {
@@ -110,6 +133,7 @@ export class Editor {
   editingId: string | null = null
   interaction: Interaction = { type: 'idle' }
   guides: Guide[] = []
+  spacing: Spacing[] = []
   spaceDown = false
   /** Blocks added by others (agents) recently, with a stagger delay. */
   entering = new Map<string, number>()
@@ -213,7 +237,6 @@ export class Editor {
 
   private bumpCamera() {
     for (const l of [...this.cameraListeners]) l()
-    this.bump()
   }
 
   private later(ms: number, fn: () => void) {
@@ -245,7 +268,9 @@ export class Editor {
     const list = [...this.blocksMap.values()].sort((a, b) => {
       const fa = a.kind === 'frame' ? 0 : 1
       const fb = b.kind === 'frame' ? 0 : 1
-      return fa - fb || a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1)
+      const ka = zKey(a)
+      const kb = zKey(b)
+      return fa - fb || (ka < kb ? -1 : ka > kb ? 1 : a.id < b.id ? -1 : 1)
     })
     this.sortedCache = { version: this.docVersion, list }
     return list
@@ -325,21 +350,69 @@ export class Editor {
 
   connectorAt(p: Vec, tolerancePx = 8): Connector | null {
     const tol = tolerancePx / this.camera.z
+    let best: Connector | null = null
+    let bestD = tol
     for (const c of this.connectors()) {
-      const pts = this.connectorPoints(c)
-      if (pts && distToSegment(p, pts.a, pts.b) <= tol) return c
+      const r = this.connectorRoute(c)
+      if (!r) continue
+      const d = distanceToRoute(p, r)
+      if (d <= bestD) {
+        best = c
+        bestD = d
+      }
     }
-    return null
+    return best
   }
 
-  /** Endpoints of a connector, clipped to the block edges. */
-  connectorPoints(c: Connector): { a: Vec; b: Vec } | null {
-    const fr = c.from ? this.pageRect(c.from) : null
-    const tr = c.to ? this.pageRect(c.to) : null
-    const fc = fr ? center(fr) : c.fromPoint
-    const tc = tr ? center(tr) : c.toPoint
-    if (!fc || !tc) return null
-    return { a: fr ? edgePoint(fr, tc, 4) : fc, b: tr ? edgePoint(tr, fc, 7) : tc }
+  private routeCache = new Map<string, { key: string; route: Route | null }>()
+
+  /** Effective endpoints, including an endpoint being dragged. */
+  connectorEnds(c: Connector) {
+    let { from, to, fromPoint, toPoint } = c
+    const it = this.interaction
+    if (it.type === 'endpoint' && it.id === c.id) {
+      if (it.which === 'start') {
+        from = it.target
+        fromPoint = it.target ? null : it.point
+      } else {
+        to = it.target
+        toPoint = it.target ? null : it.point
+      }
+    }
+    return { from: from ?? null, to: to ?? null, fromPoint: fromPoint ?? null, toPoint: toPoint ?? null }
+  }
+
+  /** Routed path of a connector (cached until its endpoints or the document change). */
+  connectorRoute(c: Connector): Route | null {
+    const e = this.connectorEnds(c)
+    const fr = e.from ? this.pageRect(e.from) : null
+    const tr = e.to ? this.pageRect(e.to) : null
+    if ((e.from && !fr) || (e.to && !tr)) return null
+    const rk = (r: Box | null) => (r ? `${r.x},${r.y},${r.w},${r.h}` : '-')
+    const pk = (p: Vec | null) => (p ? `${p.x},${p.y}` : '-')
+    const key = `${rk(fr)}|${rk(tr)}|${pk(e.fromPoint)}|${pk(e.toPoint)}|${c.route ?? ''}|${this.docVersion}`
+    const hit = this.routeCache.get(c.id)
+    if (hit && hit.key === key) return hit.route
+    const a = fr ?? (e.fromPoint ? box(e.fromPoint.x, e.fromPoint.y, 0, 0) : null)
+    const b = tr ?? (e.toPoint ? box(e.toPoint.x, e.toPoint.y, 0, 0) : null)
+    let obstacles: Box[] = []
+    if (c.route !== 'straight' && a && b) {
+      const area = union([a, b])!
+      const pad = 360
+      const x1 = area.x - pad
+      const y1 = area.y - pad
+      const x2 = area.x + area.w + pad
+      const y2 = area.y + area.h + pad
+      for (const blk of this.blocks()) {
+        if (blk.kind === 'frame' || blk.id === e.from || blk.id === e.to) continue
+        const r = this.baseRect(blk.id)!
+        if (r.x < x2 && r.x + r.w > x1 && r.y < y2 && r.y + r.h > y1) obstacles.push(r)
+      }
+      if (obstacles.length > 60) obstacles = obstacles.slice(0, 60)
+    }
+    const route = routeConnector({ from: fr, fromPoint: e.fromPoint, to: tr, toPoint: e.toPoint, style: c.route, obstacles })
+    this.routeCache.set(c.id, { key, route })
+    return route
   }
 
   // ---- camera ---------------------------------------------------------------
@@ -560,13 +633,106 @@ export class Editor {
     if (from === to) return null
     const dup = this.connectors().find((c) => c.from === from && c.to === to)
     if (dup) return dup.id
+    return this.addConnector({ from, to, label })
+  }
+
+  addConnector(c: Partial<Connector>): string {
     const id = randomId()
     const now = Date.now()
     this.transact(() =>
-      this.connectorsMap.set(id, { id, from, to, label: label ?? '', author: this.options.author, createdAt: now, updatedAt: now, pending: false, changeSet: null }),
+      this.connectorsMap.set(id, { label: '', ...c, id, author: this.options.author, createdAt: now, updatedAt: now, pending: false, changeSet: null }),
     )
     return id
   }
+
+  setRoute(ids: string[], route: RouteStyle) {
+    this.undoManager.stopCapturing()
+    this.transact(() => {
+      for (const id of ids) {
+        const c = this.connectorsMap.get(id)
+        if (c) this.connectorsMap.set(id, this.stamp(c, { route }))
+      }
+    })
+  }
+
+  // ---- arrange ---------------------------------------------------------------
+
+  private setPageRect(id: string, x: number, y: number): { id: string; patch: Partial<Block> } {
+    const b = this.blocksMap.get(id)!
+    const p = b.parent ? this.baseRect(b.parent) : null
+    return { id, patch: { x: Math.round(x - (p?.x ?? 0)), y: Math.round(y - (p?.y ?? 0)) } }
+  }
+
+  align(mode: AlignMode) {
+    const ids = this.movableIds([...this.selection].filter((id) => this.blocksMap.has(id)))
+    if (ids.length < 2) return
+    const rects = ids.map((id) => this.baseRect(id)!)
+    const bb = union(rects)!
+    this.updateBlocks(
+      ids.map((id, i) => {
+        const r = rects[i]
+        let { x, y } = r
+        if (mode === 'left') x = bb.x
+        if (mode === 'center') x = bb.x + bb.w / 2 - r.w / 2
+        if (mode === 'right') x = bb.x + bb.w - r.w
+        if (mode === 'top') y = bb.y
+        if (mode === 'middle') y = bb.y + bb.h / 2 - r.h / 2
+        if (mode === 'bottom') y = bb.y + bb.h - r.h
+        return this.setPageRect(id, x, y)
+      }),
+    )
+  }
+
+  distribute(axis: 'x' | 'y') {
+    const ids = this.movableIds([...this.selection].filter((id) => this.blocksMap.has(id)))
+    if (ids.length < 3) return
+    const items = ids.map((id) => ({ id, r: this.baseRect(id)! })).sort((a, b) => (axis === 'x' ? a.r.x - b.r.x : a.r.y - b.r.y))
+    const first = items[0].r
+    const last = items[items.length - 1].r
+    const span = axis === 'x' ? last.x + last.w - first.x : last.y + last.h - first.y
+    const total = items.reduce((s, it) => s + (axis === 'x' ? it.r.w : it.r.h), 0)
+    const gap = (span - total) / (items.length - 1)
+    let cursor = axis === 'x' ? first.x : first.y
+    this.updateBlocks(
+      items.map((it) => {
+        const pos = cursor
+        cursor += (axis === 'x' ? it.r.w : it.r.h) + gap
+        return this.setPageRect(it.id, axis === 'x' ? pos : it.r.x, axis === 'y' ? pos : it.r.y)
+      }),
+    )
+  }
+
+  bringToFront() {
+    const ids = [...this.selection].filter((id) => this.blocksMap.has(id))
+    const base = Date.now()
+    this.updateBlocks(ids.map((id, i) => ({ id, patch: { index: `z${(base + i).toString(36).padStart(10, '0')}~` } })))
+  }
+
+  sendToBack() {
+    const ids = [...this.selection].filter((id) => this.blocksMap.has(id))
+    const base = 9e12 - Date.now()
+    this.updateBlocks(ids.map((id, i) => ({ id, patch: { index: `y${(base - ids.length + i).toString(36).padStart(10, '0')}` } })))
+  }
+
+  /** Wrap the selected blocks in a new frame. */
+  groupIntoFrame(title = 'Frame') {
+    const ids = this.movableIds([...this.selection]).filter((id) => this.blocksMap.get(id)?.kind !== 'frame')
+    if (!ids.length) return null
+    const rects = ids.map((id) => this.baseRect(id)!)
+    const bb = union(rects)!
+    const x = snapTo(bb.x - FRAME_PAD, this.grid)
+    const y = snapTo(bb.y - FRAME_PAD, this.grid)
+    const fid = this.createBlock({ kind: 'frame', x, y, w: snapTo(bb.x + bb.w + FRAME_PAD, this.grid) - x, h: snapTo(bb.y + bb.h + FRAME_PAD, this.grid) - y, title, text: '', color: 'gray', size: 'm' })
+    this.transact(() => {
+      ids.forEach((id, i) => {
+        const b = this.blocksMap.get(id)!
+        this.blocksMap.set(id, this.stamp(b, { parent: fid, x: rects[i].x - x, y: rects[i].y - y }))
+      })
+    })
+    this.startEditing(fid)
+    return fid
+  }
+
 
   deleteIds(ids: string[]) {
     if (!ids.length) return
@@ -714,6 +880,7 @@ export class Editor {
     let dx = page.x - it.startPage.x
     let dy = page.y - it.startPage.y
     this.guides = []
+    this.spacing = []
     const moving = union(it.ids.map((id) => this.baseRect(id)!).filter(Boolean))
     if (moving && snap) {
       const moved = { ...moving, x: moving.x + dx, y: moving.y + dy }
@@ -727,11 +894,16 @@ export class Editor {
       const tol = SNAP_PX / this.camera.z
       const sx = this.bestSnap([moved.x, moved.x + moved.w / 2, moved.x + moved.w], others.flatMap((r) => [r.x, r.x + r.w / 2, r.x + r.w]), tol)
       const sy = this.bestSnap([moved.y, moved.y + moved.h / 2, moved.y + moved.h], others.flatMap((r) => [r.y, r.y + r.h / 2, r.y + r.h]), tol)
+      const gx = sx ? null : this.gapSnap(moved, others, 'x', tol)
+      const gy = sy ? null : this.gapSnap(moved, others, 'y', tol)
       if (sx) dx += sx.delta
+      else if (gx !== null) dx += gx
       else dx = snapTo(moving.x + dx, this.grid) - moving.x
       if (sy) dy += sy.delta
+      else if (gy !== null) dy += gy
       else dy = snapTo(moving.y + dy, this.grid) - moving.y
       const fin = { ...moving, x: moving.x + dx, y: moving.y + dy }
+      this.spacing = this.measureSpacing(fin, others, gx !== null, gy !== null)
       if (sx) {
         const related = others.filter((r) => [r.x, r.x + r.w / 2, r.x + r.w].some((v) => Math.abs(v - sx.at) < 0.5))
         const ys = [fin.y, fin.y + fin.h, ...related.flatMap((r) => [r.y, r.y + r.h])]
@@ -745,6 +917,53 @@ export class Editor {
     }
     this.interaction = { ...it, dx, dy }
     this.bump()
+  }
+
+  /** Nearest neighbors on each side of `m` that overlap it on the cross axis. */
+  private neighbors(m: Box, others: Box[]) {
+    let left: Box | null = null
+    let right: Box | null = null
+    let top: Box | null = null
+    let bottom: Box | null = null
+    for (const r of others) {
+      const vOverlap = r.y < m.y + m.h && r.y + r.h > m.y
+      const hOverlap = r.x < m.x + m.w && r.x + r.w > m.x
+      if (vOverlap && r.x + r.w <= m.x + 0.5 && (!left || r.x + r.w > left.x + left.w)) left = r
+      if (vOverlap && r.x >= m.x + m.w - 0.5 && (!right || r.x < right.x)) right = r
+      if (hOverlap && r.y + r.h <= m.y + 0.5 && (!top || r.y + r.h > top.y + top.h)) top = r
+      if (hOverlap && r.y >= m.y + m.h - 0.5 && (!bottom || r.y < bottom.y)) bottom = r
+    }
+    return { left, right, top, bottom }
+  }
+
+  /** Snap to the 24px spacing token from a neighbor, or to equal gaps between two neighbors. */
+  private gapSnap(m: Box, others: Box[], axis: 'x' | 'y', tol: number): number | null {
+    const n = this.neighbors(m, others)
+    const cands: number[] = []
+    if (axis === 'x') {
+      if (n.left) cands.push(n.left.x + n.left.w + SPACING_GAP - m.x)
+      if (n.right) cands.push(n.right.x - SPACING_GAP - m.w - m.x)
+      if (n.left && n.right) cands.push((n.left.x + n.left.w + n.right.x - m.w) / 2 - m.x)
+    } else {
+      if (n.top) cands.push(n.top.y + n.top.h + SPACING_GAP - m.y)
+      if (n.bottom) cands.push(n.bottom.y - SPACING_GAP - m.h - m.y)
+      if (n.top && n.bottom) cands.push((n.top.y + n.top.h + n.bottom.y - m.h) / 2 - m.y)
+    }
+    const best = cands.filter((d) => Math.abs(d) <= tol).sort((a, b) => Math.abs(a) - Math.abs(b))[0]
+    return best ?? null
+  }
+
+  private measureSpacing(m: Box, others: Box[], snappedX: boolean, snappedY: boolean): Spacing[] {
+    const n = this.neighbors(m, others)
+    const out: Spacing[] = []
+    const maxGap = 320
+    const midY = (r: Box) => (Math.max(r.y, m.y) + Math.min(r.y + r.h, m.y + m.h)) / 2
+    const midX = (r: Box) => (Math.max(r.x, m.x) + Math.min(r.x + r.w, m.x + m.w)) / 2
+    if (n.left && m.x - (n.left.x + n.left.w) <= maxGap) out.push({ axis: 'x', from: n.left.x + n.left.w, to: m.x, at: midY(n.left), snapped: snappedX })
+    if (n.right && n.right.x - (m.x + m.w) <= maxGap) out.push({ axis: 'x', from: m.x + m.w, to: n.right.x, at: midY(n.right), snapped: snappedX })
+    if (n.top && m.y - (n.top.y + n.top.h) <= maxGap) out.push({ axis: 'y', from: n.top.y + n.top.h, to: m.y, at: midX(n.top), snapped: snappedY })
+    if (n.bottom && n.bottom.y - (m.y + m.h) <= maxGap) out.push({ axis: 'y', from: m.y + m.h, to: n.bottom.y, at: midX(n.bottom), snapped: snappedY })
+    return out.filter((s) => s.to - s.from >= 1)
   }
 
   private bestSnap(mine: number[], theirs: number[], tol: number) {
@@ -763,6 +982,7 @@ export class Editor {
     if (it.type !== 'move') return
     this.interaction = { type: 'idle' }
     this.guides = []
+    this.spacing = []
     if (!it.dx && !it.dy) return this.bump()
     const moving = new Set(it.ids)
     const patches: { id: string; patch: Partial<Block> }[] = []
@@ -885,18 +1105,19 @@ export class Editor {
   endInteraction() {
     this.interaction = { type: 'idle' }
     this.guides = []
+    this.spacing = []
     this.bump()
   }
 
-  beginConnect(from: string, point: Vec) {
-    this.interaction = { type: 'connect', from, point, target: null }
+  beginConnect(from: string | null, point: Vec) {
+    this.interaction = { type: 'connect', from, start: point, point, target: null }
     this.bump()
   }
 
   updateConnect(point: Vec) {
     const it = this.interaction
     if (it.type !== 'connect') return
-    const target = this.hitTest(point, { exclude: new Set([it.from]) })
+    const target = this.hitTest(point, { exclude: it.from ? new Set([it.from]) : undefined })
     this.interaction = { ...it, point, target: target?.id ?? null }
     this.bump()
   }
@@ -905,25 +1126,67 @@ export class Editor {
     const it = this.interaction
     if (it.type !== 'connect') return
     this.interaction = { type: 'idle' }
+    this.undoManager.stopCapturing()
+    const snapPt = (p: Vec) => ({ x: snapTo(p.x, this.grid), y: snapTo(p.y, this.grid) })
+    const far = Math.hypot(it.point.x - it.start.x, it.point.y - it.start.y) > 24 / this.camera.z
+    if (!it.from) {
+      // connector tool from empty canvas: free start, bound or free end
+      if (!far && !it.target) return this.bump()
+      const id = this.addConnector({ fromPoint: snapPt(it.start), ...(it.target ? { to: it.target } : { toPoint: snapPt(it.point) }) })
+      this.select([id])
+      return
+    }
     const from = this.blocksMap.get(it.from)
     if (!from) return this.bump()
     if (it.target) {
-      this.undoManager.stopCapturing()
       const id = this.createConnector(it.from, it.target)
       if (id) this.select([id])
       return
     }
     const fr = this.baseRect(it.from)!
     if (Math.hypot(it.point.x - center(fr).x, it.point.y - center(fr).y) < Math.max(fr.w, fr.h) * 0.7) return this.bump()
+    if (this.tool === 'connector') {
+      const id = this.addConnector({ from: it.from, toPoint: snapPt(it.point) })
+      this.select([id])
+      return
+    }
     const draft = this.options.createForConnectorDrop?.(from, it.point)
     if (!draft) return this.bump()
     const pid = this.placeDraft(draft, it.point)
-    this.transact(() => {
-      const id = randomId()
-      const now = Date.now()
-      this.connectorsMap.set(id, { id, from: it.from, to: pid, label: '', author: this.options.author, createdAt: now, updatedAt: now, pending: false, changeSet: null })
-    })
+    this.addConnector({ from: it.from, to: pid })
     this.startEditing(pid)
+  }
+
+  beginEndpoint(id: string, which: 'start' | 'end', point: Vec) {
+    const c = this.connectorsMap.get(id)
+    if (!c) return
+    this.interaction = { type: 'endpoint', id, which, point, target: (which === 'start' ? c.from : c.to) ?? null }
+    this.bump()
+  }
+
+  updateEndpoint(point: Vec) {
+    const it = this.interaction
+    if (it.type !== 'endpoint') return
+    const c = this.connectorsMap.get(it.id)
+    const other = it.which === 'start' ? c?.to : c?.from
+    const target = this.hitTest(point, { exclude: other ? new Set([other]) : undefined })
+    this.interaction = { ...it, point, target: target?.id ?? null }
+    this.bump()
+  }
+
+  /** Drop a dragged endpoint: rebind to the block under it, or leave it floating. */
+  endEndpoint() {
+    const it = this.interaction
+    if (it.type !== 'endpoint') return
+    this.interaction = { type: 'idle' }
+    const c = this.connectorsMap.get(it.id)
+    if (!c) return this.bump()
+    const pt = { x: snapTo(it.point.x, this.grid), y: snapTo(it.point.y, this.grid) }
+    const patch: Partial<Connector> =
+      it.which === 'start' ? (it.target ? { from: it.target, fromPoint: null } : { from: null, fromPoint: pt }) : it.target ? { to: it.target, toPoint: null } : { to: null, toPoint: pt }
+    this.undoManager.stopCapturing()
+    this.transact(() => this.connectorsMap.set(it.id, this.stamp(c, patch)))
+    this.bump()
   }
 
   /** Create a draft centered at a page point, inside the frame under it if any. */

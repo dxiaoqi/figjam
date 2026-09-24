@@ -1,3 +1,4 @@
+import type { RouteStyle } from './routing'
 import type { ColorToken, SizeToken } from './tokens'
 
 export type BlockKind = 'sticky' | 'card' | 'text' | 'frame'
@@ -51,6 +52,8 @@ export interface Connector {
   fromPoint?: Point | null
   toPoint?: Point | null
   label?: string
+  /** Routing style; defaults to curved. */
+  route?: RouteStyle
   author?: Author
   changeSet?: string | null
   pending?: boolean

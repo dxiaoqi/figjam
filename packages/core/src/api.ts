@@ -114,6 +114,18 @@ class Recorder {
     return conn
   }
 
+  updateConnector(id: string, patch: Partial<Connector>) {
+    const before = this.board.connectors.get(id)
+    if (!before) throw new ToolError(`No connector with id "${id}"`)
+    const next: Connector = { ...before, ...patch, updatedAt: Date.now() }
+    if (this.changeSet) {
+      if (!this.alreadyTracked(id)) this.entries.push({ op: 'update', target: 'connector', id, before })
+      Object.assign(next, this.pendingFields)
+    }
+    this.board.connectors.set(id, next)
+    return next
+  }
+
   deleteConnector(id: string) {
     const before = this.board.connectors.get(id)
     if (!before) return
@@ -205,6 +217,8 @@ export class CanvasCore {
         return this.deleteBlocks(a, caller)
       case 'connect':
         return this.connect(a, caller)
+      case 'update_connectors':
+        return this.updateConnectors(a, caller)
       case 'group_into_frame':
         return this.groupIntoFrame(a, caller)
       case 'arrange':
@@ -367,7 +381,7 @@ export class CanvasCore {
           const b = id ? board.blocks.get(id) : undefined
           return b ? `"${preview(b.kind === 'card' || b.kind === 'frame' ? b.title : b.text, 32)}"` : '(free end)'
         }
-        out.push(`- ${name(c.from)} → ${name(c.to)}${c.label ? ` "${c.label}"` : ''} (id: ${c.id})`)
+        out.push(`- ${name(c.from)} → ${name(c.to)}${c.label ? ` "${c.label}"` : ''} [${c.route ?? 'curved'}] (id: ${c.id})`)
       }
     }
     return { markdown: out.join('\n') }
@@ -572,19 +586,34 @@ export class CanvasCore {
       if (!from) throw new ToolError(`Can't find block "${c.from}" (use an id from get_board)`)
       if (!to) throw new ToolError(`Can't find block "${c.to}" (use an id from get_board)`)
       if (from.id === to.id) throw new ToolError(`A connector needs two different blocks ("${c.from}")`)
-      return { from: from.id, to: to.id, label: c.label as string | undefined }
+      return { from: from.id, to: to.id, label: c.label as string | undefined, route: (c.route ?? a.route) as Connector['route'] }
     })
     const { result, changeSet } = this.edit(board, caller, a.intent, `Connect ${pairs.length} pair${pairs.length === 1 ? '' : 's'}`, (rec) => {
       const ids: string[] = []
       for (const p of pairs) {
         const dup = [...board.connectors.values()].find((c) => c.from === p.from && c.to === p.to)
         if (dup) continue
-        ids.push(rec.createConnector({ id: newId(), from: p.from, to: p.to, label: p.label }).id)
+        ids.push(rec.createConnector({ id: newId(), from: p.from, to: p.to, label: p.label, ...(p.route ? { route: p.route } : {}) }).id)
         rec.touched.add(p.to)
       }
       return ids
     })
     return { board: board.id, changeSet, connectors: result }
+  }
+
+  private updateConnectors(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    const missing = (a.ids as string[]).filter((id) => !board.connectors.get(id))
+    if (missing.length) throw new ToolError(`No connector with id: ${missing.join(', ')}`)
+    const { changeSet } = this.edit(board, caller, a.intent, `Restyle ${a.ids.length} connector${a.ids.length === 1 ? '' : 's'}`, (rec) => {
+      for (const id of a.ids as string[]) {
+        const patch: Partial<Connector> = {}
+        if (a.route) patch.route = a.route
+        if (a.label !== undefined) patch.label = a.label
+        rec.updateConnector(id, patch)
+      }
+    })
+    return { board: board.id, changeSet, updated: a.ids }
   }
 
   private groupIntoFrame(a: Args, caller: CallerInfo) {
@@ -686,7 +715,8 @@ export class CanvasCore {
     const board = this.board(a.board)
     this.presence.touch(caller, { boardId: board.id, autoStatus: 'Looking at the board…' })
     const target = a.frame ? this.frame(board, a.frame) : null
-    const { svg, png, width, height } = await renderSnapshot(board, { frameId: target?.id, theme: a.theme ?? 'light', format: a.format ?? 'png' })
+    if (a.ids) for (const id of a.ids as string[]) if (!board.blocks.get(id)) throw new ToolError(`No block with id "${id}"`)
+    const { svg, png, width, height } = await renderSnapshot(board, { frameId: target?.id, ids: a.ids, theme: a.theme ?? 'light', format: a.format ?? 'png' })
     if ((a.format ?? 'png') === 'svg') return { board: board.id, width, height, svg }
     return { board: board.id, width, height, image: { mimeType: 'image/png', data: png!.toString('base64') } }
   }
