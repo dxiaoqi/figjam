@@ -87,7 +87,10 @@ export async function renderSnapshot(
       parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.sticky}" fill="${c.bg}"/>`)
       const lines = wrapText(b.text, r.w - pad * 2, fs)
       const collapsed = isCollapsed(b)
+      parts.push(`<clipPath id="clip-${b.id}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.sticky}"/></clipPath>`)
+      parts.push(`<g clip-path="url(#clip-${b.id})">`)
       parts.push(textLines(lines, r.x + pad, r.y + pad, fs, c.ink, 450, Math.max(1, collapsed ? Math.ceil((r.h - pad) / (fs * LINE_HEIGHT)) : Math.floor((r.h - pad * 2) / (fs * LINE_HEIGHT))), !collapsed))
+      parts.push('</g>')
       if (collapsed) parts.push(collapsedFade(b, r, c.bg, c.ink))
     } else if (b.kind === 'card') {
       parts.push(`<rect x="${r.x}" y="${r.y + 1}" width="${r.w}" height="${r.h}" rx="${RADII.card}" fill="#000" opacity="${theme === 'light' ? 0.05 : 0.3}"/>`)
@@ -105,7 +108,7 @@ export async function renderSnapshot(
         const bl = wrapText(b.text, inner, CARD_BODY_SIZE)
         const collapsed = isCollapsed(b)
         const room = Math.max(1, collapsed ? Math.ceil((r.y + r.h - y) / (CARD_BODY_SIZE * LINE_HEIGHT)) : Math.floor((r.y + r.h - pad - y) / (CARD_BODY_SIZE * LINE_HEIGHT)))
-        parts.push(textLines(bl, r.x + pad, y, CARD_BODY_SIZE, surf.muted, 400, room, !collapsed))
+        parts.push(`<g clip-path="url(#clip-${b.id})">${textLines(bl, r.x + pad, y, CARD_BODY_SIZE, surf.muted, 400, room, !collapsed)}</g>`)
         if (collapsed) parts.push(collapsedFade(b, r, surf.surface, surf.ink))
       }
     } else if (b.kind === 'text') {

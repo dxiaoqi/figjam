@@ -385,10 +385,10 @@ export class CanvasCore {
 
   /** Make room: when a block grows, push the siblings stacked below it down by the same amount. */
   private makeRoom(board: Board, cur: Block, w: number, grow: number, skip: Set<string>, move: (id: string, y: number) => void) {
-    if (grow <= 0) return
+    if (grow === 0) return
     for (const s of board.childrenOf(cur.parent ?? null)) {
       if (s.id === cur.id || skip.has(s.id) || s.kind === 'frame') continue
-      if (s.y >= cur.y + cur.h - 1 && s.x < cur.x + w && s.x + s.w > cur.x) move(s.id, snap(s.y + grow + 7))
+      if (s.y >= cur.y + cur.h - 1 && s.x < cur.x + w && s.x + s.w > cur.x) move(s.id, Math.ceil((s.y + grow) / 8) * 8)
     }
   }
 
@@ -400,6 +400,7 @@ export class CanvasCore {
     const board = this.board(a.board)
     const updated: string[] = []
     const frames = new Set<string>()
+    const shrinkFrames = new Set<string>()
     board.doc.transact(() => {
       for (const it of a.items as { id: string; content_h?: number; expanded?: boolean }[]) {
         const cur = board.blocks.get(it.id)
@@ -409,7 +410,13 @@ export class CanvasCore {
         const h = contentH != null ? fitHeight(cur.kind, cur.w, contentH, expanded) : cur.h
         if (h === cur.h && contentH === cur.contentH && expanded === !!cur.expanded) continue
         board.blocks.set(cur.id, { ...cur, h, contentH, expanded: expanded || undefined })
-        this.makeRoom(board, cur, cur.w, h - cur.h, new Set(updated), (id, y) => board.blocks.set(id, { ...board.blocks.get(id)!, y }))
+        // growing always makes room; only an explicit collapse gives the space back (measurement jitter never pulls blocks up)
+        const delta = h - cur.h
+        const collapsing = it.expanded === false && !!cur.expanded
+        if (collapsing && cur.parent) shrinkFrames.add(cur.parent)
+        if (delta > 0 || collapsing) {
+          this.makeRoom(board, cur, cur.w, delta, new Set(updated), (id, y) => board.blocks.set(id, { ...board.blocks.get(id)!, y }))
+        }
         updated.push(cur.id)
         if (cur.parent) frames.add(cur.parent)
       }
@@ -418,7 +425,8 @@ export class CanvasCore {
         const kids = board.childrenOf(fid)
         if (!f || !kids.length) continue
         const w = snap(Math.max(f.w, Math.max(...kids.map((k) => k.x + k.w)) + PAD))
-        const h = snap(Math.max(f.h, Math.max(...kids.map((k) => k.y + k.h)) + PAD))
+        const bottom = Math.max(...kids.map((k) => k.y + k.h)) + PAD
+        const h = snap(shrinkFrames.has(fid) ? Math.max(bottom, 160) : Math.max(f.h, bottom))
         if (w !== f.w || h !== f.h) board.blocks.set(fid, { ...f, w, h })
       }
       if (updated.length) board.touch()
