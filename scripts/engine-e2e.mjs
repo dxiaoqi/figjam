@@ -129,6 +129,15 @@ const lbl = await page.locator(`[data-frame-label="${frame.id}"]`).boundingBox()
 await page.mouse.dblclick(lbl.x + 12, lbl.y + lbl.height / 2)
 await wait(200)
 check('double-click on a frame title starts editing it', (await ed(() => window.editor.editingId)) === frame.id)
+const childVisible = await ed((fid) => {
+  const ed = window.editor
+  const kid = ed.blocks().find((b) => b.parent === fid)
+  const r = ed.pageRect(kid.id)
+  const p = ed.pageToScreen({ x: r.x + r.w / 2, y: r.y + r.h / 2 })
+  const host = document.querySelector('.ae-canvas').getBoundingClientRect()
+  return document.elementFromPoint(host.left + p.x, host.top + p.y)?.closest('[data-block-id]')?.dataset.blockId === kid.id
+}, frame.id)
+check('frame children stay visible while its title is edited', childVisible)
 await page.keyboard.press('Control+a')
 await page.keyboard.type('Ideas')
 await ed(() => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true })))

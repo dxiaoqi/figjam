@@ -102,8 +102,8 @@ export type AlignMode = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom
 
 type Listener = () => void
 
-const ZOOM_STEPS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4]
-const MIN_Z = 0.1
+const ZOOM_STEPS = [0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4]
+const MIN_Z = 0.05
 const MAX_Z = 4
 const SNAP_PX = 6
 const FRAME_PAD = 32

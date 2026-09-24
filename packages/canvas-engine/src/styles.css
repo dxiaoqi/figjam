@@ -30,6 +30,8 @@
   position: absolute;
   left: 0;
   top: 0;
+  /* each layer is its own stacking context, so z-index inside one never lifts it over the next */
+  z-index: 0;
 }
 
 .ae-block {

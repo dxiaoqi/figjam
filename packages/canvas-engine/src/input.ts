@@ -113,11 +113,12 @@ export class InputController {
     this.pointerId = e.pointerId
 
     if (e.button === 2) {
-      const blockEl = target.closest<HTMLElement>('[data-block-id]')
-      const hit = ed.hitTest(page) ?? (blockEl ? ed.block(blockEl.dataset.blockId!) : null) ?? ed.hitTest(page, { frames: true })
-      const labelId = target.closest<HTMLElement>('[data-frame-label]')?.dataset.frameLabel
-      const conn = !hit && !labelId ? ed.connectorAt(page) : null
-      this.rightClick = { screen, page, target: labelId ?? hit?.id ?? conn?.id ?? null }
+      // priority: blocks, then connectors, then frames (label or body)
+      const labelId = target.closest<HTMLElement>('[data-frame-label]')?.dataset.frameLabel ?? null
+      const block = labelId ? null : ed.hitTest(page)
+      const conn = labelId || block ? null : ed.connectorAt(page)
+      const frame = labelId || block || conn ? null : ed.hitTest(page, { frames: true })
+      this.rightClick = { screen, page, target: labelId ?? block?.id ?? conn?.id ?? frame?.id ?? null }
     }
     if (e.button === 1 || e.button === 2 || ed.spaceDown || ed.tool === 'hand') {
       ed.interaction = { type: 'pan', startScreen: screen, cam: { ...ed.camera } }
@@ -187,7 +188,7 @@ export class InputController {
         const [a, b] = [...this.touches.values()]
         const dist = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y))
         const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-        const z = Math.min(4, Math.max(0.1, it.cam.z * (dist / it.startDist)))
+        const z = Math.min(4, Math.max(0.05, it.cam.z * (dist / it.startDist)))
         const anchor = { x: (it.startMid.x - it.cam.x) / it.cam.z, y: (it.startMid.y - it.cam.y) / it.cam.z }
         ed.setCamera({ x: mid.x - anchor.x * z, y: mid.y - anchor.y * z, z })
         return
