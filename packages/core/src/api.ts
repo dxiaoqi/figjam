@@ -1,10 +1,12 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
+import fs from 'node:fs'
+import path from 'node:path'
 import { z } from 'zod'
 import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
-import { fitHeight, imageInfo, maxBlockHeight, measureSticky, stickyContentHeight } from '@aifig/shared'
+import { bytesToBase64, COLOR_TOKENS, fitHeight, imageInfo, matchColor, maxBlockHeight, measureSticky, stickyContentHeight } from '@aifig/shared'
 import {
   SPACING,
   snap,
-  toColorToken,
   toSizeToken,
   tokenManifest,
   type ColorToken,
@@ -18,7 +20,7 @@ import {
   type CallResponse,
   type CallerInfo,
 } from '@aifig/shared'
-import { Board, BoardRegistry, newId } from './board'
+import { aifigHome, Board, BoardRegistry, newId } from './board'
 import {
   bboxOf,
   findFreeSpot,
@@ -143,21 +145,105 @@ interface Viewport {
   at: number
 }
 
+/** Per-call context: who is calling, and silent adjustments to report back as `warnings`. */
+interface CallContext {
+  caller: CallerInfo
+  warnings: string[]
+  strict: boolean
+}
+const callContext = new AsyncLocalStorage<CallContext>()
+
+/** Tell the caller about an adjustment we made on its behalf (snapping, fallbacks, ignored arguments). */
+export function warn(message: string) {
+  const c = callContext.getStore()
+  if (c && !c.warnings.includes(message)) c.warnings.push(message)
+}
+
+const strictMode = () => !!callContext.getStore()?.strict
+
+/** Color input → token, reporting fallbacks (or failing in strict mode). */
+function colorFor(input: unknown, fallback: ColorToken): ColorToken {
+  if (input === undefined || input === null || input === '') return fallback
+  const m = matchColor(input, fallback)
+  if (m.how === 'unknown') {
+    const list = COLOR_TOKENS.join(', ')
+    if (strictMode()) throw new ToolError(`Unknown color "${input}". Use a token (${list}) or a hex value.`)
+    warn(`Unknown color "${input}" — used "${m.token}". Colors: ${list} (hex values map to the nearest).`)
+  } else if (m.how === 'hex') warn(`Color ${input} mapped to the nearest token "${m.token}".`)
+  return m.token
+}
+
+/** Snap to the grid, collecting "101→104" notes for one summary warning per call. */
+function snapNoted(v: number, notes: string[], label: string) {
+  const s = snap(v)
+  if (s !== v) notes.push(`${label} ${v}→${s}`)
+  return s
+}
+function reportSnapped(notes: string[], what = 'the 8px grid') {
+  if (notes.length) warn(`Snapped to ${what}: ${notes.slice(0, 8).join(', ')}${notes.length > 8 ? ` (+${notes.length - 8} more)` : ''}.`)
+}
+
+interface CanvasSeen {
+  boardId: string
+  focused: boolean
+  at: number
+}
+
 export class CanvasCore {
   readonly registry = new BoardRegistry()
   readonly presence = new PresenceHub()
   private viewports = new Map<string, Viewport>()
   private openChangeSets = new Map<string, string>()
+  /** The board the person last worked on in the canvas (persisted across restarts). */
   activeBoardId: string | null = null
+  /** Open canvases (one per connection) and whether their window has focus. */
+  private canvases = new Map<string, CanvasSeen>()
+  /** Board each agent session last used, so defaults stay stable within a session. */
+  private sessionBoards = new Map<string, string>()
+  private persistTimer: ReturnType<typeof setTimeout> | null = null
+
+  private get statePath() {
+    return path.join(aifigHome(), 'state.json')
+  }
 
   init() {
     this.registry.loadAll()
     if (!this.registry.all().length) this.registry.create('My first board')
+    try {
+      const saved = JSON.parse(fs.readFileSync(this.statePath, 'utf8'))
+      if (saved.activeBoardId && this.registry.get(saved.activeBoardId)) this.activeBoardId = saved.activeBoardId
+    } catch {
+      // first run
+    }
   }
 
-  setViewport(boardId: string, rect: Rect) {
+  private persistActive() {
+    if (this.persistTimer) return
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null
+      try {
+        fs.mkdirSync(aifigHome(), { recursive: true })
+        fs.writeFileSync(this.statePath, JSON.stringify({ activeBoardId: this.activeBoardId }))
+      } catch {
+        // not fatal: the default just won't survive a restart
+      }
+    }, 300)
+    this.persistTimer.unref?.()
+  }
+
+  /** A canvas reported its viewport. Only a focused canvas (or the only one open) moves the active board. */
+  setViewport(boardId: string, rect: Rect, conn = 'default', focused = true) {
     this.viewports.set(boardId, { rect, at: Date.now() })
-    this.activeBoardId = boardId
+    this.canvases.set(conn, { boardId, focused, at: Date.now() })
+    const others = [...this.canvases.entries()].filter(([k, c]) => k !== conn && Date.now() - c.at < 120_000 && c.boardId !== boardId)
+    if ((focused || !others.length) && this.activeBoardId !== boardId) {
+      this.activeBoardId = boardId
+      this.persistActive()
+    }
+  }
+
+  canvasClosed(conn: string) {
+    this.canvases.delete(conn)
   }
 
   // ---- dispatch -----------------------------------------------------------
@@ -173,13 +259,15 @@ export class CanvasCore {
     if (!parsed.success) {
       return { ok: false, error: `Invalid arguments for ${tool}: ${parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}` }
     }
+    const ctx: CallContext = { caller, warnings: [], strict: (parsed.data as Args).strict === true || process.env.AIFIG_STRICT === '1' }
     try {
-      const out = await this.dispatch(tool, parsed.data as Args, caller)
+      const out = await callContext.run(ctx, () => this.dispatch(tool, parsed.data as Args, caller))
+      const withWarnings = (r: unknown) => (ctx.warnings.length && r && typeof r === 'object' && !Array.isArray(r) ? { ...(r as object), warnings: ctx.warnings } : r)
       if (out && typeof out === 'object' && 'image' in out) {
         const { image, ...rest } = out as any
-        return { ok: true, result: rest, image }
+        return { ok: true, result: withWarnings(rest), image }
       }
-      return { ok: true, result: out }
+      return { ok: true, result: withWarnings(out) }
     } catch (e) {
       if (e instanceof ToolError) return { ok: false, error: e.message }
       console.error(`[core] ${tool} failed`, e)
@@ -304,16 +392,34 @@ export class CanvasCore {
 
   // ---- helpers ------------------------------------------------------------
 
+  /**
+   * Resolve a board. Explicit refs win. Without one: the board this session last used (stable within a
+   * session), else the board open in the canvas — with a warning whenever that choice isn't clear-cut.
+   */
   board(ref?: string): Board {
+    const ctx = callContext.getStore()
+    const session = ctx && ctx.caller.id !== 'human:ui' ? ctx.caller.id : null
+    const remember = (b: Board) => {
+      if (session) this.sessionBoards.set(session, b.id)
+      return b
+    }
     if (ref) {
       const b = this.registry.find(ref)
       if (!b) throw new ToolError(`No board "${ref}". Boards: ${this.registry.all().map((b) => `"${b.title}" (${b.id})`).join(', ')}`)
-      return b
+      return remember(b)
     }
-    const active = this.activeBoardId && this.registry.get(this.activeBoardId)
-    const b = active || this.registry.all()[0]
+    const last = session ? this.sessionBoards.get(session) : undefined
+    const lastBoard = last ? this.registry.get(last) : undefined
+    if (lastBoard) return lastBoard
+    const recent = [...this.canvases.values()].filter((c) => Date.now() - c.at < 120_000)
+    const openBoards = new Set(recent.map((c) => c.boardId))
+    const active = this.activeBoardId ? this.registry.get(this.activeBoardId) : undefined
+    const b = active ?? this.registry.all()[0]
     if (!b) throw new ToolError('There are no boards yet. Call create_board first.')
-    return b
+    if (!active) warn(`No \`board\` given and no board is active in the canvas — used "${b.title}" (${b.id}). Pass \`board\` explicitly.`)
+    else if (openBoards.size > 1) warn(`No \`board\` given and ${openBoards.size} boards are open in the canvas — used "${b.title}" (${b.id}), the one last focused. Pass \`board\` explicitly.`)
+    else if (!openBoards.size) warn(`No \`board\` given and no canvas is open — used "${b.title}" (${b.id}), the board last active. Pass \`board\` explicitly.`)
+    return remember(b)
   }
 
   private frame(board: Board, ref: string) {
@@ -517,7 +623,7 @@ export class CanvasCore {
     const drafts: Draft[] = a.blocks.map((b: Args, i: number) => {
       const kind: Block['kind'] = b.kind ?? 'sticky'
       const size = toSizeToken(b.size, 'm')
-      const color = toColorToken(b.color, kind === 'sticky' ? 'yellow' : kind === 'card' ? 'blue' : 'gray')
+      const color = colorFor(b.color, kind === 'sticky' ? 'yellow' : kind === 'card' ? 'blue' : 'gray')
       const text = String(b.text ?? '')
       const title = b.title != null ? String(b.title) : undefined
       let dims: { w: number; h: number; size?: SizeToken }
@@ -558,6 +664,8 @@ export class CanvasCore {
     const content = { w: bb.w, h: bb.h }
 
     const inside = a.inside ? this.frame(board, a.inside) : null
+    if (inside && a.at) warn('`at` is ignored together with `inside`: blocks go below the frame\'s existing content. Drop `inside` to place at exact coordinates.')
+    if (inside && a.frame) warn('`frame` is ignored together with `inside` (frames can\'t be nested).')
     const wrapTitle: string | undefined = inside ? undefined : a.frame
     const groupSize = wrapTitle ? { w: snap(content.w + PAD * 2), h: snap(content.h + PAD * 2) } : content
 
@@ -569,7 +677,9 @@ export class CanvasCore {
       const kids = board.childrenOf(inside.id)
       origin = { x: PAD, y: kids.length ? snap(Math.max(...kids.map((k) => k.y + k.h)) + GAP) : PAD }
     } else if (a.at) {
-      origin = { x: snap(a.at.x), y: snap(a.at.y) }
+      const notes: string[] = []
+      origin = { x: snapNoted(a.at.x, notes, 'at.x'), y: snapNoted(a.at.y, notes, 'at.y') }
+      reportSnapped(notes)
     } else if (anchorRef) {
       const anchor = board.resolve(anchorRef)
       if (!anchor) throw new ToolError(`No block "${anchorRef}" to place next to.`)
@@ -642,6 +752,8 @@ export class CanvasCore {
   private updateBlocks(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
     for (const u of a.updates) if (!board.blocks.get(u.id)) throw new ToolError(`No block with id "${u.id}"`)
+    const gridNotes: string[] = []
+    const rotNotes: string[] = []
     const { result, changeSet } = this.edit(board, caller, a.intent, `Edit ${a.updates.length} block${a.updates.length === 1 ? '' : 's'}`, (rec) => {
       const frames = new Set<string>()
       const updated: string[] = []
@@ -650,11 +762,17 @@ export class CanvasCore {
         const patch: Partial<Block> = {}
         if (u.text !== undefined) patch.text = u.text
         if (u.title !== undefined) patch.title = u.title
-        if (u.color !== undefined) patch.color = toColorToken(u.color, cur.color)
+        if (u.color !== undefined) patch.color = colorFor(u.color, cur.color)
         if (u.size !== undefined) patch.size = toSizeToken(u.size, cur.size)
-        if (u.x !== undefined) patch.x = snap(u.x)
-        if (u.y !== undefined) patch.y = snap(u.y)
-        if (u.rotation !== undefined) patch.rotation = ((Math.round(u.rotation) % 360) + 360) % 360
+        const exact = a.snap === false
+        if (u.x !== undefined) patch.x = exact ? u.x : snapNoted(u.x, gridNotes, `x`)
+        if (u.y !== undefined) patch.y = exact ? u.y : snapNoted(u.y, gridNotes, `y`)
+        if (u.rotation !== undefined) {
+          const norm = (d: number) => ((d % 360) + 360) % 360
+          const r = exact ? norm(u.rotation) : norm(Math.round(u.rotation / 15) * 15)
+          if (!exact && r !== norm(u.rotation)) rotNotes.push(`${u.rotation}°→${r}°`)
+          patch.rotation = r
+        }
         const merged = { ...cur, ...patch }
         const contentChanged = patch.text !== undefined || patch.title !== undefined || patch.size !== undefined
         if (contentChanged) patch.contentH = undefined
@@ -675,6 +793,8 @@ export class CanvasCore {
       for (const f of frames) this.fitFrame(rec, board, f)
       return updated
     })
+    reportSnapped(gridNotes)
+    reportSnapped(rotNotes, '15° (pass `snap: false` for exact angles)')
     return { board: board.id, changeSet, updated: result }
   }
 
@@ -693,7 +813,10 @@ export class CanvasCore {
 
   private connect(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
-    const pairs = (a.connectors as Args[]).map((c) => {
+    if (a.connectors && (a.from || a.to)) throw new ToolError('Pass either `connectors: [...]` or a single `from` / `to`, not both')
+    const list: Args[] = a.connectors ?? (a.from && a.to ? [{ from: a.from, to: a.to, label: a.label }] : [])
+    if (!list.length) throw new ToolError('Pass `connectors: [{ from, to }]` (several) or `from` and `to` (one)')
+    const pairs = list.map((c) => {
       const from = board.resolve(c.from)
       const to = board.resolve(c.to)
       if (!from) throw new ToolError(`Can't find block "${c.from}" (use an id from get_board)`)
@@ -740,21 +863,28 @@ export class CanvasCore {
 
   private updateConnectors(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
-    const missing = (a.ids as string[]).filter((id) => !board.connectors.get(id))
+    if (a.connectors && a.ids) throw new ToolError('Pass either `ids` (same change for all) or `connectors: [{ id, … }]` (per connector), not both')
+    const shared = { route: a.route, label: a.label, waypoints: a.waypoints, relation: a.relation }
+    const items: Args[] = a.connectors ?? (a.ids ?? []).map((id: string) => ({ id, ...shared }))
+    if (!items.length) throw new ToolError('Pass `ids` or `connectors: [{ id, route, label, waypoints }]`')
+    const missing = items.map((i) => i.id as string).filter((id) => !board.connectors.get(id))
     if (missing.length) throw new ToolError(`No connector with id: ${missing.join(', ')}`)
-    const { changeSet } = this.edit(board, caller, a.intent, `Restyle ${a.ids.length} connector${a.ids.length === 1 ? '' : 's'}`, (rec) => {
-      for (const id of a.ids as string[]) {
+    const notes: string[] = []
+    const { changeSet } = this.edit(board, caller, a.intent, `Restyle ${items.length} connector${items.length === 1 ? '' : 's'}`, (rec) => {
+      for (const it of items) {
         const patch: Partial<Connector> = {}
-        if (a.route) patch.route = a.route
-        if (a.label !== undefined) patch.label = a.label
-        if (a.waypoints) {
-          patch.waypoints = a.waypoints.length ? a.waypoints.map((p: { x: number; y: number }) => ({ x: snap(p.x), y: snap(p.y) })) : null
-          if (a.waypoints.length && !a.route) patch.route = 'elbow'
+        if (it.route) patch.route = it.route
+        if (it.label !== undefined) patch.label = it.label
+        if (it.relation) (patch as Args).relation = it.relation === 'none' ? undefined : it.relation
+        if (it.waypoints) {
+          patch.waypoints = it.waypoints.length ? it.waypoints.map((p: { x: number; y: number }, i: number) => ({ x: snapNoted(p.x, notes, `waypoint ${i + 1}.x`), y: snapNoted(p.y, notes, `waypoint ${i + 1}.y`) })) : null
+          if (it.waypoints.length && !it.route) patch.route = 'elbow'
         }
-        rec.updateConnector(id, patch)
+        rec.updateConnector(it.id, patch)
       }
     })
-    return { board: board.id, changeSet, updated: a.ids }
+    reportSnapped(notes)
+    return { board: board.id, changeSet, updated: items.map((i) => i.id) }
   }
 
   private groupIntoFrame(a: Args, caller: CallerInfo) {
@@ -890,7 +1020,8 @@ export class CanvasCore {
           return [`**${b.text}**`, '', ...notes]
         case 'image': {
           const as = b.asset ? board.assets.get(b.asset) : undefined
-          return [`![${b.text || as?.name || 'image'}](${as?.name ?? b.asset ?? ''})`, '', ...notes]
+          const src = a.images === 'inline' && as ? `data:${as.mime};base64,${bytesToBase64(as.bytes)}` : (as?.name ?? b.asset ?? '')
+          return [`![${b.text || as?.name || 'image'}](${src})`, '', ...notes]
         }
         default:
           return [`- ${b.text.replace(/\n/g, '\n  ')}`, ...notes]

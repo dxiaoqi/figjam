@@ -220,6 +220,7 @@ export async function startCore(port = CORE_PORT) {
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
       const conn: Conn = { ws, board }
+      const connId = Math.random().toString(36).slice(2)
       conns.add(conn)
       ws.binaryType = 'arraybuffer'
       // step 1 + full state so the client renders immediately
@@ -237,7 +238,7 @@ export async function startCore(port = CORE_PORT) {
         try {
           if (!isBinary) {
             const msg = JSON.parse(data.toString()) as ClientMessage
-            if (msg.type === 'viewport') core.setViewport(board.id, msg.bounds)
+            if (msg.type === 'viewport') core.setViewport(board.id, msg.bounds, connId, msg.focused !== false)
             return
           }
           const buf = new Uint8Array(data as ArrayBuffer)
@@ -252,7 +253,10 @@ export async function startCore(port = CORE_PORT) {
           console.error('[core] bad message', e)
         }
       })
-      ws.on('close', () => conns.delete(conn))
+      ws.on('close', () => {
+        conns.delete(conn)
+        core.canvasClosed(connId)
+      })
     })
   })
 

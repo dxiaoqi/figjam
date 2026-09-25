@@ -9,7 +9,10 @@ import { COLOR_TOKENS, SIZE_TOKENS } from './tokens'
 const board = z
   .string()
   .optional()
-  .describe('Board id or title. Defaults to the board currently open in the canvas app.')
+  .describe(
+    'Board id or title. Recommended: always pass it. Without it the core uses the board this session last used, else the board open in the canvas (and returns a warning when that is ambiguous).',
+  )
+const strict = z.boolean().optional().describe('Fail instead of adjusting silently-fixable input (e.g. unknown colors). Default false: adjustments are listed in `warnings`.')
 const intent = z
   .string()
   .optional()
@@ -83,13 +86,15 @@ export const toolDefs = {
       inside: z.string().optional().describe('Existing frame id or title to place blocks in (frame grows to fit).'),
       right_of: z.string().optional().describe('Existing block/frame id to place the new blocks to the right of.'),
       below: z.string().optional().describe('Existing block/frame id to place the new blocks below.'),
-      at: z.object({ x: z.number(), y: z.number() }).optional().describe('Explicit top-left override (page coords).'),
+      at: z.object({ x: z.number(), y: z.number() }).optional().describe('Explicit top-left override (page coords, snapped to the 8px grid). Ignored with `inside`.'),
       intent,
+      strict,
     },
   },
   update_blocks: {
     title: 'Update blocks',
-    description: 'Edit text, title, color or size of existing blocks. Sizes are re-measured automatically.',
+    description:
+      'Edit text, title, color, size, position or rotation of existing blocks. Sizes are re-measured automatically. Positions snap to the 8px grid and rotation to 15° unless `snap: false`; any adjustment is reported in `warnings`.',
     input: {
       board,
       updates: z
@@ -102,11 +107,13 @@ export const toolDefs = {
             size,
             x: z.number().optional().describe('Only when explicitly asked to move a block.'),
             y: z.number().optional(),
-            rotation: z.number().optional().describe('Rotation in degrees (snapped to 15° unless precise values are needed).'),
+            rotation: z.number().optional().describe('Rotation in degrees, snapped to 15° (pass `snap: false` for exact values).'),
           }),
         )
         .min(1),
+      snap: z.boolean().optional().describe('Default true: x/y snap to the 8px grid and rotation to 15°. false keeps exact values.'),
       intent,
+      strict,
     },
   },
   delete_blocks: {
@@ -121,17 +128,27 @@ export const toolDefs = {
       board,
       connectors: z
         .array(z.object({ from: z.string(), to: z.string(), label: z.string().optional(), route: routeStyle }))
-        .min(1),
+        .min(1)
+        .optional()
+        .describe('Several connectors. For a single one you can instead pass `from` / `to` (/ `label`) at the top level.'),
+      from: z.string().optional(),
+      to: z.string().optional(),
+      label: z.string().optional(),
       route: routeStyle.describe('Default routing for all connectors in this call.'),
       intent,
     },
   },
   update_connectors: {
     title: 'Update connectors',
-    description: 'Change the routing style or label of existing connectors (ids from get_board).',
+    description:
+      'Change the routing style, label or waypoints of existing connectors (ids from get_board). Either apply the same change to `ids`, or pass per-connector changes in `connectors: [{ id, route, label, waypoints }]` (the same array shape as `connect`).',
     input: {
       board,
-      ids: z.array(z.string()).min(1),
+      ids: z.array(z.string()).min(1).optional(),
+      connectors: z
+        .array(z.object({ id: z.string(), route: routeStyle, label: z.string().optional(), waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional() }))
+        .min(1)
+        .optional(),
       route: routeStyle,
       label: z.string().optional(),
       waypoints: z
@@ -194,6 +211,7 @@ export const toolDefs = {
       frame: z.string().optional(),
       ids: z.array(z.string()).optional().describe('Only render these blocks (and connectors between them).'),
       format: z.enum(['png', 'svg']).optional().describe('png (default) or svg'),
+      raw: z.boolean().optional().describe('With format svg: return the SVG markup itself as the text result instead of JSON.'),
       theme: z.enum(['light', 'dark']).optional(),
     },
   },
@@ -204,6 +222,7 @@ export const toolDefs = {
       board,
       format: z.enum(['markdown', 'json']).describe('markdown (readable document) or json (full structure, no image bytes)'),
       frame: z.string().optional(),
+      images: z.enum(['link', 'inline']).optional().describe('Markdown only. link (default): image file names. inline: embed images as data: URIs so the document stands alone.'),
     },
   },
   set_status: {

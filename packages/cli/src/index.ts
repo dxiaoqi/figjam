@@ -28,7 +28,10 @@ async function run(tool: AnyToolName, args: Record<string, unknown>, print?: (r:
     process.exit(1)
   }
   if (o.json || !print) console.log(JSON.stringify(r.result, null, 2))
-  else print(r.result)
+  else {
+    print(r.result)
+    for (const w of (r.result as { warnings?: string[] })?.warnings ?? []) console.error(`⚠ ${w}`)
+  }
 }
 
 function csLine(r: any) {
@@ -224,6 +227,7 @@ program
   .option('--format <format>', 'md | json | png | svg', 'md')
   .option('-f, --frame <frame>')
   .option('-o, --out <file>')
+  .option('--inline-images', 'markdown: embed images as data: URIs')
   .action(async (o) => {
     const format = String(o.format).toLowerCase()
     if (format === 'png' || format === 'svg') {
@@ -233,7 +237,7 @@ program
       fs.writeFileSync(out, format === 'svg' ? (r.result as any).svg : Buffer.from(r.image!.data, 'base64'))
       return console.log(`✓ wrote ${out}`)
     }
-    const r = await callCore('export_board', { board: program.opts().board, frame: o.frame, format: format === 'json' ? 'json' : 'markdown' }, caller())
+    const r = await callCore('export_board', { board: program.opts().board, frame: o.frame, format: format === 'json' ? 'json' : 'markdown', images: o.inlineImages ? 'inline' : undefined }, caller())
     if (!r.ok) throw new Error(r.error)
     const res = r.result as { content: string; filename: string }
     if (!o.out) {

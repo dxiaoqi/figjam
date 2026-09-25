@@ -32,9 +32,12 @@ export function buildMcpServer(invoke: (tool: ToolName, args: Record<string, unk
           const result = r.result as any
           const content: any[] = []
           if (r.image) content.push({ type: 'image', data: r.image.data, mimeType: r.image.mimeType })
-          if (result && typeof result.markdown === 'string') content.push({ type: 'text', text: result.markdown })
+          if (name === 'render_snapshot' && args?.raw && typeof result?.svg === 'string') content.push({ type: 'text', text: result.svg })
+          else if (result && typeof result.markdown === 'string') content.push({ type: 'text', text: result.markdown })
           else if (result && typeof result.content === 'string' && name === 'export_board') content.push({ type: 'text', text: result.content })
           else content.push({ type: 'text', text: JSON.stringify(result, null, 2) })
+          // text-only results (markdown, raw svg, exports) still surface adjustments
+          if (result?.warnings?.length && content.every((c) => c.type !== 'text' || !c.text.startsWith('{'))) content.push({ type: 'text', text: `Warnings:\n- ${result.warnings.join('\n- ')}` })
           return { content }
         } catch (e) {
           return { isError: true, content: [{ type: 'text' as const, text: (e as Error).message }] }
