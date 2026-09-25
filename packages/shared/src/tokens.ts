@@ -207,3 +207,12 @@ export function tokenManifest() {
     ],
   }
 }
+/** How a color input was understood: exact token, alias, nearest token to a hex value, or not at all. */
+export function matchColor(input: unknown, fallback: ColorToken = 'yellow'): { token: ColorToken; how: 'token' | 'alias' | 'hex' | 'unknown' } {
+  if (typeof input !== 'string' || !input.trim()) return { token: fallback, how: 'unknown' }
+  const v = input.trim().toLowerCase()
+  if ((COLOR_TOKENS as readonly string[]).includes(v)) return { token: v as ColorToken, how: 'token' }
+  if (COLOR_ALIASES[v]) return { token: COLOR_ALIASES[v], how: 'alias' }
+  if (hexToRgb(v)) return { token: toColorToken(v, fallback), how: 'hex' }
+  return { token: fallback, how: 'unknown' }
+}
