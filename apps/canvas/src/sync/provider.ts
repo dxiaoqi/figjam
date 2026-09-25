@@ -90,7 +90,7 @@ export class CoreProvider {
 
   sendViewport(bounds: Rect) {
     if (this.ws?.readyState !== WebSocket.OPEN) return
-    const msg: ClientMessage = { type: 'viewport', bounds }
+    const msg: ClientMessage = { type: 'viewport', bounds, focused: document.hasFocus() && document.visibilityState === 'visible' }
     this.ws.send(JSON.stringify(msg))
   }
 

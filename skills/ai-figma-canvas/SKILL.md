@@ -15,7 +15,7 @@ or rejects. The layout engine does positioning — you describe content and stru
 
 ## Workflow
 
-1. `get_board` — see frames, blocks and ids before writing. The default board is the one the user has open.
+1. `get_board` — see frames, blocks and ids before writing. Note the board id it returns and pass `board` on every later call (the default is the board open in the canvas, which can change under you). Read `warnings` in results: they report snapping, color fallbacks and ignored arguments.
 2. `begin_change_set` with a one-line intent ("Cluster interview notes by theme").
 3. `create_blocks` with a layout intent. Put related content in a titled frame (`frame: "Competitors"`), or add to an
    existing one (`inside: "<frame id or title>"`). Place new sections with `right_of` / `below` an existing frame.

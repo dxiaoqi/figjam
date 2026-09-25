@@ -45,7 +45,21 @@ minimap, Appearance), opens `.aifig` files from anywhere (Save As keeps the chos
 light/dark setting, and its **Connect agent** dialog points agents at the bundled CLI/MCP.
 
 Boards live in `~/.aifig/boards/<id>.aifig` (Yjs state) with a readable `<id>.json` next to it. Override the
-location with `AIFIG_HOME`, and ports with `AIFIG_CORE_PORT` / `AIFIG_UI_PORT`.
+location with `AIFIG_HOME`, and ports with `AIFIG_CORE_PORT` / `AIFIG_UI_PORT`. `~/.aifig/state.json` remembers the
+board last active in the canvas, which is the default for tools called without `board` (agents should pass it anyway).
+
+**Sandboxed launchers** (agent IDEs or tools that can't write to your home folder or use the GPU): if the core fails
+with `EACCES` or the desktop window stays white, point every writable location somewhere the sandbox allows:
+
+```bash
+AIFIG_HOME=/tmp/aifig npx aifig core                                   # boards, state, logs
+AIFIG_HOME=/tmp/aifig npx electron apps/desktop --user-data-dir=/tmp/aifig-electron --disable-gpu
+```
+
+`--user-data-dir` moves Electron's profile (caches, recent files, keychain-encrypted settings) out of
+`~/Library/Application Support` / `~/.config`; `--disable-gpu` avoids the GPU process and its shader cache. Use the
+same `AIFIG_HOME` in your agent's MCP config (`"env": { "AIFIG_HOME": "/tmp/aifig" }`) so the agent and the app see
+the same boards.
 
 ## Connect an agent
 

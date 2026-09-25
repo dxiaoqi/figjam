@@ -108,7 +108,9 @@ export function BoardCanvas() {
       else timer = setTimeout(report, 250)
     })
     const offStatus = provider.subscribe(() => provider.status === 'connected' && report())
+    window.addEventListener('focus', report)
     return () => {
+      window.removeEventListener('focus', report)
       cancelAnimationFrame(raf)
       offCamera()
       offStatus()

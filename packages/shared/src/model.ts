@@ -186,4 +186,4 @@ export type ServerMessage =
   | { type: 'board-deleted'; boardId: string }
 
 export type ClientMessage =
-  | { type: 'viewport'; bounds: Rect }
+  | { type: 'viewport'; bounds: Rect; focused?: boolean }
