@@ -16,9 +16,9 @@ const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-c
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, hasTouch: true, acceptDownloads: true })
 const page = await context.newPage()
 const errors = []
-page.on('pageerror', (e) => errors.push(e.message))
+page.on('pageerror', (e) => !/boom at runtime/.test(e.message) && errors.push(e.message))
 // the snippet sandbox logs every blocked escape attempt; those are expected
-page.on('console', (m) => m.type() === 'error' && !m.location().url?.startsWith('http://localhost:47822') && !/sandboxed|allow-top-navigation|allow-popups|Content Security Policy/.test(m.text()) && errors.push(m.text()))
+page.on('console', (m) => m.type() === 'error' && !m.location().url?.startsWith('http://localhost:47822') && !/sandboxed|allow-top-navigation|allow-popups|Content Security Policy|Permissions policy violation|boom at runtime/.test(m.text()) && errors.push(m.text()))
 const cdp = await page.context().newCDPSession(page)
 await page.goto(`${base}/?board=${board}`)
 await page.waitForTimeout(2000)
@@ -1178,6 +1178,43 @@ const mdSnip = cli('--board', board, 'export', '--format', 'md')
 const jsonSnip = JSON.parse(cli('--board', board, 'export', '--format', 'json'))
 const svgSnip = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.svg?ids=${snip}`).then((r) => r.text())
 check('exports keep the source (MD/JSON) and a screenshot (PNG/SVG)', mdSnip.includes('### 🌐 Counter') && mdSnip.includes('```js') && jsonSnip.blocks.find((b) => b.id === snip)?.web?.js?.includes('aifig.setState') && svgSnip.includes('<image'), mdSnip.length)
+
+// MCP report 2026-09-25: top-level await, syntax precheck, runtime error overlay, update summary, titles, watch link
+const tla = JSON.parse(cli('--json', '--board', board, '--human', 'call', 'create_snippet', JSON.stringify({ board, at: { x: 22600, y: 12000 }, html: '<h2>Await demo</h2><p id="o">…</p>', js: "const s = await aifig.getState()\ndocument.getElementById('o').textContent = 'ran'\nawait aifig.setState({ ran: true, before: s })" })))
+check('bug 4: a top-level await snippet saves with a warning and gets its heading as title', tla.warnings?.some((w) => w.includes('Top-level `await`')) && (await webOf(tla.id)).title === 'Await demo', JSON.stringify(tla.warnings))
+await ed((i) => { const r = window.editor.pageRect(i); window.editor.zoomToBounds({ x: r.x - 300, y: r.y - 200, w: r.w + 600, h: r.h + 400 }, { animate: false }) }, tla.id)
+await wait(400)
+const tlaPos = await screenOf(tla.id)
+await page.mouse.dblclick(tlaPos.x, tlaPos.y)
+await page.waitForFunction((i) => window.editor.block(i)?.web?.state?.ran === true, tla.id, { timeout: 8000 }).catch(() => {})
+check('bug 4: top-level await runs (wrapped in an async function)', (await webOf(tla.id)).state?.ran === true, JSON.stringify((await webOf(tla.id)).state))
+check('DX 5: the block badge shows the snippet title', ((await blockEl(tla.id).locator('.aifig-web-badge').textContent()) ?? '').includes('Await demo'))
+await ed(() => window.editor.stopEditing())
+let syntaxErr = ''
+try {
+  execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), '--board', board, '--human', 'call', 'create_snippet', JSON.stringify({ board, html: '<p>x</p>', js: 'const a = 1\nconst b = (\nconsole.log(a' })], { encoding: 'utf8', stdio: 'pipe' })
+} catch (e) {
+  syntaxErr = String(e.stderr ?? e.message)
+}
+check('bug 4: a syntax error is refused on save with its line', /JS syntax error on line \d+/.test(syntaxErr) && syntaxErr.includes('Nothing was saved'), syntaxErr.trim().slice(0, 120))
+const boom = JSON.parse(cli('--json', '--board', board, '--human', 'snippet', '--title', 'Boom', '--html', '<p>before</p>', '--js', "setTimeout(() => { throw new Error('boom at runtime') }, 50)", '--at', '23200,12000')).id
+await ed((i) => { const r = window.editor.pageRect(i); window.editor.zoomToBounds({ x: r.x - 300, y: r.y - 200, w: r.w + 600, h: r.h + 400 }, { animate: false }) }, boom)
+await wait(400)
+const boomPos = await screenOf(boom)
+await page.mouse.dblclick(boomPos.x, boomPos.y)
+await wait(1500)
+const overlayText = await page.frameLocator('[data-web-frame]').locator('[data-aifig-error]').textContent({ timeout: 4000 }).catch(() => '')
+check('bug 4: runtime errors show a visible overlay inside the snippet', (overlayText ?? '').includes('boom at runtime'), overlayText)
+await ed(() => window.editor.stopEditing())
+const upd = JSON.parse(cli('--json', '--board', board, '--as', 'Claude Code', 'call', 'update_snippet', JSON.stringify({ board, id: tla.id, js: "const s = await aifig.getState()\nawait aifig.setState({ ran: 2 })" })))
+check('DX 4: update_snippet reports what changed', /^\+\d+ \/ −\d+ lines$/.test(upd.changed?.js ?? '') && !!upd.changeSet, JSON.stringify(upd.changed))
+cli('--board', board, '--human', 'reject')
+await ed((i) => { const r = window.editor.pageRect(i); window.editor.zoomToBounds({ x: r.x - 300, y: r.y - 200, w: r.w + 600, h: r.h + 400 }, { animate: false }) }, yt.id)
+await wait(300)
+await ed((i) => window.editor.select([i]), yt.id)
+await wait(200)
+const watch = await blockEl(yt.id).locator('[data-watch-link]').evaluate((a) => ({ href: a.href, text: a.textContent, visible: getComputedStyle(a).opacity === '1' }))
+check('optional A: a visible “Watch on YouTube” fallback links to the original', watch.href === 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' && watch.text.includes('Watch on YouTube') && watch.visible, JSON.stringify(watch))
 
 // built-in assistant: hidden without a provider, works with the mock provider, never writes keys to the board
 const aiMenu = async () => {

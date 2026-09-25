@@ -228,8 +228,8 @@ export const toolDefs = {
       url: z.string().optional().describe('https URL to embed.'),
       html: z.string().optional().describe('Inline snippet: body HTML.'),
       css: z.string().optional(),
-      js: z.string().optional().describe('Runs after the HTML, as a classic script.'),
-      title: z.string().optional().describe('Shown on the preview.'),
+      js: z.string().optional().describe('Runs after the HTML. Syntax is checked on save. Top-level `await` works (the script is then wrapped in an async function, so use addEventListener instead of inline on*= handlers). Runtime errors show in the snippet.'),
+      title: z.string().optional().describe('Label on the block badge, in exports and get_board. Defaults to the first <h1>–<h3> or <title> in the html. The preview itself shows whatever your html renders.'),
       width: z.number().optional().describe('Default 480.'),
       height: z.number().optional().describe('Default 320 (270 for 16:9 video).'),
       inside: z.string().optional(),
@@ -241,7 +241,8 @@ export const toolDefs = {
   },
   update_snippet: {
     title: 'Update web snippet',
-    description: 'Change a snippet\'s URL, HTML, CSS, JS or title (only the fields you pass). Goes through change-set review, with a diff.',
+    description:
+      'Change a snippet\'s URL, HTML, CSS, JS or title (only the fields you pass). Goes through change-set review, where the person sees a source diff; the result lists what changed (`changed`, e.g. js: "+3 / −1 lines").',
     input: {
       board,
       id: z.string(),

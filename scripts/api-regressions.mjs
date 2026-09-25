@@ -125,6 +125,17 @@ if (typed.created?.length) {
   check('typed blocks: the flat connect shape still suggests a relation', relC?.relation === 'supports', relC?.relation)
 }
 
+// ---- web snippets (bug 4, DX 4/5): checked without a browser; the engine e2e runs them
+const snipOk = await call(HUMAN, 'create_snippet', { board: B, html: '<h1>Calc</h1>', js: 'const s = await aifig.getState()' })
+if (snipOk.ok || !String(snipOk.error).includes('Unknown tool')) {
+  check('bug 4: top-level await is accepted with a warning', snipOk.ok && snipOk.result.warnings?.some((w) => w.includes('Top-level `await`')), JSON.stringify(snipOk.result?.warnings ?? snipOk.error))
+  const bad = await call(HUMAN, 'create_snippet', { board: B, html: '<p/>', js: 'function (' })
+  check('bug 4: syntax errors are refused on save', !bad.ok && /JS syntax error on line 1/.test(bad.error), bad.error)
+  check('DX 5: the title defaults to the first heading', (await call(HUMAN, 'get_board', { board: B, format: 'json' })).result.blocks.find((b) => b.id === snipOk.result.id)?.web?.title === 'Calc')
+  const u = (await call(HUMAN, 'update_snippet', { board: B, id: snipOk.result.id, js: 'const s = await aifig.getState()\nconsole.log(s)' })).result
+  check('DX 4: update_snippet summarizes the change', u.changed?.js === '+1 / −0 lines', JSON.stringify(u.changed))
+}
+
 // ---- DX 6: self-contained exports ----------------------------------------------------------------
 const png1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 await call(HUMAN, 'add_image', { board: B, data: png1x1, at: { x: 4000, y: 0 } })

@@ -56,6 +56,7 @@ import {
 } from './layout'
 import { PresenceHub, identify } from './presence'
 import { renderSnapshot } from './snapshot'
+import { checkSnippetJs } from './snippet-host'
 
 export class ToolError extends Error {}
 
@@ -588,6 +589,13 @@ export class CanvasCore {
       web = { ...(base?.mode === 'inline' ? base : {}), mode: 'inline', html: a.html ?? base?.html ?? '', css: a.css ?? base?.css ?? '', js: a.js ?? base?.js ?? '', title: a.title ?? base?.title }
       if (snippetSourceBytes(web) > SNIPPET_LIMITS.sourceBytes) throw new ToolError(`Snippet source is over ${SNIPPET_LIMITS.sourceBytes / 1024} KB`)
       if (!`${web.html}${web.js}`.trim()) throw new ToolError('An inline snippet needs some html or js')
+      const js = checkSnippetJs(web.js ?? '')
+      if (js.mode === 'error') throw new ToolError(`${js.error}. Nothing was saved.`)
+      if (js.mode === 'async') warn('Top-level `await` found: the script runs inside an async function, so its top-level declarations are not globals — attach handlers with addEventListener rather than inline on*="…" attributes.')
+      if (!web.title) {
+        const heading = (web.html ?? '').match(/<(h[1-3]|title)\b[^>]*>([\s\S]*?)<\/\1>/i)?.[2]?.replace(/<[^>]+>/g, '').trim()
+        if (heading) web.title = heading.slice(0, 80)
+      }
     } else if (base) web = { ...base, title: a.title ?? base.title }
     else throw new ToolError('Pass `url` (https) or an inline `html` / `css` / `js` snippet')
     return web
@@ -629,7 +637,20 @@ export class CanvasCore {
     const { changeSet } = this.edit(board, caller, a.intent, `Update snippet “${preview(web.title ?? '', 30)}”`, (rec) => {
       rec.updateBlock(cur.id, { web, text: web.title ?? '' })
     })
-    return { board: board.id, changeSet, id: cur.id, mode: web.mode }
+    const before = cur.web
+    const lines = (v?: string) => (v ?? '').split('\n')
+    const changed: Record<string, string> = {}
+    for (const k of ['url', 'title', 'html', 'css', 'js'] as const) {
+      if ((before[k] ?? '') === (web[k] ?? '')) continue
+      if (k === 'url' || k === 'title') changed[k] = `${before[k] ?? '—'} → ${web[k] ?? '—'}`
+      else {
+        const a0 = new Set(lines(before[k]))
+        const b0 = new Set(lines(web[k]))
+        changed[k] = `+${lines(web[k]).filter((l) => !a0.has(l)).length} / −${lines(before[k]).filter((l) => !b0.has(l)).length} lines`
+      }
+    }
+    if (!Object.keys(changed).length) warn('Nothing changed — the snippet already had this source.')
+    return { board: board.id, changeSet, id: cur.id, mode: web.mode, changed }
   }
 
   /** The canvas captured a preview inside the sandbox; store it. Not an edit (no change set, not undoable). */

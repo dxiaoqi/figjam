@@ -1,4 +1,5 @@
 import http from 'node:http'
+import vm from 'node:vm'
 import { SNIPPET_LIMITS, SNIPPET_PORT, snippetCsp, type Block } from '@aifig/shared'
 import type { BoardRegistry } from './board'
 
@@ -41,7 +42,30 @@ const BRIDGE = `(() => {
   setInterval(() => send({ type: 'heartbeat', mem: (performance.memory && performance.memory.usedJSHeapSize) || 0, nodes: document.getElementsByTagName('*').length }), 500)
   for (const ev of ['pointerdown', 'keydown', 'wheel']) addEventListener(ev, () => send({ type: 'activity' }), { capture: true, passive: true })
   addEventListener('keydown', (e) => { if (e.key === 'Escape') send({ type: 'exit' }) }, true)
-  addEventListener('error', (e) => send({ type: 'error', message: String(e.message || e).slice(0, 300) }))
+  let overlay = null
+  const showError = (message) => {
+    const text = String(message || 'Error').slice(0, 300)
+    send({ type: 'error', message: text })
+    const put = () => {
+      if (!overlay) {
+        overlay = document.createElement('div')
+        overlay.setAttribute('data-aifig-error', '')
+        overlay.setAttribute('role', 'alert')
+        overlay.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:2147483647;display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 4px 16px rgba(0,0,0,.12)'
+        const close = document.createElement('button')
+        close.textContent = '×'
+        close.setAttribute('aria-label', 'Dismiss')
+        close.style.cssText = 'margin-left:auto;border:0;background:none;color:inherit;font:16px/1 system-ui;cursor:pointer'
+        close.onclick = () => { overlay.remove(); overlay = null }
+        overlay.append(document.createElement('span'), close)
+      }
+      overlay.firstChild.textContent = '⚠ ' + text
+      if (!overlay.isConnected) document.documentElement.appendChild(overlay)
+    }
+    document.body ? put() : addEventListener('DOMContentLoaded', put)
+  }
+  addEventListener('error', (e) => showError(e.message || e.error))
+  addEventListener('unhandledrejection', (e) => showError('Unhandled promise rejection: ' + ((e.reason && e.reason.message) || e.reason)))
   async function capture() {
     try {
       const w = Math.max(1, innerWidth)
@@ -95,8 +119,34 @@ const BASE_CSS = `html,body{margin:0;height:100%}body{font:14px/1.45 Inter,syste
 /** Close a raw-text element the snippet may have left open, so the bridge and structure stay intact. */
 const safeRaw = (s: string, tag: string) => s.replace(new RegExp(`</${tag}`, 'gi'), `<\\/${tag}`)
 
+/**
+ * Classify snippet JS without running it: a classic script, one that needs an async wrapper (top-level
+ * `await`), or a syntax error (with its line).
+ */
+export function checkSnippetJs(js: string): { mode: 'classic' | 'async'; error?: undefined } | { mode: 'error'; error: string } {
+  if (!js.trim()) return { mode: 'classic' }
+  const tryCompile = (code: string) => {
+    try {
+      new vm.Script(code, { filename: 'snippet.js' })
+      return null
+    } catch (e) {
+      return e as Error
+    }
+  }
+  const classic = tryCompile(js)
+  if (!classic) return { mode: 'classic' }
+  if (!tryCompile(asyncWrap(js))) return { mode: 'async' }
+  const line = classic.stack?.match(/snippet\.js:(\d+)/)?.[1]
+  return { mode: 'error', error: `JS syntax error${line ? ` on line ${line}` : ''}: ${classic.message}` }
+}
+
+/** Top-level await needs an async function; a rejection surfaces in the snippet's error overlay. */
+const asyncWrap = (js: string) => `(async () => {\n${js}\n})()`
+
 export function snippetDocument(web: NonNullable<Block['web']>) {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><style>${BASE_CSS}</style><style>${safeRaw(web.css ?? '', 'style')}</style><script>${BRIDGE}</script></head><body>${web.html ?? ''}<script>${safeRaw(web.js ?? '', 'script')}</script></body></html>`
+  const js = web.js ?? ''
+  const code = checkSnippetJs(js).mode === 'async' ? asyncWrap(js) : js
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><style>${BASE_CSS}</style><style>${safeRaw(web.css ?? '', 'style')}</style><script>${BRIDGE}</script></head><body>${web.html ?? ''}<script>${safeRaw(code, 'script')}</script></body></html>`
 }
 
 /**

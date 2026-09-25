@@ -1,4 +1,4 @@
-import { Code2, Globe, Play, TriangleAlert } from 'lucide-react'
+import { Code2, ExternalLink, Globe, Play, TriangleAlert } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { intersects, type BlockRenderProps, type Editor } from '@aifig/canvas-engine'
@@ -258,8 +258,24 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
       )}
       <div className="aifig-web-badge">
         {web.mode === 'url' ? <Play className="size-3" fill="currentColor" /> : <Code2 className="size-3" />}
-        {running ? 'Running · Esc to stop' : web.mode === 'url' ? web.provider : 'Snippet'}
+        <span className="truncate">{running ? `${snippetLabel(web)} · Esc to stop` : snippetLabel(web)}</span>
       </div>
+      {web.mode === 'url' && web.url && (
+        <a
+          data-ui
+          data-watch-link
+          className={cn('aifig-web-watch', running && 'is-running')}
+          href={web.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onPointerDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          title={`Open ${web.url}`}
+        >
+          {running ? `Not playing? Watch on ${web.provider ?? 'the site'}` : `Watch on ${web.provider ?? 'the site'}`}
+          <ExternalLink className="size-3" />
+        </a>
+      )}
       {!running && !stopped && <div className="aifig-web-hint">Double-click to {web.mode === 'url' ? 'open' : 'run'}</div>}
       {stopped && !running && (
         <div className="aifig-web-stopped" data-web-stopped>

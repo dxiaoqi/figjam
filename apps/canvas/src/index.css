@@ -404,6 +404,42 @@
   backdrop-filter: blur(6px);
   pointer-events: none;
 }
+.aifig-web-badge span {
+  max-width: 240px;
+}
+/* third-party embeds can fail inside their own frame (bot checks, region locks) where we can't see it: always offer the original */
+.aifig-web-watch {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #fff;
+  background: rgb(0 0 0 / 0.62);
+  backdrop-filter: blur(6px);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 140ms ease-out, background-color 140ms ease-out;
+}
+.aifig-web-watch.is-running,
+.ae-block:hover .aifig-web-watch,
+.ae-block.is-selected .aifig-web-watch {
+  opacity: 1;
+}
+.aifig-web-watch.is-running {
+  top: 8px;
+  bottom: auto;
+}
+.aifig-web-watch:hover {
+  background: rgb(0 0 0 / 0.8);
+}
 .aifig-web-hint {
   position: absolute;
   inset: auto 0 0 0;

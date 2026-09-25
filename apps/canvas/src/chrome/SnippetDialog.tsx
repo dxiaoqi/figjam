@@ -54,13 +54,15 @@ export function SnippetDialog() {
     setBusy(true)
     const src = tab === 'url' ? { url: url.trim() } : { html, css, js }
     try {
-      if (req.id) await callCore('update_snippet', { board: boardId, id: req.id, title: title || undefined, ...src })
+      const notify = (r: { warnings?: string[] }) => r.warnings?.forEach((w) => toast.warning(w))
+      if (req.id) notify(await callCore('update_snippet', { board: boardId, id: req.id, title: title || undefined, ...src }))
       else {
         const at = req.at ?? (() => {
           const vp = editor.viewportPageBounds()
           return { x: vp.x + vp.w / 2 - 240, y: vp.y + vp.h / 2 - 160 }
         })()
-        const r = await callCore<{ id: string }>('create_snippet', { board: boardId, title: title || undefined, at, ...src })
+        const r = await callCore<{ id: string; warnings?: string[] }>('create_snippet', { board: boardId, title: title || undefined, at, ...src })
+        notify(r)
         if (r.id) setTimeout(() => editor.select([r.id]), 150)
       }
       setReq(null)
