@@ -1,11 +1,16 @@
-import type { Block, CallerInfo } from '@aifig/shared'
+import fs from 'node:fs'
+import path from 'node:path'
+import { hostOf, type Block, type CallerInfo } from '@aifig/shared'
+import type { ActivityLog } from './activity'
 import type { CanvasCore } from './api'
 import { ToolError } from './api'
+import type { SecretStore } from './secrets'
 
 /**
  * The optional built-in assistant: a thin Canvas API client that runs a few selection commands.
- * Its provider settings (including any API key) live in memory only — the desktop app hands them over from the
- * OS keychain at startup. Nothing is written to boards or disk here.
+ * Provider settings come from the desktop app (which keeps the key with Electron safeStorage and hands it over in
+ * memory) or from the canvas in a browser (the key goes to the core's SecretStore — OS keychain, else this session
+ * only). Keys are never written to boards or to plain files.
  */
 
 export type ProviderName = 'mock' | 'openai' | 'anthropic'
@@ -96,16 +101,82 @@ function mock(): Provider {
 
 // ---- assistant ------------------------------------------------------------------
 
+const PROVIDERS: ProviderName[] = ['mock', 'openai', 'anthropic']
+const secretName = (p: ProviderName) => `assistant.${p}`
+
 export class Assistant {
   private config: AssistantConfig = { provider: null }
+  /** where the current key came from */
+  private keySource: 'desktop' | 'store' | 'env' | null = null
 
-  constructor(private core: CanvasCore) {
+  constructor(
+    private core: CanvasCore,
+    private secrets?: SecretStore,
+    private log?: ActivityLog,
+    private settingsFile?: string,
+  ) {
     const env = process.env.AIFIG_ASSISTANT as ProviderName | undefined
-    if (env) this.configure({ provider: env, key: process.env.AIFIG_ASSISTANT_KEY, model: process.env.AIFIG_ASSISTANT_MODEL, baseUrl: process.env.AIFIG_ASSISTANT_BASE_URL })
+    if (env) {
+      this.configure({ provider: env, key: process.env.AIFIG_ASSISTANT_KEY, model: process.env.AIFIG_ASSISTANT_MODEL, baseUrl: process.env.AIFIG_ASSISTANT_BASE_URL })
+      this.keySource = 'env'
+    }
   }
 
+  static settingsPath(home: string) {
+    return path.join(home, 'assistant.json')
+  }
+
+  /** Restore browser-made settings: non-secret parts from assistant.json, the key from the SecretStore. */
+  async load() {
+    if (this.config.provider || !this.settingsFile) return
+    let saved: Omit<AssistantConfig, 'key'>
+    try {
+      saved = JSON.parse(fs.readFileSync(this.settingsFile, 'utf8'))
+    } catch {
+      return
+    }
+    if (!saved.provider || !PROVIDERS.includes(saved.provider)) return
+    const key = saved.provider === 'mock' ? '' : ((await this.secrets?.get(secretName(saved.provider)).catch(() => null)) ?? '')
+    this.config = { provider: saved.provider, model: saved.model, baseUrl: saved.baseUrl, key }
+    this.keySource = key ? 'store' : null
+  }
+
+  /** In-memory settings pushed by the desktop shell (it owns persistence via safeStorage). */
   configure(cfg: AssistantConfig | null) {
     this.config = cfg?.provider ? { ...cfg } : { provider: null }
+    this.keySource = cfg?.key ? 'desktop' : null
+  }
+
+  /** Settings made in the canvas without the desktop app. The key never touches assistant.json. */
+  async save(cfg: AssistantConfig | null, actor: CallerInfo) {
+    const provider = cfg?.provider && PROVIDERS.includes(cfg.provider) ? cfg.provider : null
+    if (!provider) {
+      if (this.settingsFile) fs.rmSync(this.settingsFile, { force: true })
+      for (const p of PROVIDERS) if (p !== 'mock') await this.secrets?.delete(secretName(p)).catch(() => {})
+      this.configure(null)
+      return { persisted: false }
+    }
+    let key = provider === 'mock' ? '' : (cfg?.key ?? '')
+    if (provider !== 'mock') {
+      if (!this.secrets) throw new ToolError('No secret store is available')
+      if (key) await this.secrets.set(secretName(provider), key)
+      else key = (await this.secrets.get(secretName(provider))) ?? (this.config.provider === provider ? (this.config.key ?? '') : '')
+      if (!key) throw new ToolError('Add an API key for this provider')
+    }
+    if (this.settingsFile) {
+      fs.mkdirSync(path.dirname(this.settingsFile), { recursive: true, mode: 0o700 })
+      fs.writeFileSync(this.settingsFile, JSON.stringify({ provider, model: cfg?.model || '', baseUrl: cfg?.baseUrl || '' }), { mode: 0o600 })
+    }
+    this.config = { provider, key, model: cfg?.model || '', baseUrl: cfg?.baseUrl || '' }
+    this.keySource = key ? 'store' : null
+    this.log?.record({ category: 'secret', action: 'configure', outcome: 'ok', actor, target: `assistant · ${provider}`, via: this.secrets?.backend })
+    return { persisted: provider === 'mock' || !!this.secrets?.persistent }
+  }
+
+  /** Non-secret view for the settings dialog. */
+  settings() {
+    const { provider, model, baseUrl, key } = this.config
+    return { provider, model: model ?? '', baseUrl: baseUrl ?? '', hasKey: !!key, keySource: this.keySource, store: this.secrets ? { backend: this.secrets.backend, persistent: this.secrets.persistent, osBacked: this.secrets.osBacked } : null }
   }
 
   status() {
@@ -117,7 +188,21 @@ export class Assistant {
   private provider(): Provider {
     const s = this.status()
     if (!s.available) throw new ToolError('The assistant is off. Add a model provider in Assistant Settings.')
-    return this.config.provider === 'mock' ? mock() : this.config.provider === 'anthropic' ? anthropic(this.config) : openai(this.config)
+    if (this.config.provider === 'mock') return mock()
+    const inner = this.config.provider === 'anthropic' ? anthropic(this.config) : openai(this.config)
+    const host = hostOf(this.config.baseUrl || (this.config.provider === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com'))
+    return {
+      json: async (system, user) => {
+        try {
+          const out = await inner.json(system, user)
+          this.log?.record({ category: 'network', action: 'model-call', outcome: 'ok', actor: CALLER, source: { kind: 'assistant', id: this.config.provider! }, target: host, via: 'user-configured', detail: `${this.keySource ?? 'no'} key` })
+          return out
+        } catch (e) {
+          this.log?.record({ category: 'network', action: 'model-call', outcome: 'error', actor: CALLER, source: { kind: 'assistant', id: this.config.provider! }, target: host, via: 'user-configured', detail: (e as Error).message })
+          throw e
+        }
+      },
+    }
   }
 
   async run(boardRef: string | undefined, command: AssistantCommand, ids: string[]) {

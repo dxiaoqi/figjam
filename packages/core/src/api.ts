@@ -2,6 +2,10 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
+import { hostOf } from '@aifig/shared'
+import type { ActivityLog } from './activity'
+import { guardedFetch, NetGuardError } from './net-guard'
+import { deniedMessage, type PermissionAsk, type PermissionBroker } from './permissions'
 import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
 import { bytesToBase64, COLOR_TOKENS, fitHeight, imageInfo, matchColor, maxBlockHeight, measureSticky, stickyContentHeight } from '@aifig/shared'
 import {
@@ -224,6 +228,8 @@ export class CanvasCore {
   /** Board each agent session last used, so defaults stay stable within a session. */
   private sessionBoards = new Map<string, string>()
   private persistTimer: ReturnType<typeof setTimeout> | null = null
+  /** Set by the server; without them (unit use) outbound fetches are refused. */
+  security: { permissions?: PermissionBroker; activity?: ActivityLog } = {}
 
   private get statePath() {
     return path.join(aifigHome(), 'state.json')
@@ -601,12 +607,40 @@ export class CanvasCore {
     return web
   }
 
-  private async posterFor(board: Board, web: WebSnippet) {
+  /**
+   * Fetch something from the network on the caller's behalf: asks the permission broker (people are trusted,
+   * agents need a grant or a yes in the canvas), refuses local/private addresses, and logs the outcome.
+   */
+  async fetchFor(caller: CallerInfo, url: string, source: PermissionAsk['source'], reason: string, opts: { policy?: string; maxBytes?: number; timeoutMs?: number } = {}) {
+    const { permissions, activity } = this.security
+    if (!permissions || !activity) throw new ToolError('Network access is not available')
+    const target = hostOf(url)
+    if (!opts.policy) {
+      const ask: PermissionAsk = { capability: 'network', target, actor: caller, source, reason }
+      const decision = await permissions.request(ask)
+      if (!decision.granted) {
+        activity.record({ category: 'network', action: 'fetch', outcome: 'denied', actor: caller, source, target, via: decision.via })
+        throw new ToolError(deniedMessage(ask, decision))
+      }
+    }
+    try {
+      const r = await guardedFetch(url, { maxBytes: opts.maxBytes, timeoutMs: opts.timeoutMs })
+      activity.record({ category: 'network', action: 'fetch', outcome: r.ok ? 'ok' : 'error', actor: caller, source, target: hostOf(r.finalUrl) === target ? target : `${target} → ${hostOf(r.finalUrl)}`, via: opts.policy ?? 'permission', detail: r.ok ? `${r.bytes.byteLength} bytes` : `HTTP ${r.status}` })
+      return r
+    } catch (e) {
+      activity.record({ category: 'network', action: 'fetch', outcome: e instanceof NetGuardError ? 'denied' : 'error', actor: caller, source, target, via: opts.policy ?? 'permission', detail: (e as Error).message })
+      if (e instanceof NetGuardError) throw new ToolError(e.message)
+      throw new ToolError(`Download failed for ${target}: ${(e as Error).message}`)
+    }
+  }
+
+  private async posterFor(board: Board, web: WebSnippet, caller: CallerInfo) {
     if (!web.posterUrl || (web.thumb && web.thumbFor === snippetHash(web))) return web
     try {
-      const r = await fetch(web.posterUrl, { signal: AbortSignal.timeout(4000) })
+      // poster URLs are derived by normalizeEmbedUrl for known providers, never taken from the caller
+      const r = await this.fetchFor(caller, web.posterUrl, { kind: 'tool', id: 'create_snippet', board: board.id }, 'Fetch the video poster', { policy: 'provider-poster', timeoutMs: 4000, maxBytes: SNIPPET_LIMITS.thumbBytes })
       if (!r.ok) return web
-      const bytes = new Uint8Array(await r.arrayBuffer())
+      const bytes = r.bytes
       const info = imageInfo(bytes)
       if (!info || bytes.byteLength > SNIPPET_LIMITS.thumbBytes) return web
       const id = `a${newId()}`
@@ -620,7 +654,7 @@ export class CanvasCore {
   private async createSnippet(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
     let web = this.snippetFrom(a)
-    web = await this.posterFor(board, web)
+    web = await this.posterFor(board, web, caller)
     const video = web.mode === 'url' && /YouTube|Vimeo|Loom/.test(web.provider ?? '')
     const w = snap(Math.min(Math.max(a.width ?? 480, 160), 1600))
     const h = snap(Math.min(Math.max(a.height ?? (video ? Math.round((w * 9) / 16) : 320), 120), 1200))
@@ -633,7 +667,7 @@ export class CanvasCore {
     const cur = board.blocks.get(a.id) ?? board.resolve(a.id)
     if (!cur || cur.kind !== 'web' || !cur.web) throw new ToolError(`No web snippet "${a.id}"`)
     let web = this.snippetFrom(a, cur.web)
-    web = await this.posterFor(board, web)
+    web = await this.posterFor(board, web, caller)
     const { changeSet } = this.edit(board, caller, a.intent, `Update snippet “${preview(web.title ?? '', 30)}”`, (rec) => {
       rec.updateBlock(cur.id, { web, text: web.title ?? '' })
     })
@@ -1083,9 +1117,9 @@ export class CanvasCore {
       if (!fs.existsSync(a.path)) throw new ToolError(`No file at ${a.path}`)
       bytes = new Uint8Array(fs.readFileSync(a.path))
     } else if (a.url) {
-      const r = await fetch(a.url, { signal: AbortSignal.timeout(15000) })
-      if (!r.ok) throw new ToolError(`Download failed (${r.status}) for ${a.url}`)
-      bytes = new Uint8Array(await r.arrayBuffer())
+      const r = await this.fetchFor(caller, String(a.url), { kind: 'tool', id: 'add_image', board: board.id }, 'Download an image to place on the board')
+      if (!r.ok) throw new ToolError(`Download failed (${r.status}) for ${hostOf(String(a.url))}`)
+      bytes = r.bytes
     } else if (a.data) {
       bytes = new Uint8Array(Buffer.from(String(a.data).replace(/^data:[^,]+,/, ''), 'base64'))
     } else throw new ToolError('Provide path, url or data')

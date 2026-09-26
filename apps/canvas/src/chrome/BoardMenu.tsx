@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -100,6 +100,11 @@ export function BoardMenu() {
           >
             <Pencil className="size-4" /> Rename…
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:activity'))}>
+            <ShieldCheck className="size-4" /> Activity & permissions…
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
             <Trash2 className="size-4" /> Delete board…
           </DropdownMenuItem>

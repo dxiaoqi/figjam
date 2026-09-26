@@ -1,4 +1,5 @@
 import { toast } from 'sonner'
+import { apiFetch } from './auth'
 
 export type ExportFormat = 'png' | 'svg'
 
@@ -6,7 +7,7 @@ export type ExportFormat = 'png' | 'svg'
 async function fetchSnapshot(boardId: string, format: ExportFormat, opts: { ids?: string[]; theme: 'light' | 'dark' }) {
   const q = new URLSearchParams({ theme: opts.theme })
   if (opts.ids?.length) q.set('ids', opts.ids.join(','))
-  const r = await fetch(`/api/boards/${encodeURIComponent(boardId)}/snapshot.${format}?${q}`)
+  const r = await apiFetch(`/api/boards/${encodeURIComponent(boardId)}/snapshot.${format}?${q}`)
   if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Export failed (${r.status})`)
   return r.blob()
 }
@@ -40,7 +41,7 @@ export async function copySnapshot(boardId: string, opts: { ids?: string[]; them
 /** Markdown or JSON document export (rendered by the core). */
 export async function downloadDocument(boardId: string, format: 'md' | 'json') {
   try {
-    const r = await fetch(`/api/boards/${encodeURIComponent(boardId)}/export.${format}`)
+    const r = await apiFetch(`/api/boards/${encodeURIComponent(boardId)}/export.${format}`)
     if (!r.ok) throw new Error(`Export failed (${r.status})`)
     const name = decodeURIComponent(r.headers.get('content-disposition')?.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? `board.${format}`)
     const url = URL.createObjectURL(await r.blob())

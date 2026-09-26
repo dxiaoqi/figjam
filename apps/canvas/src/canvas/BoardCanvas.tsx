@@ -5,7 +5,9 @@ import { COLORS, SURFACES, type Author, type Block } from '@aifig/shared'
 import { useBoard, useProviderState } from '../board-context'
 import { BoardMenu } from '../chrome/BoardMenu'
 import { ContextMenu } from '../chrome/ContextMenu'
+import { ActivityDialog } from '../chrome/ActivityDialog'
 import { AssistantSettings } from '../chrome/AssistantSettings'
+import { PermissionPrompt } from '../chrome/PermissionPrompt'
 import { EmptyState } from '../chrome/EmptyState'
 import { ReviewPanel } from '../chrome/ReviewPanel'
 import { StatusBanner } from '../chrome/StatusBanner'
@@ -147,6 +149,8 @@ export function BoardCanvas() {
           return window.dispatchEvent(new Event('aifig:toggle-minimap'))
         case 'assistant-settings':
           return window.dispatchEvent(new Event('aifig:assistant-settings'))
+        case 'activity':
+          return window.dispatchEvent(new Event('aifig:activity'))
         case 'export':
           if (payload === 'png' || payload === 'svg') return downloadSnapshot(boardId, document.title.replace(/ — ai-figma$/, ''), payload, { ids: ids.length ? ids : undefined, theme: themeMode })
           return downloadDocument(boardId, payload === 'json' ? 'json' : 'md')
@@ -182,6 +186,8 @@ export function BoardCanvas() {
           <ReviewPanel />
           <ContextMenu />
           <AssistantSettings />
+          <ActivityDialog />
+          <PermissionPrompt />
           <SnippetDialog />
           <StatusBanner />
         </EditorContext.Provider>
