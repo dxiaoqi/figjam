@@ -6,23 +6,26 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useBoard } from '../board-context'
 import { mcpSnippets } from '../lib/core'
+import { tn, useT } from '../i18n'
+import { AgentSetup } from './AgentSetup'
 
 export function CopyBlock({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false)
+  const t = useT()
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
-      toast.success(`${label} copied`)
+      toast.success(t('common.copied', { label }))
       setTimeout(() => setCopied(false), 1600)
     } catch {
-      toast.error('Clipboard is not available — select the text and copy it manually.')
+      toast.error(t('common.clipboardUnavailable'))
     }
   }
   return (
     <div className="group relative">
       <pre className="max-h-64 overflow-auto rounded-lg border bg-muted/60 p-3 pr-12 font-mono text-[12px] leading-relaxed whitespace-pre-wrap break-all select-all">{text}</pre>
-      <Button size="icon" variant="ghost" className="absolute top-1.5 right-1.5 size-8" onClick={copy} aria-label={`Copy ${label}`}>
+      <Button size="icon" variant="ghost" className="absolute top-1.5 right-1.5 size-8" onClick={copy} aria-label={t('common.copy', { label })}>
         {copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
       </Button>
     </div>
@@ -31,17 +34,22 @@ export function CopyBlock({ text, label }: { text: string; label: string }) {
 
 export function ConnectDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { health } = useBoard()
-  const s = mcpSnippets(health)
+  const t = useT()
+  const s = mcpSnippets(health, t('connect.cliExample').split('|') as [string, string, string])
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="max-h-[calc(100dvh-32px)] overflow-x-hidden overflow-y-auto sm:max-w-xl [&>*]:min-w-0" data-connect-dialog>
         <DialogHeader>
-          <DialogTitle>Connect an agent</DialogTitle>
-          <DialogDescription>
-            Agents drive this canvas through the local MCP server or the <code className="font-mono">aifig</code> CLI. Their edits appear live with a cursor
-            and wait for your review.
-          </DialogDescription>
+          <DialogTitle>{t('connect.title')}</DialogTitle>
+          <DialogDescription>{tn('connect.description', { cli: <code className="font-mono">aifig</code> })}</DialogDescription>
         </DialogHeader>
+        <section className="space-y-2">
+          <h3 className="text-xs font-medium text-muted-foreground">{t('connect.oneClick')}</h3>
+          {open && <AgentSetup />}
+        </section>
+        <h3 className="-mb-1 text-xs font-medium text-muted-foreground">
+          {t('connect.manual')} <span className="font-normal">· {t('connect.manualHint')}</span>
+        </h3>
         <Tabs defaultValue="claude">
           <TabsList>
             <TabsTrigger value="claude">Claude Code</TabsTrigger>
@@ -50,26 +58,27 @@ export function ConnectDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             <TabsTrigger value="cli">CLI</TabsTrigger>
           </TabsList>
           <TabsContent value="claude" className="space-y-2 pt-2">
-            <p className="text-sm text-muted-foreground">Run once in your terminal:</p>
-            <CopyBlock label="Claude Code command" text={s.claude} />
-            <p className="text-sm text-muted-foreground">Then ask: “Put the three options we discussed on the ai-figma board as cards, grouped by risk.”</p>
+            <p className="text-sm text-muted-foreground">{t('connect.runOnce')}</p>
+            <CopyBlock label={t('connect.claudeLabel')} text={s.claude} />
+            <p className="text-sm text-muted-foreground">{t('connect.claudeThen')}</p>
           </TabsContent>
           <TabsContent value="cursor" className="space-y-2 pt-2">
             <p className="text-sm text-muted-foreground">
-              Add to <code className="font-mono">~/.cursor/mcp.json</code> (or your project’s <code className="font-mono">.cursor/mcp.json</code>):
+              {tn('connect.cursorAdd', { global: <code className="font-mono">~/.cursor/mcp.json</code>, project: <code className="font-mono">.cursor/mcp.json</code> })}
             </p>
-            <CopyBlock label="Cursor MCP config" text={s.cursor} />
+            <CopyBlock label={t('connect.cursorLabel')} text={s.cursor} />
           </TabsContent>
           <TabsContent value="http" className="space-y-2 pt-2">
             <p className="text-sm text-muted-foreground">
-              While ai-figma is running, agents can also connect over local HTTP (Streamable HTTP) at <code className="font-mono">{s.url}</code> — no process to launch.
+              {tn('connect.http', { url: <code className="font-mono">{s.url}</code> })}
+              {tn('connect.httpToken', { cmd: <code className="font-mono">aifig token --rotate</code> })}
             </p>
-            <CopyBlock label="Claude Code HTTP command" text={s.claudeHttp} />
-            <CopyBlock label="Cursor HTTP config" text={s.cursorHttp} />
+            <CopyBlock label={t('connect.claudeHttpLabel')} text={s.claudeHttp} />
+            <CopyBlock label={t('connect.cursorHttpLabel')} text={s.cursorHttp} />
           </TabsContent>
           <TabsContent value="cli" className="space-y-2 pt-2">
-            <p className="text-sm text-muted-foreground">Scripts and agents without MCP can use the CLI:</p>
-            <CopyBlock label="CLI example" text={s.cli} />
+            <p className="text-sm text-muted-foreground">{t('connect.cli')}</p>
+            <CopyBlock label={t('connect.cliLabel')} text={s.cli} />
           </TabsContent>
         </Tabs>
       </DialogContent>

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { COLOR_TOKENS, SIZE_TOKENS } from './tokens'
-import { BLOCK_TYPE_IDS, RELATIONS } from './types'
+import { RELATIONS } from './types'
+import { CONTENT_LANGUAGES, TEMPLATE_IDS } from './templates'
 
 /**
  * Canvas API contract. Every surface (MCP, CLI, UI) calls the core with one of these tools.
@@ -29,9 +30,9 @@ const routeStyle = z
   .optional()
   .describe('Connector routing: curved (default, flows around blocks), elbow (right angles, avoids blocks) or straight.')
 
-const blockType = z.enum(BLOCK_TYPE_IDS)
+const blockType = z.string().describe('Built-in type (insight, question, quote, hypothesis, idea, todo) or a skill type enabled on the board (e.g. research.quote; see list_types / list_skills).')
 const typeFieldsInput = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
-const relation = z.enum(RELATIONS).optional().describe('Optional meaning, e.g. a quote "supports" an insight. Suggested automatically between typed blocks.')
+const relation = z.string().optional().describe(`Optional meaning (${RELATIONS.join(', ')}, or a verb a skill declares), e.g. a quote "supports" an insight. Suggested automatically between typed blocks.`)
 
 const blockInput = z.object({
   kind: z
@@ -45,6 +46,9 @@ const blockInput = z.object({
   type: blockType.optional().describe('Optional built-in type (see list_types): insight, question, quote, hypothesis, idea, todo. Sets the color and icon.'),
   fields: typeFieldsInput.optional().describe('Field values for the type, e.g. {"status":"unverified"} for a hypothesis (see list_types).'),
   group: z.string().optional().describe('Group name, used by layout "cluster" (one column per group, with a heading).'),
+  row: z.string().optional().describe('Layout "matrix": row label.'),
+  col: z.string().optional().describe('Layout "matrix": column label.'),
+  date: z.string().optional().describe('Layout "timeline": date or sortable label (e.g. 2026-03, Q2, v1.4).'),
   ref: z.string().optional().describe('Local name for this block, so other blocks in the same call can reference it as parent.'),
   parent: z
     .string()
@@ -60,8 +64,17 @@ export const toolDefs = {
   },
   create_board: {
     title: 'Create board',
-    description: 'Create a new empty board.',
-    input: { title: z.string().describe('Board title') },
+    description: `Create a new board — empty, or from a template (${TEMPLATE_IDS.join(', ')}; see list_templates). Template content is laid out by the engine with typed blocks and applies directly (no review), so you can build on it right away.`,
+    input: {
+      title: z.string().optional().describe('Board title. Defaults to the template name, or "Untitled board".'),
+      template: z.enum(TEMPLATE_IDS).optional().describe('Start from a template.'),
+      language: z.enum(CONTENT_LANGUAGES).optional().describe('Language of the template content: en (default) or zh-CN.'),
+    },
+  },
+  list_templates: {
+    title: 'List templates',
+    description: 'Board templates for create_board: id, title and what each contains.',
+    input: {},
   },
   get_board: {
     title: 'Read board',
@@ -86,7 +99,7 @@ export const toolDefs = {
     input: {
       board,
       blocks: z.array(blockInput).min(1).describe('Blocks to create, in reading order.'),
-      layout: z.enum(['grid', 'row', 'stack', 'cluster', 'tree']).optional(),
+      layout: z.enum(['grid', 'row', 'stack', 'cluster', 'tree', 'matrix', 'timeline', 'flow']).optional().describe('grid, row, stack, cluster (by `group`), tree (by `parent`), matrix (by `row` × `col`), timeline (ordered by `date`), flow (steps in order, joined by arrows).'),
       columns: z.number().int().min(1).max(60).optional().describe('Columns for grid layout.'),
       direction: z.enum(['right', 'down']).optional().describe('Tree direction (default right).'),
       frame: z.string().optional().describe('Wrap the new blocks in a new frame with this title.'),
@@ -154,12 +167,12 @@ export const toolDefs = {
       board,
       ids: z.array(z.string()).min(1).optional(),
       connectors: z
-        .array(z.object({ id: z.string(), route: routeStyle, label: z.string().optional(), relation: z.enum([...RELATIONS, 'none']).optional(), waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional() }))
+        .array(z.object({ id: z.string(), route: routeStyle, label: z.string().optional(), relation: z.string().optional(), waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional() }))
         .min(1)
         .optional(),
       route: routeStyle,
       label: z.string().optional(),
-      relation: z.enum([...RELATIONS, 'none']).optional().describe('Set the relation, or "none" to clear it.'),
+      relation: z.string().optional().describe('Set the relation, or "none" to clear it.'),
       waypoints: z
         .array(z.object({ x: z.number(), y: z.number() }))
         .optional()
@@ -197,8 +210,11 @@ export const toolDefs = {
     input: {
       board,
       ids: z.array(z.string()).min(1),
-      layout: z.enum(['grid', 'row', 'stack']),
+      layout: z.enum(['grid', 'row', 'stack', 'matrix', 'timeline', 'flow']),
       columns: z.number().int().min(1).max(12).optional(),
+      rows_field: z.string().optional().describe('matrix: field of typed blocks for rows ("type" for the block type).'),
+      cols_field: z.string().optional().describe('matrix: field for columns.'),
+      date_field: z.string().optional().describe('timeline: field with the date; blocks without it keep their order.'),
       intent,
     },
   },
@@ -254,6 +270,28 @@ export const toolDefs = {
       intent,
     },
   },
+  list_skills: {
+    title: 'List skills',
+    description:
+      'Skills installed on this machine and which are enabled on the board. An enabled skill adds block types (use them in create_blocks / set_type), layouts, prompt templates and actions — read get_skill for its instructions before using it.',
+    input: { board },
+  },
+  get_skill: {
+    title: 'Read a skill',
+    description: 'A skill\'s instructions (its SKILL.md), block types with fields and card templates, layouts, prompts and actions. Follow the instructions when working with its blocks.',
+    input: { name: z.string() },
+  },
+  apply_skill_layout: {
+    title: 'Apply a skill layout',
+    description: 'Arrange blocks with one of an enabled skill\'s layouts (e.g. competitor-kit.positioning-matrix). Goes through review.',
+    input: { board, layout: z.string().describe('<skill>.<layout> from get_skill'), frame: z.string().optional(), intent },
+  },
+  run_skill_action: {
+    title: 'Run a skill action',
+    description:
+      'Run an action an enabled skill defines (it calls a tool by name, e.g. web search) on blocks. The first time a skill uses a tool the person is asked in the canvas (the call waits for their answer); results arrive as a change set. Every call is logged.',
+    input: { board, skill: z.string(), action: z.string(), ids: z.array(z.string()).min(1).describe('Blocks to run it on') },
+  },
   list_types: {
     title: 'List block types',
     description: 'The built-in block types (insight, question, quote, hypothesis, idea, todo) with their fields, colors, prefixes and suggested connector relations.',
@@ -266,7 +304,7 @@ export const toolDefs = {
     input: {
       board,
       ids: z.array(z.string()).min(1),
-      type: z.enum([...BLOCK_TYPE_IDS, 'none']).optional().describe('New type, or "none" to demote to a plain block. Omit to only update fields.'),
+      type: z.string().optional().describe('New type (built-in or an enabled skill type), or "none" to demote to a plain block. Omit to only update fields.'),
       fields: typeFieldsInput.optional(),
       intent,
     },
@@ -276,7 +314,7 @@ export const toolDefs = {
     description: 'Find blocks by type and field values, e.g. type "hypothesis" where {"status":"unverified"}. Returns ids, text and fields.',
     input: {
       board,
-      type: z.enum([...BLOCK_TYPE_IDS, 'none']).optional().describe('"none" finds untyped stickies/cards.'),
+      type: z.string().optional().describe('Built-in or skill type; "none" finds untyped stickies/cards.'),
       where: typeFieldsInput.optional(),
       frame: z.string().optional(),
     },
@@ -348,6 +386,26 @@ export const toolDefs = {
     description: 'The allowed colors, sizes and spacing. Blocks can only use these values.',
     input: {},
   },
+  list_versions: {
+    title: 'List versions',
+    description: 'Version history of a board, newest first: automatic snapshots, named checkpoints and the state before each restore.',
+    input: { board, limit: z.number().int().min(1).max(200).optional().describe('Default 50.') },
+  },
+  create_version: {
+    title: 'Create checkpoint',
+    description: 'Save a named checkpoint of the board (kept until someone deletes it). Good before a large reorganization.',
+    input: { board, name: z.string().min(1).max(120).describe('Short name, e.g. "Before clustering".') },
+  },
+  restore_version: {
+    title: 'Restore version',
+    description:
+      'Bring the board back to a version from list_versions. The current state is checkpointed first. From an agent the restore is a change set the human reviews; it can be undone like any other change.',
+    input: {
+      board,
+      version: z.string().describe('Version id from list_versions.'),
+      intent,
+    },
+  },
 } as const
 
 export type ToolName = keyof typeof toolDefs
@@ -374,6 +432,22 @@ export const humanToolDefs = {
   report_snippet_thumb: {
     input: { board, id: z.string(), hash: z.string(), png: z.string().describe('base64 PNG captured inside the sandbox') },
   },
+  enable_skill: { input: { board, name: z.string() } },
+  disable_skill: { input: { board, name: z.string() } },
+  install_skill: { input: { path: z.string().describe('Folder containing SKILL.md') } },
+  load_dev_skill: { input: { path: z.string() } },
+  list_activity: { input: { board, skill: z.string().optional(), limit: z.number().optional() } },
+  save_block_type: {
+    input: {
+      board,
+      block: z.string().describe('Sticky or card to learn the type from'),
+      label: z.string(),
+      skill: z.string().optional().describe('Skill folder name (kebab-case); default "<board>-types"'),
+      color: z.string().optional(),
+      icon: z.string().optional(),
+      fields: z.array(z.object({ key: z.string(), label: z.string(), kind: z.enum(['text', 'number', 'enum', 'boolean']), options: z.array(z.string()).optional() })).optional(),
+    },
+  },
   report_layout: {
     input: {
       board,
@@ -382,10 +456,25 @@ export const humanToolDefs = {
         .describe('Measured content heights from the canvas, and expand/collapse toggles'),
     },
   },
+  apply_template: {
+    input: {
+      board: z.string(),
+      template: z.enum(TEMPLATE_IDS),
+      language: z.enum(CONTENT_LANGUAGES).optional(),
+      rename: z.boolean().optional().describe('Also retitle the board after the template'),
+    },
+  },
   rename_board: { input: { board, title: z.string() } },
   open_file: { input: { path: z.string() } },
   save_file: { input: { board: z.string(), path: z.string() } },
   delete_board: { input: { board: z.string() } },
+  get_version: { input: { board, version: z.string() } },
+  /** Checkpoint the current state and return the restore edits; the canvas applies them so ⌘Z undoes the restore. */
+  prepare_restore: { input: { board, version: z.string() } },
+  delete_version: { input: { board, version: z.string() } },
+  get_notices: { input: { board: z.string().optional() } },
+  dismiss_notice: { input: { id: z.string() } },
+  open_backup_folder: { input: { board: z.string().optional(), reveal: z.boolean().optional().describe('Open it in the file manager (default true).') } },
 } as const
 
 export type HumanToolName = keyof typeof humanToolDefs

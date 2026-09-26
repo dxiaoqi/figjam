@@ -8,20 +8,22 @@ import type { BoardRegistry } from './board'
  * the snippet's own state blob, a heartbeat for the watchdog, Esc-to-exit, and a self-snapshot for the preview.
  */
 const BRIDGE = `(() => {
+  // iframe (browser): postMessage to the parent. <webview> (desktop): the preload's host channel, since a
+  // webview is its own top-level page.
+  const host = window.aifigHost
   const P = window.parent
-  if (P === window) return
+  if (!host && P === window) return
   const pending = new Map()
   const listeners = []
   let seq = 0
-  const send = (m) => P.postMessage(Object.assign({ aifig: 1 }, m), '*')
+  const send = host ? (m) => host.send(Object.assign({ aifig: 1 }, m)) : (m) => P.postMessage(Object.assign({ aifig: 1 }, m), '*')
   const call = (type, data) => new Promise((resolve, reject) => {
     const id = ++seq
     pending.set(id, { resolve, reject })
     send({ type, id, data })
   })
-  window.addEventListener('message', (e) => {
-    const m = e.data
-    if (e.source !== P || !m || m.aifig !== 1) return
+  const receive = (m) => {
+    if (!m || m.aifig !== 1) return
     if (m.type === 'reply') {
       const p = pending.get(m.id)
       if (!p) return
@@ -30,7 +32,9 @@ const BRIDGE = `(() => {
     } else if (m.type === 'state') {
       for (const f of listeners) try { f(m.data) } catch (err) { console.error(err) }
     } else if (m.type === 'capture') capture()
-  })
+  }
+  if (host) host.onMessage(receive)
+  else window.addEventListener('message', (e) => { if (e.source === P) receive(e.data) })
   Object.defineProperty(window, 'aifig', {
     value: Object.freeze({
       getState: () => call('state:get'),

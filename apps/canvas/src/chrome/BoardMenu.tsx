@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Bookmark, Check, ChevronDown, FolderOpen, History, Pencil, Plus, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { useBoard, useBoardTitle, useProviderState } from '../board-context'
 import { callCore } from '../lib/core'
+import { openBackupFolder, openVersionHistory } from '../lib/versions'
+import { useT } from '../i18n'
+import { openNewBoard } from './NewBoardDialog'
 
 export function Logo({ className }: { className?: string }) {
   return (
@@ -28,9 +31,10 @@ export function Logo({ className }: { className?: string }) {
 }
 
 export function BoardMenu() {
-  const { boards, boardId, switchBoard, createBoard, refreshBoards } = useBoard()
+  const { boards, boardId, switchBoard, refreshBoards } = useBoard()
   const { status } = useProviderState()
   const title = useBoardTitle()
+  const t = useT()
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -51,7 +55,7 @@ export function BoardMenu() {
     try {
       await callCore('delete_board', { board: boardId })
       setConfirmDelete(false)
-      toast.success(`Deleted “${title}”`)
+      toast.success(t('board.deleted', { title }))
       const next = boards.find((b) => b.id !== boardId)
       refreshBoards()
       if (next) switchBoard(next.id)
@@ -62,7 +66,7 @@ export function BoardMenu() {
   }
 
   const dot = status === 'connected' ? 'bg-emerald-500' : status === 'connecting' ? 'bg-amber-400 animate-pulse' : 'bg-red-500'
-  const dotLabel = status === 'connected' ? 'Synced with the local core' : status === 'connecting' ? 'Connecting to the core…' : 'Offline — retrying'
+  const dotLabel = t(status === 'connected' ? 'board.synced' : status === 'connecting' ? 'board.connecting' : 'board.offline')
 
   return (
     <div className="pointer-events-auto m-3 flex items-center gap-1">
@@ -70,27 +74,27 @@ export function BoardMenu() {
         <DropdownMenuTrigger asChild>
           <button className="chrome flex h-10 items-center gap-2.5 rounded-xl pr-3 pl-2 text-sm font-medium transition-colors hover:bg-accent/60">
             <Logo className="size-6" />
-            <span className="max-w-[40vw] truncate">{title || 'Untitled board'}</span>
+            <span className="max-w-[40vw] truncate">{title || t('board.untitled')}</span>
             <ChevronDown className="size-3.5 text-muted-foreground" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-72">
-          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Boards on this machine</DropdownMenuLabel>
+          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{t('board.onMachine')}</DropdownMenuLabel>
           <div className="max-h-72 overflow-y-auto">
             {boards.map((b) => (
               <DropdownMenuItem key={b.id} onSelect={() => switchBoard(b.id)} className="flex items-center gap-2">
                 <Check className={cn('size-4', b.id === boardId ? 'opacity-100' : 'opacity-0')} />
                 <span className="flex-1 truncate">{b.title}</span>
                 {b.pendingChangeSets > 0 && (
-                  <span className="rounded-full bg-violet-500/15 px-1.5 text-[10px] font-medium text-violet-600 dark:text-violet-300">{b.pendingChangeSets} to review</span>
+                  <span className="rounded-full bg-violet-500/15 px-1.5 text-[10px] font-medium text-violet-600 dark:text-violet-300">{t('board.toReview', { count: b.pendingChangeSets })}</span>
                 )}
                 <span className="text-xs text-muted-foreground tabular-nums">{b.blockCount}</span>
               </DropdownMenuItem>
             ))}
           </div>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={createBoard}>
-            <Plus className="size-4" /> New board
+          <DropdownMenuItem onSelect={() => openNewBoard()} data-menu-new-board>
+            <Plus className="size-4" /> {t('board.newEllipsis')}
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {
@@ -98,10 +102,28 @@ export function BoardMenu() {
               setRenaming(true)
             }}
           >
-            <Pencil className="size-4" /> Rename…
+            <Pencil className="size-4" /> {t('board.rename')}
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => openVersionHistory()} data-menu-versions>
+            <History className="size-4" /> Version history…
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openVersionHistory({ checkpoint: true })}>
+            <Bookmark className="size-4" /> Save checkpoint…
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openBackupFolder(boardId)}>
+            <FolderOpen className="size-4" /> Open backup folder
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:activity'))}>
+            <ShieldCheck className="size-4" /> Activity & permissions…
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:assistant-settings'))}>
+            <Sparkles className="size-4" /> Assistant settings…
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
-            <Trash2 className="size-4" /> Delete board…
+            <Trash2 className="size-4" /> {t('board.delete')}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -117,16 +139,16 @@ export function BoardMenu() {
       <Dialog open={renaming} onOpenChange={setRenaming}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Rename board</DialogTitle>
-            <DialogDescription>Agents can refer to this board by its title.</DialogDescription>
+            <DialogTitle>{t('board.renameTitle')}</DialogTitle>
+            <DialogDescription>{t('board.renameHint')}</DialogDescription>
           </DialogHeader>
           <Input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && rename()} />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRenaming(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={rename} disabled={!draft.trim()}>
-              Save
+              {t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -135,15 +157,15 @@ export function BoardMenu() {
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete “{title}”?</DialogTitle>
-            <DialogDescription>The board file is removed from disk. This can’t be undone.</DialogDescription>
+            <DialogTitle>{t('board.deleteTitle', { title })}</DialogTitle>
+            <DialogDescription>{t('board.deleteHint')}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
-              Keep it
+              {t('board.keep')}
             </Button>
             <Button variant="destructive" onClick={remove}>
-              Delete board
+              {t('board.deleteConfirm')}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -2,11 +2,14 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
+import { hostOf } from '@aifig/shared'
+import type { ActivityLog } from './activity'
+import { guardedFetch, NetGuardError } from './net-guard'
+import { deniedMessage, type PermissionAsk, type PermissionBroker } from './permissions'
 import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
 import { bytesToBase64, COLOR_TOKENS, fitHeight, imageInfo, matchColor, maxBlockHeight, measureSticky, stickyContentHeight } from '@aifig/shared'
 import {
   BLOCK_TYPE_IDS,
-  BLOCK_TYPES,
   cardContentHeight,
   coerceFields,
   measureCard,
@@ -17,9 +20,20 @@ import {
   typeChrome,
   typeFields,
   typePatch,
-  type BlockTypeId,
+  type TypeId,
+  type TypeRegistry,
+  typeDef,
+  templateRows,
   type FieldValue,
   normalizeEmbedUrl,
+  MAX_SKILL_TYPE_FIELDS,
+  SKILL_NAME,
+  stripMarkdown,
+  type ActivityEntry,
+  type BoardSkill,
+  type FieldDef,
+  type SkillAction,
+  type SkillManifest,
   SNIPPET_LIMITS,
   snippetHash,
   snippetSourceBytes,
@@ -42,7 +56,12 @@ import {
   type CallResponse,
   type CallerInfo,
 } from '@aifig/shared'
+import { spawn } from 'node:child_process'
+import { diffBlocks, isEmptyPlan, planRestore } from '@aifig/shared'
+import { backupRoot, boardBackupDir } from './backups'
 import { aifigHome, Board, BoardRegistry, newId } from './board'
+import { CorruptFileError, FutureVersionError } from './fileformat'
+import { deleteVersion, listVersions, readVersion } from './versions'
 import {
   bboxOf,
   findFreeSpot,
@@ -54,9 +73,16 @@ import {
   type LayoutIntent,
   type LayoutItem,
 } from './layout'
+import { McpTools } from './mcp-client'
 import { PresenceHub, identify } from './presence'
+import { SkillLibrary, userSkillsDir, writeSkillFolder } from './skills'
+
+/** Axis labels of matrix / timeline layouts: small bold text. */
+const axisLabelSize = (g: string) => measureBlock({ kind: 'text', text: `**${g}**`, size: 's', w: 0, h: 0 })
 import { renderSnapshot } from './snapshot'
 import { checkSnippetJs } from './snippet-host'
+import { templateSteps } from './templates'
+import { TEMPLATE_IDS, TEMPLATES, type ContentLanguage, type TemplateId } from '@aifig/shared'
 
 export class ToolError extends Error {}
 
@@ -73,6 +99,42 @@ function preview(s: string | undefined, n = 48) {
 
 function slug(s: string) {
   return s.replace(/[^\w\u4e00-\u9fff-]+/g, '-').replace(/^-|-$/g, '') || 'board'
+}
+
+/** Turn a tool's text result into up to 8 short items (JSON arrays, bullet lists or paragraphs). */
+function splitResults(text: string): string[] {
+  const t = text.trim()
+  if (!t) return ['(no results)']
+  try {
+    const j = JSON.parse(t)
+    const arr = Array.isArray(j) ? j : Array.isArray(j?.results) ? j.results : null
+    if (arr) return arr.slice(0, 8).map((x: unknown) => (typeof x === 'string' ? x : [((x as Args).title ?? ''), ((x as Args).url ?? ''), ((x as Args).snippet ?? (x as Args).text ?? '')].filter(Boolean).join('\n'))).filter(Boolean)
+  } catch {
+    // plain text
+  }
+  const bullets = t.split('\n').filter((l) => /^\s*([-*•]|\d+[.)])\s+/.test(l)).map((l) => l.replace(/^\s*([-*•]|\d+[.)])\s+/, '').trim())
+  const items = bullets.length >= 2 ? bullets : t.split(/\n\s*\n/).map((x) => x.trim())
+  return items.filter(Boolean).slice(0, 8).map((x) => (x.length > 600 ? `${x.slice(0, 599)}…` : x))
+}
+
+/** “Price: $49” lines in a card body → fields (number / boolean / text) and their values. */
+function inferFields(text: string): { fields: FieldDef[]; values: Record<string, string> } {
+  const fields: FieldDef[] = []
+  const values: Record<string, string> = {}
+  for (const line of stripMarkdown(text).split('\n')) {
+    const m = line.match(/^\s*(?:[-*•]\s*)?([A-Za-z\u4e00-\u9fff][\w \u4e00-\u9fff/&-]{0,30}?)\s*[:：]\s*(.+)$/)
+    if (!m || fields.length >= MAX_SKILL_TYPE_FIELDS) continue
+    const label = m[1].trim()
+    const key = label.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || `field${fields.length + 1}`
+    if (fields.some((f) => f.key === key)) continue
+    const v = m[2].trim()
+    const num = v.replace(/[,\s]/g, '').match(/^[$€£¥]?(-?\d+(\.\d+)?)(\/\w+)?$/)
+    if (/^(yes|no|true|false)$/i.test(v)) fields.push({ key, label, kind: 'boolean' })
+    else if (num) fields.push({ key, label, kind: 'number', ...(num[3] ? { unit: num[3].slice(1) } : {}) })
+    else fields.push({ key, label, kind: 'text' })
+    values[key] = num ? num[1] : v
+  }
+  return { fields, values }
 }
 
 export function describeBlock(b: Block) {
@@ -161,6 +223,22 @@ class Recorder {
     this.board.connectors.delete(id)
     if (this.changeSet) this.entries.push({ op: 'delete', target: 'connector', id, before })
   }
+
+  /** Put back a block exactly as it was in a version (keeping its original author). */
+  restoreBlock(b: Block) {
+    const before = this.board.blocks.get(b.id)
+    if (!before) this.entries.push({ op: 'create', target: 'block', id: b.id })
+    else if (this.changeSet && !this.alreadyTracked(b.id)) this.entries.push({ op: 'update', target: 'block', id: b.id, before })
+    this.board.blocks.set(b.id, { ...b, editedBy: this.author, updatedAt: Date.now(), ...this.pendingFields })
+    this.touched.add(b.id)
+  }
+
+  restoreConnector(c: Connector) {
+    const before = this.board.connectors.get(c.id)
+    if (!before) this.entries.push({ op: 'create', target: 'connector', id: c.id })
+    else if (this.changeSet && !this.alreadyTracked(c.id)) this.entries.push({ op: 'update', target: 'connector', id: c.id, before })
+    this.board.connectors.set(c.id, { ...c, updatedAt: Date.now(), ...this.pendingFields })
+  }
 }
 
 interface Viewport {
@@ -224,6 +302,10 @@ export class CanvasCore {
   /** Board each agent session last used, so defaults stay stable within a session. */
   private sessionBoards = new Map<string, string>()
   private persistTimer: ReturnType<typeof setTimeout> | null = null
+  readonly skills = new SkillLibrary()
+  readonly mcpTools = new McpTools()
+  /** Set by the server; without them (unit use) outbound fetches are refused. */
+  security: { permissions?: PermissionBroker; activity?: ActivityLog } = {}
 
   private get statePath() {
     return path.join(aifigHome(), 'state.json')
@@ -304,10 +386,12 @@ export class CanvasCore {
         return {
           boards: this.registry.all().map((b) => ({ ...b.summary(), open: b.id === this.activeBoardId })),
         }
-      case 'create_board': {
-        const b = this.registry.create(a.title)
-        return { board: b.summary() }
-      }
+      case 'create_board':
+        return this.createBoard(a)
+      case 'apply_template':
+        return this.applyTemplate(this.board(a.board), a.template, a.language ?? 'en', a.rename)
+      case 'list_templates':
+        return { templates: TEMPLATE_IDS.map((id) => ({ id, title: TEMPLATES[id].title.en, titles: TEMPLATES[id].title, description: TEMPLATES[id].description })) }
       case 'rename_board': {
         const b = this.board(a.board)
         b.doc.transact(() => {
@@ -317,7 +401,14 @@ export class CanvasCore {
         return { board: b.summary() }
       }
       case 'open_file': {
-        const b = this.registry.openFile(a.path)
+        let b: Board
+        try {
+          b = this.registry.openFile(a.path)
+        } catch (e) {
+          if (e instanceof FutureVersionError) throw new ToolError(e.message)
+          if (e instanceof CorruptFileError) throw new ToolError(`“${path.basename(a.path)}” is damaged and can’t be opened (${e.reason}). If it was an ai-figma board, look for a copy in ${backupRoot()}.`)
+          throw e
+        }
         return { board: b.summary() }
       }
       case 'save_file': {
@@ -373,7 +464,27 @@ export class CanvasCore {
       case 'report_layout':
         return this.reportLayout(a)
       case 'list_types':
-        return this.listTypes()
+        return this.listTypes(a)
+      case 'list_skills':
+        return this.listSkills(a)
+      case 'get_skill':
+        return this.getSkill(a)
+      case 'enable_skill':
+        return this.enableSkill(a, caller)
+      case 'disable_skill':
+        return this.disableSkill(a, caller)
+      case 'install_skill':
+        return this.installSkill(a)
+      case 'load_dev_skill':
+        return this.loadDevSkill(a)
+      case 'apply_skill_layout':
+        return this.applySkillLayout(a, caller)
+      case 'run_skill_action':
+        return this.runSkillAction(a, caller)
+      case 'list_activity':
+        return this.skillActivity(a)
+      case 'save_block_type':
+        return this.saveBlockType(a, caller)
       case 'create_snippet':
         return this.createSnippet(a, caller)
       case 'update_snippet':
@@ -422,7 +533,159 @@ export class CanvasCore {
         return this.exportBoard(a)
       case 'get_design_tokens':
         return tokenManifest()
+      case 'list_versions':
+        return this.listVersions(a)
+      case 'create_version': {
+        const b = this.board(a.board)
+        return { board: b.id, version: this.registry.safety.snapshot(b, 'checkpoint', a.name.trim(), caller.name) }
+      }
+      case 'restore_version':
+        return this.restoreVersion(a, caller)
+      case 'prepare_restore':
+        return this.restoreVersion({ ...a, prepare: true }, caller)
+      case 'get_version':
+        return this.getVersion(a, caller)
+      case 'delete_version': {
+        const b = this.board(a.board)
+        deleteVersion(b.id, a.version)
+        return { board: b.id, deleted: a.version }
+      }
+      case 'get_notices':
+        return { notices: this.registry.notices.list(a.board), backupFolder: backupRoot() }
+      case 'dismiss_notice':
+        return { dismissed: this.registry.notices.dismiss(a.id) }
+      case 'open_backup_folder':
+        return this.openBackupFolder(a)
     }
+  }
+
+  // ---- versions & backups -------------------------------------------------
+
+  private listVersions(a: Args) {
+    const board = this.board(a.board)
+    const versions = listVersions(board.id).slice(0, a.limit ?? 50)
+    return { board: board.id, count: versions.length, versions: versions.map((v) => ({ ...v, createdAtIso: new Date(v.createdAt).toISOString() })) }
+  }
+
+  /** A version as a detached, read-only board. */
+  private versionBoard(board: Board, id: string) {
+    try {
+      const v = readVersion(board.id, id)
+      return { info: v.info, board: Board.fromBytes(board.id, v.payload, v.file, { persist: false }).board }
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT' || e instanceof CorruptFileError) {
+        const known = listVersions(board.id).slice(0, 5).map((v) => v.id)
+        throw new ToolError(e instanceof CorruptFileError && (e as CorruptFileError).reason.includes('checksum') ? `Version "${id}" is damaged and can't be restored.` : `No version "${id}" on "${board.title}".${known.length ? ` Recent: ${known.join(', ')}` : ''}`)
+      }
+      if (e instanceof FutureVersionError) throw new ToolError(e.message)
+      throw e
+    }
+  }
+
+  async versionPreview(boardRef: string, id: string, theme: 'light' | 'dark') {
+    const board = this.registry.get(boardRef)
+    if (!board) return null
+    try {
+      const { board: vb } = this.versionBoard(board, id)
+      return (await renderSnapshot(vb, { theme, format: 'svg' })).svg
+    } catch {
+      return null
+    }
+  }
+
+  private getVersion(a: Args, _caller: CallerInfo) {
+    const board = this.board(a.board)
+    const { info, board: vb } = this.versionBoard(board, a.version)
+    return {
+      board: board.id,
+      version: info,
+      /** What restoring would do to the current board. */
+      diff: diffBlocks(board.blocks.values(), vb.blocks.values()),
+      blocks: [...vb.blocks.values()],
+      connectors: [...vb.connectors.values()],
+    }
+  }
+
+  private copyMissingAssets(board: Board, from: Board) {
+    for (const [id, asset] of from.assets) if (!board.assets.has(id)) board.assets.set(id, asset)
+  }
+
+  /**
+   * Restore a version: checkpoint the current state, then write the difference as ordinary edits — direct
+   * for people, a reviewable change set for agents — so it can be undone like any other change. `prepare`
+   * (the canvas) only checkpoints and returns the plan; the canvas applies it itself so ⌘Z undoes it.
+   */
+  private restoreVersion(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    const { info, board: vb } = this.versionBoard(board, a.version)
+    const label = info.name || new Date(info.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
+    const plan = planRestore({ blocks: board.blocks.values(), connectors: board.connectors.values() }, { blocks: vb.blocks.values(), connectors: vb.connectors.values() })
+    const summary = diffBlocks(board.blocks.values(), vb.blocks.values())
+    if (isEmptyPlan(plan)) return { board: board.id, restored: info.id, unchanged: true, summary, changeSet: null, checkpoint: null }
+    board.saveNow()
+    const checkpoint = this.registry.safety.snapshot(board, 'before-restore', `Before restoring “${label}”`, caller.name)
+    board.doc.transact(() => this.copyMissingAssets(board, vb), 'api')
+    if (a.prepare && caller.kind === 'human') return { board: board.id, restored: info.id, checkpoint: checkpoint.id, summary, plan }
+    const { changeSet } = this.edit(board, caller, a.intent, `Restore version “${label}”`, (rec) => {
+      for (const b of plan.upsertBlocks) rec.restoreBlock(b)
+      for (const id of plan.deleteBlocks) rec.deleteBlock(id)
+      for (const c of plan.upsertConnectors) rec.restoreConnector(c)
+      for (const id of plan.deleteConnectors) rec.deleteConnector(id)
+    })
+    return {
+      board: board.id,
+      restored: info.id,
+      checkpoint: checkpoint.id,
+      summary,
+      changeSet,
+      note: changeSet ? 'The restore is waiting for review in the canvas.' : `Restored. To go back, restore version ${checkpoint.id}.`,
+    }
+  }
+
+  private async openBackupFolder(a: Args) {
+    const board = a.board ? this.board(a.board) : null
+    const dir = board ? boardBackupDir(board.id, board.title) : backupRoot()
+    const target = fs.existsSync(dir) ? dir : backupRoot()
+    fs.mkdirSync(target, { recursive: true })
+    if (a.reveal === false) return { path: target, opened: false }
+    const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
+    const opened = await new Promise<boolean>((resolve) => {
+      try {
+        const p = spawn(cmd, [target], { detached: true, stdio: 'ignore' })
+        p.once('error', () => resolve(false))
+        p.once('spawn', () => {
+          p.unref()
+          resolve(true)
+        })
+      } catch {
+        resolve(false)
+      }
+    })
+    return { path: target, opened }
+  }
+
+  /** New board, optionally filled from a template. Template content is applied as the person's own (not a change set). */
+  private async createBoard(a: Args) {
+    const language = a.language ?? 'en'
+    const title = a.title?.trim() || (a.template ? TEMPLATES[a.template as TemplateId].title[language as ContentLanguage] : language === 'zh-CN' ? '未命名画板' : 'Untitled board')
+    const b = this.registry.create(title)
+    if (!a.template) return { board: b.summary() }
+    await this.applyTemplate(b, a.template, language)
+    return { board: b.summary(), template: a.template, language, next: 'The board is ready. Read it with get_board before adding to it.' }
+  }
+
+  private async applyTemplate(b: Board, template: TemplateId, language: ContentLanguage, rename = false) {
+    const caller: CallerInfo = { id: 'human:template', name: 'Template', client: 'template', kind: 'human' }
+    for (const step of templateSteps(template, language)) {
+      const r = await this.call({ tool: step.tool, args: { ...step.args, board: b.id }, caller })
+      if (!r.ok) throw new ToolError(`Template "${template}" failed at ${step.tool}: ${r.error}`)
+    }
+    if (rename)
+      b.doc.transact(() => {
+        b.meta.set('title', TEMPLATES[template].title[language])
+        b.touch()
+      }, 'api')
+    return { board: b.summary(), template, language }
   }
 
   // ---- helpers ------------------------------------------------------------
@@ -601,12 +864,40 @@ export class CanvasCore {
     return web
   }
 
-  private async posterFor(board: Board, web: WebSnippet) {
+  /**
+   * Fetch something from the network on the caller's behalf: asks the permission broker (people are trusted,
+   * agents need a grant or a yes in the canvas), refuses local/private addresses, and logs the outcome.
+   */
+  async fetchFor(caller: CallerInfo, url: string, source: PermissionAsk['source'], reason: string, opts: { policy?: string; maxBytes?: number; timeoutMs?: number } = {}) {
+    const { permissions, activity } = this.security
+    if (!permissions || !activity) throw new ToolError('Network access is not available')
+    const target = hostOf(url)
+    if (!opts.policy) {
+      const ask: PermissionAsk = { capability: 'network', target, actor: caller, source, reason }
+      const decision = await permissions.request(ask)
+      if (!decision.granted) {
+        activity.record({ category: 'network', action: 'fetch', outcome: 'denied', actor: caller, source, target, via: decision.via })
+        throw new ToolError(deniedMessage(ask, decision))
+      }
+    }
+    try {
+      const r = await guardedFetch(url, { maxBytes: opts.maxBytes, timeoutMs: opts.timeoutMs })
+      activity.record({ category: 'network', action: 'fetch', outcome: r.ok ? 'ok' : 'error', actor: caller, source, target: hostOf(r.finalUrl) === target ? target : `${target} → ${hostOf(r.finalUrl)}`, via: opts.policy ?? 'permission', detail: r.ok ? `${r.bytes.byteLength} bytes` : `HTTP ${r.status}` })
+      return r
+    } catch (e) {
+      activity.record({ category: 'network', action: 'fetch', outcome: e instanceof NetGuardError ? 'denied' : 'error', actor: caller, source, target, via: opts.policy ?? 'permission', detail: (e as Error).message })
+      if (e instanceof NetGuardError) throw new ToolError(e.message)
+      throw new ToolError(`Download failed for ${target}: ${(e as Error).message}`)
+    }
+  }
+
+  private async posterFor(board: Board, web: WebSnippet, caller: CallerInfo) {
     if (!web.posterUrl || (web.thumb && web.thumbFor === snippetHash(web))) return web
     try {
-      const r = await fetch(web.posterUrl, { signal: AbortSignal.timeout(4000) })
+      // poster URLs are derived by normalizeEmbedUrl for known providers, never taken from the caller
+      const r = await this.fetchFor(caller, web.posterUrl, { kind: 'tool', id: 'create_snippet', board: board.id }, 'Fetch the video poster', { policy: 'provider-poster', timeoutMs: 4000, maxBytes: SNIPPET_LIMITS.thumbBytes })
       if (!r.ok) return web
-      const bytes = new Uint8Array(await r.arrayBuffer())
+      const bytes = r.bytes
       const info = imageInfo(bytes)
       if (!info || bytes.byteLength > SNIPPET_LIMITS.thumbBytes) return web
       const id = `a${newId()}`
@@ -620,7 +911,7 @@ export class CanvasCore {
   private async createSnippet(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
     let web = this.snippetFrom(a)
-    web = await this.posterFor(board, web)
+    web = await this.posterFor(board, web, caller)
     const video = web.mode === 'url' && /YouTube|Vimeo|Loom/.test(web.provider ?? '')
     const w = snap(Math.min(Math.max(a.width ?? 480, 160), 1600))
     const h = snap(Math.min(Math.max(a.height ?? (video ? Math.round((w * 9) / 16) : 320), 120), 1200))
@@ -633,7 +924,7 @@ export class CanvasCore {
     const cur = board.blocks.get(a.id) ?? board.resolve(a.id)
     if (!cur || cur.kind !== 'web' || !cur.web) throw new ToolError(`No web snippet "${a.id}"`)
     let web = this.snippetFrom(a, cur.web)
-    web = await this.posterFor(board, web)
+    web = await this.posterFor(board, web, caller)
     const { changeSet } = this.edit(board, caller, a.intent, `Update snippet “${preview(web.title ?? '', 30)}”`, (rec) => {
       rec.updateBlock(cur.id, { web, text: web.title ?? '' })
     })
@@ -671,26 +962,329 @@ export class CanvasCore {
     return { board: board.id, thumb: id }
   }
 
-  // ---- block types ---------------------------------------------------------
+  // ---- skills ---------------------------------------------------------------
 
-  private listTypes() {
-    const relations: { from: BlockTypeId; to: BlockTypeId; relation: string }[] = []
-    for (const f of BLOCK_TYPE_IDS) for (const t of BLOCK_TYPE_IDS) {
-      const r = suggestRelation(f, t)
-      if (r) relations.push({ from: f, to: t, relation: r })
-    }
+  private skillSummary(s: SkillManifest | BoardSkill, board: Board) {
+    const enabled = board.skills.get(s.name)
     return {
-      types: BLOCK_TYPE_IDS.map((id) => {
-        const d = BLOCK_TYPES[id]
-        return { id, label: d.label, description: d.description, color: d.color, prefixes: d.prefixes, fields: d.fields }
-      }),
-      relations,
-      note: 'Types are optional. Promote with set_type (or create_blocks `type`), demote with type "none" — field values are kept. At most a few fields per type; deeper schemas belong to Skills.',
+      name: s.name,
+      description: s.description,
+      version: s.version,
+      capability: s.capability,
+      tools: s.permissions.tools.map((t) => ({ name: t, available: t.startsWith('aifig.') || this.mcpTools.available(t), allowed: !!this.security.permissions?.hasGrant(`skill:${s.name}`, 'tool', t) })),
+      source: s.source,
+      enabled: !!enabled,
+      ...(enabled && enabled.version !== s.version ? { enabledVersion: enabled.version } : {}),
+      types: s.canvas.types.map((t) => ({ id: t.id, label: t.label, base: t.base, fields: t.fields.map((f) => f.key) })),
+      layouts: s.canvas.layouts.map((l) => `${s.name}.${l.id}`),
+      actions: s.canvas.actions.map((x) => ({ id: x.id, label: x.label, tool: x.tool })),
+      prompts: s.canvas.prompts.map((p) => p.id),
+      ...('errors' in s && s.errors.length ? { errors: s.errors } : {}),
+      ...('warnings' in s && s.warnings.length ? { warnings: s.warnings } : {}),
     }
   }
 
-  private heightFor(b: Block) {
-    const extra = typeChrome(b)
+  private listSkills(a: Args) {
+    const board = this.board(a.board)
+    const lib = this.skills.list()
+    const names = new Set(lib.map((s) => s.name))
+    const boardOnly = [...board.skills.values()].filter((s) => !names.has(s.name))
+    return {
+      board: board.id,
+      skills: [...lib, ...boardOnly].map((s) => this.skillSummary(s, board)),
+      note: 'Enabled skills add block types (use their ids in create_blocks / set_type), layouts (apply_skill_layout) and actions (run_skill_action). Read get_skill for the instructions before working with a skill. The person enables skills in the canvas (Skills panel) or with `aifig skill enable`.',
+    }
+  }
+
+  private findSkill(name: string, board?: Board) {
+    const s = this.skills.get(name) ?? (board ? board.skills.get(name) : undefined) ?? this.registry.all().map((b) => b.skills.get(name)).find(Boolean)
+    if (!s) throw new ToolError(`No skill "${name}". Skills: ${this.skills.list().map((x) => x.name).join(', ') || 'none installed'}`)
+    return s
+  }
+
+  private getSkill(a: Args) {
+    const s = this.findSkill(a.name)
+    return {
+      name: s.name,
+      description: s.description,
+      version: s.version,
+      capability: s.capability,
+      permissions: s.permissions,
+      instructions: s.instructions,
+      types: s.canvas.types,
+      layouts: s.canvas.layouts.map((l) => ({ ...l, id: `${s.name}.${l.id}` })),
+      actions: s.canvas.actions,
+      prompts: s.canvas.prompts,
+      ...('errors' in s && s.errors.length ? { errors: s.errors } : {}),
+    }
+  }
+
+  private snapshotSkill(s: SkillManifest, by: string): BoardSkill {
+    const { errors: _e, warnings: _w, path: _p, ...rest } = s
+    return { ...rest, enabledAt: Date.now(), enabledBy: by }
+  }
+
+  private enableSkill(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    const s = this.skills.get(a.name)
+    if (!s) throw new ToolError(`No installed skill "${a.name}" (see list_skills; install folders with \`aifig skill install <dir>\`)`)
+    if (s.errors.length) throw new ToolError(`“${s.name}” has problems and can't be enabled:\n- ${s.errors.join('\n- ')}`)
+    const clash = s.canvas.types.find((t) => [...board.skills.values()].some((o) => o.name !== s.name && o.canvas.types.some((x) => x.id === t.id)))
+    if (clash) throw new ToolError(`Type "${clash.id}" is already defined by another skill on this board`)
+    board.doc.transact(() => board.skills.set(s.name, this.snapshotSkill(s, caller.name)), 'api')
+    this.recordSkill(board, s.name, caller, { action: 'enable', outcome: 'ok', detail: `v${s.version} · ${s.capability}${s.permissions.tools.length ? ` · tools: ${s.permissions.tools.join(', ')}` : ''}` })
+    return { board: board.id, enabled: s.name, types: s.canvas.types.map((t) => t.id), capability: s.capability, tools: s.permissions.tools, ...(s.warnings.length ? { warnings: s.warnings } : {}) }
+  }
+
+  private disableSkill(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    if (!board.skills.has(a.name)) throw new ToolError(`“${a.name}” is not enabled on this board`)
+    const used = [...board.blocks.values()].filter((b) => b.type && b.type.startsWith(`${a.name}.`)).length
+    board.doc.transact(() => board.skills.delete(a.name), 'api')
+    this.recordSkill(board, a.name, caller, { action: 'disable', outcome: 'ok', detail: used ? `${used} block(s) keep their type and fields; they show as plain until it's enabled again` : undefined })
+    return { board: board.id, disabled: a.name, blocksKeepingType: used }
+  }
+
+  private installSkill(a: Args) {
+    const s = this.skills.install(a.path)
+    if (s.errors.length) throw new ToolError(`Can't install ${a.path}:\n- ${s.errors.join('\n- ')}`)
+    return { installed: s.name, path: s.path, version: s.version, types: s.canvas.types.map((t) => t.id), warnings: s.warnings }
+  }
+
+  /** `aifig skill dev`: (re)load a folder; boards that have it enabled pick up the new version immediately. */
+  private loadDevSkill(a: Args) {
+    const s = this.skills.dev(a.path)
+    const updated: string[] = []
+    if (!s.errors.length) {
+      for (const board of this.registry.all()) {
+        const cur = board.skills.get(s.name)
+        if (!cur) continue
+        board.doc.transact(() => board.skills.set(s.name, { ...this.snapshotSkill(s, cur.enabledBy), enabledAt: cur.enabledAt }), 'api')
+        updated.push(board.id)
+      }
+    }
+    return { name: s.name, path: s.path, version: s.version, capability: s.capability, errors: s.errors, warnings: s.warnings, types: s.canvas.types.map((t) => t.id), boardsUpdated: updated }
+  }
+
+  private enabledSkill(board: Board, name: string) {
+    const s = board.skills.get(name)
+    if (!s) throw new ToolError(`Skill “${name}” is not enabled on this board (list_skills shows what's available; the person enables it in the Skills panel)`)
+    return s
+  }
+
+  private applySkillLayout(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    const [name, id] = String(a.layout).split(/\.(.+)/)
+    const s = this.enabledSkill(board, name)
+    const l = s.canvas.layouts.find((x) => x.id === id)
+    if (!l) throw new ToolError(`“${name}” has no layout "${id}". Layouts: ${s.canvas.layouts.map((x) => `${name}.${x.id}`).join(', ') || 'none'}`)
+    const reg = board.types()
+    const typeSet = new Set(l.types ?? s.canvas.types.map((t) => t.id))
+    const frame = a.frame ? this.frame(board, a.frame) : null
+    let blocks = [...board.blocks.values()].filter((b) => b.type && typeSet.has(b.type) && (!frame || b.parent === frame.id))
+    if (!blocks.length) throw new ToolError(`No ${[...typeSet].map((t) => typeDef(t, reg).plural).join(' / ')} ${frame ? `in “${frame.title}”` : 'on the board'} to arrange`)
+    if (!frame) {
+      const counts = new Map<string, number>()
+      for (const b of blocks) counts.set(b.parent ?? '', (counts.get(b.parent ?? '') ?? 0) + 1)
+      const parent = [...counts.entries()].sort((x, y) => y[1] - x[1])[0][0]
+      if (counts.size > 1) warn(`Blocks of this layout are spread over ${counts.size} frames; arranged the ${counts.get(parent)} in ${parent ? `“${board.blocks.get(parent)?.title}”` : 'the canvas'}. Pass \`frame\` to choose.`)
+      blocks = blocks.filter((b) => (b.parent ?? '') === parent)
+    }
+    const field = (key?: string) => (b: Block) => {
+      if (!key) return undefined
+      if (key === 'type') return b.type ? typeDef(b.type, reg).plural : 'Untyped'
+      const v = typeFields(b, reg)[key]
+      return v === undefined || v === '' ? undefined : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v)
+    }
+    const intent: LayoutIntent = l.intent === 'type' ? 'matrix' : l.intent === 'cluster' ? 'matrix' : l.intent
+    const opts =
+      l.intent === 'type'
+        ? { row: field('type'), col: () => '' }
+        : l.intent === 'cluster'
+          ? { row: () => '', col: field(l.field) }
+          : { row: field(l.rows), col: field(l.cols), date: field(l.field) }
+    const { changeSet } = this.edit(board, caller, a.intent, `${l.label} (${name})`, (rec) => this.arrangeBlocks(board, rec, blocks, intent, opts))
+    return { board: board.id, changeSet, layout: `${name}.${l.id}`, arranged: blocks.length }
+  }
+
+  private skillCaller(name: string): CallerInfo {
+    return { id: `skill:${name}`, name, client: 'skill', kind: 'agent' }
+  }
+
+  private async runSkillAction(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    const s = this.enabledSkill(board, a.skill)
+    const action = s.canvas.actions.find((x) => x.id === a.action)
+    if (!action) throw new ToolError(`“${s.name}” has no action "${a.action}". Actions: ${s.canvas.actions.map((x) => x.id).join(', ') || 'none'}`)
+    const blocks = (a.ids as string[]).map((id) => {
+      const b = board.blocks.get(id)
+      if (!b) throw new ToolError(`No block with id "${id}"`)
+      if (action.appliesTo && (!b.type || !action.appliesTo.includes(b.type))) throw new ToolError(`“${action.label}” works on ${action.appliesTo.map((t) => typeDef(t, board.types()).plural).join(', ')}; ${describeBlock(b)} is ${b.type ? `a ${typeDef(b.type, board.types()).label}` : 'untyped'}`)
+      return b
+    })
+    if (!action.tool.startsWith('aifig.') && !this.mcpTools.available(action.tool)) {
+      throw new ToolError(`“${action.label}” needs the tool ${action.tool}, but no MCP server "${action.tool.split('.')[0]}" is configured (~/.aifig/mcp.json).`)
+    }
+    // the skill is the actor: even when a person clicks the action, its first use of a tool is confirmed
+    const broker = this.security.permissions
+    if (!broker) throw new ToolError('Skill tools need the core\'s permission broker (not available in this process)')
+    const ask = {
+      capability: 'tool' as const,
+      target: action.tool,
+      actor: this.skillCaller(s.name),
+      source: { kind: 'skill' as const, id: s.name, board: board.id },
+      reason: `“${action.label}” on ${blocks.length} block${blocks.length === 1 ? '' : 's'}${caller.kind === 'agent' ? `, started by ${this.author(caller).name}` : ''}`,
+    }
+    const allowed = await broker.request(ask)
+    if (!allowed.granted) {
+      this.recordSkill(board, s.name, caller, { action: 'run', outcome: 'denied', target: action.tool, via: allowed.via, detail: action.label })
+      throw new ToolError(deniedMessage(ask, allowed))
+    }
+    return this.executeSkillAction(board, s, action, blocks, caller)
+  }
+
+  private async executeSkillAction(board: Board, s: BoardSkill, action: SkillAction, blocks: Block[], caller: CallerInfo) {
+    const reg = board.types()
+    const results: { id: string; status: 'ok' | 'error'; created?: number; error?: string }[] = []
+    const as = this.skillCaller(s.name)
+    for (const b of blocks) {
+      const fields = typeFields(b, reg)
+      const fill = (v: unknown): unknown =>
+        typeof v === 'string'
+          ? v.replace(/\{\{\s*(text|title|fields\.(\w+))\s*\}\}/g, (_m, k, f) => String(f ? (fields[f] ?? '') : k === 'title' ? (b.title ?? b.text) : stripMarkdown(b.text)))
+          : Array.isArray(v)
+            ? v.map(fill)
+            : v && typeof v === 'object'
+              ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fill(x)]))
+              : v
+      const args = fill(action.args ?? {}) as Record<string, unknown>
+      try {
+        let text: string
+        if (action.tool.startsWith('aifig.')) {
+          const r = await this.call({ tool: action.tool.slice(6) as AnyToolName, args: { board: board.id, ...args }, caller: as })
+          if (!r.ok) throw new Error(r.error)
+          text = JSON.stringify(r.result)
+        } else {
+          const r = await this.mcpTools.call(action.tool, args)
+          if (r.isError) throw new Error(r.text || `${action.tool} failed`)
+          text = r.text
+        }
+        let created = 0
+        if (action.output?.mode === 'field') {
+          const r = await this.call({ tool: 'set_type', args: { board: board.id, ids: [b.id], fields: { [action.output.field]: text.slice(0, 120) }, intent: `${action.label} (${s.name})` }, caller: as })
+          if (!r.ok) throw new Error(r.error)
+        } else if (!action.tool.startsWith('aifig.')) {
+          const items = splitResults(text)
+          const out = action.output
+          const r = await this.call({
+            tool: 'create_blocks',
+            args: { board: board.id, right_of: b.id, layout: 'stack', intent: `${action.label} (${s.name})`, blocks: items.map((t) => ({ text: t, ...(out?.type ? { type: out.type } : {}) })) },
+            caller: as,
+          })
+          if (!r.ok) throw new Error(r.error)
+          const ids = (r.result as { created: { id: string }[] }).created.map((c) => c.id)
+          created = ids.length
+          if (ids.length) await this.call({ tool: 'connect', args: { board: board.id, connectors: ids.map((id) => ({ from: id, to: b.id, ...(out?.relation ? { relation: out.relation } : {}) })) }, caller: as })
+        }
+        this.recordSkill(board, s.name, caller, { action: 'run', outcome: 'ok', target: action.tool, detail: `${action.label}: ${describeBlock(b)}${created ? ` → ${created} new block(s), waiting for review` : ''}` })
+        results.push({ id: b.id, status: 'ok', created })
+      } catch (e) {
+        const msg = (e as Error).message
+        this.recordSkill(board, s.name, caller, { action: 'run', outcome: 'error', target: action.tool, detail: `${action.label}: ${describeBlock(b)}: ${msg}` })
+        results.push({ id: b.id, status: 'error', error: msg })
+      }
+    }
+    return { board: board.id, status: results.every((r) => r.status === 'ok') ? 'ok' : 'partial', action: `${s.name}.${action.id}`, tool: action.tool, results }
+  }
+
+  /** Skill entries go to the shared activity log (security foundation), tagged with the skill and board. */
+  private recordSkill(board: Board, skill: string, caller: CallerInfo, e: { action: string; outcome: ActivityEntry['outcome']; target?: string; via?: string; detail?: string }) {
+    this.security.activity?.record({ category: 'skill', ...e, actor: { id: caller.id, name: caller.kind === 'agent' ? this.author(caller).name : caller.name, client: caller.client, kind: caller.kind }, source: { kind: 'skill', id: skill, board: board.id } })
+  }
+
+  private skillActivity(a: Args) {
+    const board = this.board(a.board)
+    const log = this.security.activity?.list({ limit: 500 }) ?? []
+    const activity = log.filter((e) => e.source?.kind === 'skill' && (!e.source.board || e.source.board === board.id) && (!a.skill || e.source.id === a.skill)).slice(0, a.limit ?? 200)
+    const grants = (this.security.permissions?.grants() ?? []).filter((g) => g.subject.startsWith('skill:') && (!a.skill || g.subject === `skill:${a.skill}`))
+    const pending = (this.security.permissions?.pending() ?? []).filter((p) => p.source.kind === 'skill')
+    return { board: board.id, activity, grants, pending }
+  }
+
+  /** No-code “Save as block type”: learn a type from a sticky/card, write a standard skill folder, enable it here. */
+  private saveBlockType(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    const src = board.blocks.get(a.block)
+    if (!src || (src.kind !== 'sticky' && src.kind !== 'card')) throw new ToolError('Pick a sticky or a card to save as a block type')
+    const label = String(a.label).trim()
+    if (!label) throw new ToolError('Give the type a name')
+    const typeId = label.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'item'
+    const skillName = a.skill ?? `${(board.title.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'board').slice(0, 40)}-types`
+    if (!SKILL_NAME.test(skillName)) throw new ToolError(`Skill name "${skillName}" must be lowercase words joined by dashes`)
+    const inferred = inferFields(src.text)
+    const fields: FieldDef[] = (a.fields as FieldDef[] | undefined) ?? inferred.fields
+    if (fields.length > MAX_SKILL_TYPE_FIELDS) throw new ToolError(`At most ${MAX_SKILL_TYPE_FIELDS} fields`)
+    const color = colorFor(a.color ?? src.color, src.color)
+    const dir = path.join(userSkillsDir(), skillName)
+    const blocksFile = path.join(dir, 'canvas/blocks.json')
+    let blocksJson: Record<string, any> = { types: {} }
+    if (fs.existsSync(blocksFile)) {
+      try {
+        blocksJson = JSON.parse(fs.readFileSync(blocksFile, 'utf8'))
+      } catch {
+        // rewrite a broken file
+      }
+    }
+    const { $schema: _s, version: _v, ...rest } = blocksJson
+    rest.types = { ...(rest.types ?? {}), [typeId]: { label, plural: `${label}s`, base: src.kind, color, icon: a.icon ?? 'Tag', description: `Saved from “${preview(src.title || src.text, 40)}” on ${board.title}.`, fields, template: src.kind === 'card' && fields.length ? { rows: fields.slice(0, 4).map((f) => f.key) } : undefined } }
+    const typeList = Object.entries(rest.types as Record<string, { label: string; fields?: FieldDef[] }>)
+    writeSkillFolder(dir, {
+      name: skillName,
+      description: `Block types saved from the “${board.title}” board: ${typeList.map(([, t]) => t.label).join(', ')}. Use when adding these kinds of items to an ai-figma board.`,
+      instructions: [`# ${board.title} types`, '', 'Block types made with “Save as block type” in ai-figma.', '', ...typeList.map(([id, t]) => `- \`${skillName}.${id}\` — ${t.label}${t.fields?.length ? `; fields: ${t.fields.map((f) => `\`${f.key}\` (${f.kind})`).join(', ')}` : ''}`)].join('\n'),
+      blocks: rest,
+    })
+    const s = this.skills.get(skillName)
+    if (!s || s.errors.length) throw new ToolError(`Saved, but the skill didn't validate:\n- ${(s?.errors ?? ['not found']).join('\n- ')}`)
+    board.doc.transact(() => board.skills.set(s.name, this.snapshotSkill(s, caller.name)), 'api')
+    this.recordSkill(board, s.name, caller, { action: 'save-type', outcome: 'ok', detail: `${label} (${fields.length} field${fields.length === 1 ? '' : 's'}) → ${dir}` })
+    const full = `${skillName}.${typeId}`
+    const values = Object.fromEntries(Object.entries(inferred.values).filter(([k]) => fields.some((f) => f.key === k)))
+    const coerced = coerceFields(full, values, board.types()).fields
+    this.edit(board, caller, undefined, `Save as ${label}`, (rec) => rec.updateBlock(src.id, typePatch(src, full, coerced, board.types())))
+    return { board: board.id, skill: skillName, type: full, fields, path: dir, export: `/api/skills/${skillName}/export.zip` }
+  }
+
+  // ---- block types ---------------------------------------------------------
+
+  private listTypes(a: Args) {
+    const board = this.board(a.board)
+    const reg = board.types()
+    const ids = Object.keys(reg)
+    const relations: { from: string; to: string; relation: string }[] = []
+    for (const f of ids) for (const t of ids) {
+      const r = suggestRelation(f, t, reg)
+      if (r) relations.push({ from: f, to: t, relation: r })
+    }
+    return {
+      board: board.id,
+      types: ids.map((id) => {
+        const d = reg[id]
+        return { id, label: d.label, description: d.description, color: d.color, prefixes: d.prefixes, fields: d.fields, ...(d.skill ? { skill: d.skill, base: d.base, template: d.template } : {}) }
+      }),
+      relations,
+      note: 'Types are optional. Promote with set_type (or create_blocks `type`), demote with type "none" — field values are kept. Built-in types have at most three fields; skill types (from enabled skills, see list_skills) a few more.',
+    }
+  }
+
+  private unknownType(type: string, board: Board) {
+    const skillTypes = Object.values(board.types()).filter((d) => d.skill).map((d) => d.id)
+    const hint = type.includes('.') ? ` Is its skill enabled on this board? (list_skills)` : ''
+    return `Unknown type "${type}".${hint} Types here: ${[...BLOCK_TYPE_IDS, ...skillTypes].join(', ')}.`
+  }
+
+  private heightFor(b: Block, reg?: TypeRegistry) {
+    const extra = typeChrome(b, reg)
     if (b.kind === 'sticky') return fitHeight('sticky', b.w, stickyContentHeight(b.text, b.w, extra), b.expanded)
     if (b.kind === 'card') return fitHeight('card', b.w, cardContentHeight(b.title ?? '', b.text, b.w, extra), b.expanded)
     return b.h
@@ -698,7 +1292,9 @@ export class CanvasCore {
 
   private setType(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
-    const type: BlockTypeId | null | undefined = a.type === 'none' ? null : a.type
+    const reg = board.types()
+    const type: TypeId | null | undefined = a.type === 'none' ? null : a.type
+    if (type && !isBlockType(type, reg)) throw new ToolError(this.unknownType(type, board))
     const blocks = (a.ids as string[]).map((id) => {
       const b = board.blocks.get(id) ?? board.resolve(id)
       if (!b) throw new ToolError(`No block "${id}"`)
@@ -711,38 +1307,40 @@ export class CanvasCore {
       const t = type ?? blocks[0].type
       if (!t) throw new ToolError('Fields need a type')
       if (blocks.some((b) => (type ?? b.type) !== t)) throw new ToolError('Setting fields on blocks of different types — call set_type once per type')
-      const r = coerceFields(t, a.fields)
+      const r = coerceFields(t, a.fields, reg)
       if (r.errors.length) throw new ToolError(r.errors[0])
       fields = r.fields
     }
-    const label = type === null ? 'Make plain' : type ? `Mark as ${BLOCK_TYPES[type].label.toLowerCase()}` : 'Update fields'
+    const label = type === null ? 'Make plain' : type ? `Mark as ${typeDef(type, reg).label.toLowerCase()}` : 'Update fields'
     const { changeSet } = this.edit(board, caller, a.intent, `${label} (${blocks.length})`, (rec) => {
       const frames = new Set<string>()
       for (const b of blocks) {
-        const patch = typePatch(b, type, fields)
+        const patch = typePatch(b, type, fields, reg)
         if (!Object.keys(patch).length) continue
         const next = { ...b, ...patch } as Block
-        const h = this.heightFor(next)
+        const h = this.heightFor(next, reg)
         rec.updateBlock(b.id, { ...patch, h, contentH: undefined })
         this.makeRoom(board, b, b.w, h - b.h, new Set(blocks.map((x) => x.id)), (id, y) => rec.updateBlock(id, { y }))
         if (b.parent) frames.add(b.parent)
       }
       for (const f of frames) this.fitFrame(rec, board, f)
     })
-    return { board: board.id, changeSet, updated: blocks.map((b) => ({ id: b.id, type: type === null ? null : (type ?? b.type), fields: typeFields({ ...b, ...typePatch(b, type, fields) } as Block) })) }
+    return { board: board.id, changeSet, updated: blocks.map((b) => ({ id: b.id, type: type === null ? null : (type ?? b.type), fields: typeFields({ ...b, ...typePatch(b, type, fields, reg) } as Block, reg) })) }
   }
 
   private queryBlocks(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
     this.presence.touch(caller, { boardId: board.id, autoStatus: 'Looking through the board…' })
     const frame = a.frame ? this.frame(board, a.frame) : null
-    const type = a.type === 'none' ? null : isBlockType(a.type) ? a.type : undefined
+    const reg = board.types()
+    if (a.type && a.type !== 'none' && !isBlockType(a.type, reg)) throw new ToolError(this.unknownType(a.type, board))
+    const type = a.type === 'none' ? null : isBlockType(a.type, reg) ? a.type : undefined
     if (a.where && Object.keys(a.where).length && type) {
-      const { errors } = coerceFields(type, a.where)
+      const { errors } = coerceFields(type, a.where, reg)
       if (errors.length) throw new ToolError(errors[0])
     }
     const hits = [...board.blocks.values()]
-      .filter((b) => (b.kind === 'sticky' || b.kind === 'card') && (!frame || b.parent === frame.id) && matchesQuery(b, { type, where: a.where }))
+      .filter((b) => (b.kind === 'sticky' || b.kind === 'card') && (!frame || b.parent === frame.id) && matchesQuery(b, { type, where: a.where }, reg))
       .sort((p, q) => (p.parent ?? '').localeCompare(q.parent ?? '') || p.y - q.y || p.x - q.x)
     return {
       board: board.id,
@@ -752,7 +1350,7 @@ export class CanvasCore {
         kind: b.kind,
         type: b.type ?? null,
         text: b.kind === 'card' ? `${b.title ?? ''}${b.text ? ` — ${b.text}` : ''}` : b.text,
-        fields: typeFields(b),
+        fields: typeFields(b, reg),
         frame: b.parent ? (board.blocks.get(b.parent)?.title ?? null) : null,
       })),
     }
@@ -769,6 +1367,7 @@ export class CanvasCore {
 
   private getBoard(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
+    const reg = board.types()
     this.presence.touch(caller, { boardId: board.id, autoStatus: 'Reading the board…' })
     const frameFilter = a.frame ? this.frame(board, a.frame) : null
     const all = [...board.blocks.values()]
@@ -794,7 +1393,8 @@ export class CanvasCore {
             : `"${preview(b.text, 100)}"`
       const collapsed = b.contentH != null && b.contentH > b.h + 4 && b.h >= maxBlockHeight(b.kind, b.w, b.expanded) - 8
       const flags = [b.kind === 'image' ? '' : b.color, b.size !== 'm' && b.kind !== 'image' ? `size ${b.size}` : '', b.rotation ? `rotated ${b.rotation}°` : '', b.pending ? 'pending review' : '', collapsed ? `long: collapsed, full height ${b.contentH}px` : ''].filter(Boolean).join(', ')
-      const typed = b.type ? ` <${b.type}${fieldSummary(b) ? `: ${fieldSummary(b)}` : ''}>` : ''
+      const sum = b.type ? fieldSummary(b, reg) : ''
+      const typed = b.type ? ` <${b.type}${sum ? `: ${sum}` : ''}>` : ''
       return `- ${b.kind}${typed} ${body} [${flags}] (id: ${b.id}, ${b.x},${b.y} ${b.w}×${b.h})`
     }
     const out: string[] = []
@@ -843,32 +1443,42 @@ export class CanvasCore {
       group?: string
       parentRef?: string
       asset?: string
-      type?: BlockTypeId
+      type?: TypeId
       fields?: Record<string, FieldValue>
       extra: number
       web?: WebSnippet
+      row?: string
+      col?: string
+      date?: string
     }
+    const reg = board.types()
     const drafts: Draft[] = a.blocks.map((b: Args, i: number) => {
-      const kind: Block['kind'] = b.kind ?? 'sticky'
+      if (b.type && !isBlockType(b.type, reg)) {
+        if (strictMode()) throw new ToolError(this.unknownType(b.type, board))
+        warn(`${this.unknownType(b.type, board)} Created it as a plain block.`)
+      }
+      const typeBase = b.type && isBlockType(b.type, reg) ? reg[b.type].base : undefined
+      const kind: Block['kind'] = b.kind ?? typeBase ?? 'sticky'
       const size = toSizeToken(b.size, 'm')
       const color = colorFor(b.color, kind === 'sticky' ? 'yellow' : kind === 'card' ? 'blue' : 'gray')
       const text = String(b.text ?? '')
       const title = b.title != null ? String(b.title) : undefined
-      const type = isBlockType(b.type) && (kind === 'sticky' || kind === 'card') ? b.type : undefined
+      const type = isBlockType(b.type, reg) && (kind === 'sticky' || kind === 'card') ? (b.type as TypeId) : undefined
       let fields: Record<string, FieldValue> | undefined
       if (type) {
-        const r = coerceFields(type, b.fields ?? {})
+        const r = coerceFields(type, b.fields ?? {}, reg)
         if (r.errors.length) throw new ToolError(r.errors[0])
         fields = r.fields
       }
-      if (type && b.color !== undefined && colorFor(b.color, color) !== BLOCK_TYPES[type].color) warn(`\`color\` is ignored for typed blocks — a ${BLOCK_TYPES[type].label.toLowerCase()} is always ${BLOCK_TYPES[type].color}.`)
-      const extra = type ? typeChrome({ type, typeData: { [type]: fields } }) : 0
+      const tdef = type ? typeDef(type, reg) : undefined
+      if (tdef && b.color !== undefined && colorFor(b.color, color) !== tdef.color) warn(`\`color\` is ignored for typed blocks — a ${tdef.label.toLowerCase()} is always ${tdef.color}.`)
+      const extra = type ? typeChrome({ type, typeData: { [type]: fields ?? {} } }, reg) : 0
       let dims: { w: number; h: number; size?: SizeToken }
       if (kind === 'sticky') dims = measureSticky(text, size, false, extra)
       else if (kind === 'image' || kind === 'web') dims = { w: b.w, h: b.h }
       else if (kind === 'card') dims = measureCard(title ?? '', text, size, false, extra)
       else dims = measureBlock({ kind, text, title, size, w: 0, h: 0 })
-      return { key: `k${i}`, ref: b.ref, kind, text, title, color: type ? BLOCK_TYPES[type].color : color, size: dims.size ?? size, w: dims.w, h: dims.h, group: b.group, parentRef: b.parent, asset: b.asset as string | undefined, type, fields, extra, web: kind === 'web' ? (b.web as WebSnippet) : undefined }
+      return { key: `k${i}`, ref: b.ref, kind, text, title, color: tdef ? tdef.color : color, size: dims.size ?? size, w: dims.w, h: dims.h, group: b.group, parentRef: b.parent, asset: b.asset as string | undefined, type, fields, extra, web: kind === 'web' ? (b.web as WebSnippet) : undefined, row: b.row, col: b.col, date: b.date }
     })
     // same kind in one batch → same size
     const stickies = drafts.filter((d) => d.kind === 'sticky')
@@ -892,12 +1502,16 @@ export class CanvasCore {
       h: d.h,
       group: d.group,
       parentKey: d.parentRef ? refToKey.get(d.parentRef) : undefined,
+      row: d.row,
+      col: d.col,
+      date: d.date,
     }))
     const headingSize = (g: string) => measureBlock({ kind: 'text', text: g, size: 'l', w: 0, h: 0 })
-    const res = layout(items, intentLayout, { columns: a.columns, direction: a.direction, headingSize })
+    const res = layout(items, intentLayout, { columns: a.columns, direction: a.direction, headingSize, labelSize: axisLabelSize })
+    const hsize = (hd: { group: string; small?: boolean }) => (hd.small ? axisLabelSize(hd.group) : headingSize(hd.group))
 
     const rects: Rect[] = [...res.placed.values()]
-    for (const hd of res.headings) rects.push({ x: hd.x, y: hd.y, ...headingSize(hd.group) })
+    for (const hd of res.headings) rects.push({ x: hd.x, y: hd.y, ...hsize(hd) })
     const bb = bboxOf(rects)
     const content = { w: bb.w, h: bb.h }
 
@@ -949,8 +1563,8 @@ export class CanvasCore {
         created.push({ id: f.id, kind: 'frame', label: wrapTitle })
       }
       for (const hd of res.headings) {
-        const s = headingSize(hd.group)
-        const t = rec.createBlock({ id: newId(), kind: 'text', x: snap(hd.x + offset.x), y: snap(hd.y + offset.y), w: s.w, h: s.h, parent, text: hd.group, color: 'gray', size: 'l' })
+        const s = hsize(hd)
+        const t = rec.createBlock({ id: newId(), kind: 'text', x: snap(hd.x + offset.x), y: snap(hd.y + offset.y), w: s.w, h: s.h, parent, text: hd.small ? `**${hd.group}**` : hd.group, color: 'gray', size: hd.small ? 's' : 'l', ...(hd.small ? { layoutRole: 'axis' as const } : {}) })
         created.push({ id: t.id, kind: 'text', label: hd.group })
       }
       const keyToId = new Map<string, string>()
@@ -1015,9 +1629,9 @@ export class CanvasCore {
         const contentChanged = patch.text !== undefined || patch.title !== undefined || patch.size !== undefined
         if (contentChanged) patch.contentH = undefined
         if (cur.kind === 'sticky' && contentChanged) {
-          const m = measureSticky(merged.text, merged.size, cur.expanded, typeChrome(merged))
+          const m = measureSticky(merged.text, merged.size, cur.expanded, typeChrome(merged, board.types()))
           const w = Math.max(m.w, patch.size ? 0 : cur.w)
-          Object.assign(patch, { w, h: w === m.w ? m.h : fitHeight('sticky', w, stickyContentHeight(merged.text, w, typeChrome(merged)), cur.expanded), size: m.size })
+          Object.assign(patch, { w, h: w === m.w ? m.h : fitHeight('sticky', w, stickyContentHeight(merged.text, w, typeChrome(merged, board.types())), cur.expanded), size: m.size })
         } else if ((cur.kind === 'card' || cur.kind === 'text') && contentChanged) {
           const m = measureBlock(merged)
           patch.w = m.w
@@ -1060,7 +1674,7 @@ export class CanvasCore {
       if (!from) throw new ToolError(`Can't find block "${c.from}" (use an id from get_board)`)
       if (!to) throw new ToolError(`Can't find block "${c.to}" (use an id from get_board)`)
       if (from.id === to.id) throw new ToolError(`A connector needs two different blocks ("${c.from}")`)
-      return { from: from.id, to: to.id, label: c.label as string | undefined, route: (c.route ?? a.route) as Connector['route'], relation: (c.relation as Connector['relation']) ?? suggestRelation(from.type, to.type) }
+      return { from: from.id, to: to.id, label: c.label as string | undefined, route: (c.route ?? a.route) as Connector['route'], relation: (c.relation as Connector['relation']) ?? suggestRelation(from.type, to.type, board.types()) }
     })
     const { result, changeSet } = this.edit(board, caller, a.intent, `Connect ${pairs.length} pair${pairs.length === 1 ? '' : 's'}`, (rec) => {
       const ids: string[] = []
@@ -1083,9 +1697,9 @@ export class CanvasCore {
       if (!fs.existsSync(a.path)) throw new ToolError(`No file at ${a.path}`)
       bytes = new Uint8Array(fs.readFileSync(a.path))
     } else if (a.url) {
-      const r = await fetch(a.url, { signal: AbortSignal.timeout(15000) })
-      if (!r.ok) throw new ToolError(`Download failed (${r.status}) for ${a.url}`)
-      bytes = new Uint8Array(await r.arrayBuffer())
+      const r = await this.fetchFor(caller, String(a.url), { kind: 'tool', id: 'add_image', board: board.id }, 'Download an image to place on the board')
+      if (!r.ok) throw new ToolError(`Download failed (${r.status}) for ${hostOf(String(a.url))}`)
+      bytes = r.bytes
     } else if (a.data) {
       bytes = new Uint8Array(Buffer.from(String(a.data).replace(/^data:[^,]+,/, ''), 'base64'))
     } else throw new ToolError('Provide path, url or data')
@@ -1155,17 +1769,57 @@ export class CanvasCore {
     })
     const parent = blocks[0].parent ?? null
     if (blocks.some((b) => (b.parent ?? null) !== parent)) throw new ToolError('arrange needs blocks that share the same parent frame')
+    const reg = board.types()
+    const field = (key?: string) => (b: Block) => {
+      if (!key) return undefined
+      if (key === 'type') return b.type ? typeDef(b.type, reg).plural : 'Untyped'
+      const v = typeFields(b, reg)[key]
+      return v === undefined || v === '' ? undefined : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v)
+    }
+    if (a.layout === 'matrix' && (!a.rows_field || !a.cols_field)) throw new ToolError('matrix needs `rows_field` and `cols_field` (a field key, or "type" for rows)')
+    const { changeSet } = this.edit(board, caller, a.intent, `Arrange ${blocks.length} blocks as ${a.layout}`, (rec) =>
+      this.arrangeBlocks(board, rec, blocks, a.layout, { columns: a.columns, row: field(a.rows_field), col: field(a.cols_field), date: field(a.date_field) }),
+    )
+    return { board: board.id, changeSet, arranged: blocks.map((b) => b.id) }
+  }
+
+  /** Lay out existing siblings with an intent, anchored at their current top-left; axis labels are replaced, flow/timeline get arrows. */
+  private arrangeBlocks(board: Board, rec: Recorder, blocks: Block[], intent: LayoutIntent, o: { columns?: number; row?: (b: Block) => string | undefined; col?: (b: Block) => string | undefined; date?: (b: Block) => string | undefined }) {
+    const parent = blocks[0].parent ?? null
     const ordered = [...blocks].sort((p, q) => p.y - q.y || p.x - q.x)
     const bb = bboxOf(ordered)
-    const res = layout(ordered.map((b) => ({ key: b.id, kind: b.kind, w: b.w, h: b.h })), a.layout, { columns: a.columns, headingSize: () => ({ w: 0, h: 0 }) })
-    const { changeSet } = this.edit(board, caller, a.intent, `Arrange ${blocks.length} blocks as ${a.layout}`, (rec) => {
-      for (const b of ordered) {
-        const p = res.placed.get(b.id)!
-        rec.updateBlock(b.id, { x: snap(bb.x + p.x), y: snap(bb.y + p.y), h: p.h })
-      }
-      if (parent) this.fitFrame(rec, board, parent)
-    })
-    return { board: board.id, changeSet, arranged: blocks.map((b) => b.id) }
+    const res = layout(
+      ordered.map((b) => ({ key: b.id, kind: b.kind, w: b.w, h: b.h, row: o.row?.(b), col: o.col?.(b), date: o.date?.(b) })),
+      intent,
+      { columns: o.columns, headingSize: axisLabelSize, labelSize: axisLabelSize },
+    )
+    for (const ax of board.childrenOf(parent).filter((b) => b.layoutRole === 'axis' && intersects(board.pageRect(b), { x: bb.x - 400, y: bb.y - 200, w: bb.w + 800, h: bb.h + 400 }))) rec.deleteBlock(ax.id)
+    const moved = new Set(ordered.map((b) => b.id))
+    const newRects: Rect[] = []
+    for (const b of ordered) {
+      const p = res.placed.get(b.id)!
+      const x = snap(bb.x + p.x)
+      const y = snap(bb.y + p.y)
+      rec.updateBlock(b.id, { x, y })
+      newRects.push({ x, y, w: b.w, h: b.h })
+    }
+    for (const hd of res.headings) {
+      const s = axisLabelSize(hd.group)
+      rec.createBlock({ id: newId(), kind: 'text', x: snap(bb.x + hd.x), y: snap(bb.y + hd.y), w: s.w, h: s.h, parent, text: `**${hd.group}**`, color: 'gray', size: 's', layoutRole: 'axis' })
+      newRects.push({ x: bb.x + hd.x, y: bb.y + hd.y, w: s.w, h: s.h })
+    }
+    // blocks the layout now covers move below it, keeping their arrangement
+    const area = bboxOf(newRects)
+    const others = board.childrenOf(parent).filter((b) => !moved.has(b.id) && b.kind !== 'frame' && b.layoutRole !== 'axis' && intersects(b, area, 8))
+    if (others.length) {
+      const dy = snap(area.y + area.h + CLUSTER_GAP - Math.min(...others.map((b) => b.y)))
+      for (const b of others) rec.updateBlock(b.id, { y: b.y + dy })
+    }
+    for (const [from, to] of res.edges) {
+      if ([...board.connectors.values()].some((c) => c.from === from && c.to === to)) continue
+      rec.createConnector({ id: newId(), from, to, route: 'elbow' })
+    }
+    if (parent) this.fitFrame(rec, board, parent)
   }
 
   private tidy(a: Args, caller: CallerInfo) {
@@ -1214,14 +1868,15 @@ export class CanvasCore {
     const items = sibs.filter((b) => b.layoutRole !== 'axis')
     if (!items.length) throw new ToolError('Nothing to tidy here')
     const origin = frame ? { x: PAD, y: PAD } : (() => { const bb = bboxOf(items); return { x: bb.x, y: bb.y } })()
-    const order = [...BLOCK_TYPE_IDS, undefined]
+    const reg = board.types()
+    const order: (TypeId | undefined)[] = [...Object.keys(reg), ...new Set(items.map((b) => b.type).filter((t): t is string => !!t && !reg[t])), undefined]
     const rows = order.map((t) => ({ t, list: items.filter((b) => b.type === t).sort((p, q) => p.y - q.y || p.x - q.x) })).filter((r) => r.list.length)
     const GAP = 24
     const BAND = 48
     const moves = new Map<string, { x: number; y: number }>()
     const axes: { text: string; x: number; y: number }[] = []
     const field = a.matrix_field as string | undefined
-    const bandLayout = (list: { t?: BlockTypeId; list: Block[] }[], startY: number) => {
+    const bandLayout = (list: { t?: TypeId; list: Block[] }[], startY: number) => {
       let y = startY
       const maxRowW = 6
       for (const r of list) {
@@ -1243,16 +1898,16 @@ export class CanvasCore {
     }
     if (a.by === 'matrix') {
       if (!field) throw new ToolError('matrix needs `matrix_field`, e.g. "status" or "done" (see list_types)')
-      const withField = new Set(BLOCK_TYPE_IDS.filter((t) => BLOCK_TYPES[t].fields.some((f) => f.key === field)))
+      const withField = new Set(Object.keys(reg).filter((t) => reg[t].fields.some((f) => f.key === field)))
       if (!withField.size) throw new ToolError(`No type has a field "${field}" (see list_types)`)
       const valueOf = (b: Block) => {
-        const v = typeFields(b)[field]
+        const v = typeFields(b, reg)[field]
         return v === undefined || v === '' ? '—' : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v)
       }
       const inMatrix = rows.filter((r) => r.t && withField.has(r.t))
       const rest = rows.filter((r) => !r.t || !withField.has(r.t))
       const members = inMatrix.flatMap((r) => r.list)
-      const declared = [...withField].flatMap((t) => BLOCK_TYPES[t].fields.filter((f) => f.key === field).flatMap((f) => (f.kind === 'enum' ? [...f.options] : f.kind === 'boolean' ? ['no', 'yes'] : [])))
+      const declared = [...withField].flatMap((t) => reg[t].fields.filter((f) => f.key === field).flatMap((f) => (f.kind === 'enum' ? [...f.options] : f.kind === 'boolean' ? ['no', 'yes'] : [])))
       const cols = [...new Set([...declared, ...members.map(valueOf)])]
       const labelW = 128
       const colW = cols.map((c) => Math.max(160, ...members.filter((b) => valueOf(b) === c).map((b) => b.w)))
@@ -1273,7 +1928,7 @@ export class CanvasCore {
           cursor[ci] += b.h + GAP
           rowH = Math.max(rowH, cursor[ci] - y - GAP)
         }
-        axes.push({ text: BLOCK_TYPES[r.t!].plural, x: origin.x, y })
+        axes.push({ text: typeDef(r.t!, reg).plural, x: origin.x, y })
         y += rowH + BAND
       }
       if (rest.length) bandLayout(rest, y + GAP)
@@ -1319,6 +1974,7 @@ export class CanvasCore {
 
   exportBoard(a: Args) {
     const board = this.board(a.board)
+    const reg = board.types()
     const target = a.frame ? this.frame(board, a.frame) : null
     const all = [...board.blocks.values()]
     const inScope = (b: Block) => !target || b.id === target.id || b.parent === target.id
@@ -1329,8 +1985,9 @@ export class CanvasCore {
     if (a.format === 'json') {
       const assets = [...board.assets.values()].filter((as) => blocks.some((b) => b.asset === as.id)).map(({ bytes, ...meta }) => ({ ...meta, size: bytes.byteLength }))
       const clean = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).filter(([k, v]) => v !== undefined && v !== null && k !== 'changeSet')) as T
-      const byType = Object.fromEntries(BLOCK_TYPE_IDS.map((t) => [t, blocks.filter((b) => b.type === t).map((b) => b.id)]).filter(([, v]) => v.length))
-      return { format: 'json', filename: `${slug(board.title)}.json`, content: JSON.stringify({ format: 'aifig-export/1', exportedAt: new Date().toISOString(), board: { id: board.id, title: board.title }, byType, blocks: blocks.map((b) => clean({ ...b, ...(b.type ? { fields: typeFields(b) } : {}) })), connectors: connectors.map(clean), threads, assets }, null, 2) }
+      const typeIds = [...new Set(blocks.map((b) => b.type).filter((t): t is string => !!t))]
+      const byType = Object.fromEntries(typeIds.map((t) => [t, blocks.filter((b) => b.type === t).map((b) => b.id)]))
+      return { format: 'json', filename: `${slug(board.title)}.json`, content: JSON.stringify({ format: 'aifig-export/1', exportedAt: new Date().toISOString(), board: { id: board.id, title: board.title }, byType, blocks: blocks.map((b) => clean({ ...b, ...(b.type ? { fields: typeFields(b, reg) } : {}) })), connectors: connectors.map(clean), threads, assets }, null, 2) }
     }
     const byY = (p: Block, q: Block) => p.y - q.y || p.x - q.x
     const label = (b: Block | undefined) => (b ? (b.kind === 'card' || b.kind === 'frame' ? b.title || b.text : b.text).replace(/\s+/g, ' ').trim() : '(free end)')
@@ -1363,19 +2020,22 @@ export class CanvasCore {
     // typed blocks first, one section per type; everything else by frame
     const where = (b: Block) => (b.parent ? board.blocks.get(b.parent)?.title : '') || ''
     const typedLine = (b: Block): string[] => {
-      const f = typeFields(b)
+      const f = typeFields(b, reg)
       const text = (b.kind === 'card' ? `**${b.title || 'Untitled'}**${b.text ? ` — ${b.text}` : ''}` : b.text).replace(/\n/g, ' ').trim()
       const ctx = where(b) ? ` _(${where(b)})_` : ''
       const comments = threads.filter((t) => t.target === b.id && !t.resolved).flatMap((t) => [`  > 💬 ${t.author.name}: ${t.text}`, ...t.replies.map((r) => `  > ↳ ${r.author.name}: ${r.text}`)])
       if (b.type === 'todo') return [`- [${f.done ? 'x' : ' '}] ${text}${f.owner ? ` — @${f.owner}` : ''}${ctx}`, ...comments]
       if (b.type === 'quote') return [`> ${text}${[f.interviewee, f.source].filter(Boolean).length ? ` — ${[f.interviewee, f.source].filter(Boolean).join(', ')}` : ''}${ctx}`, '', ...comments]
-      const sum = fieldSummary(b)
-      return [`- ${text}${sum ? ` — _${sum}_` : ''}${ctx}`, ...comments]
+      const rows = templateRows(b, reg).filter((r) => r.value)
+      const sum = fieldSummary(b, reg)
+      return [`- ${text}${sum ? ` — _${sum}_` : ''}${ctx}`, ...rows.map((r) => `  - ${r.label}: ${r.value}`), ...comments]
     }
-    for (const t of BLOCK_TYPE_IDS) {
+    const presentTypes = [...Object.keys(reg), ...new Set(blocks.map((b) => b.type).filter((t): t is string => !!t && !reg[t]))]
+    for (const t of presentTypes) {
       const list = blocks.filter((b) => b.type === t).sort((p, q) => where(p).localeCompare(where(q)) || byY(p, q))
       if (!list.length) continue
-      out.push(`## ${BLOCK_TYPES[t].plural} (${list.length})`, '')
+      const d = typeDef(t, reg)
+      out.push(`## ${d.plural}${d.skill ? ` · ${d.skill}` : ''} (${list.length})`, '')
       for (const b of list) out.push(...typedLine(b))
       out.push('')
     }
@@ -1533,6 +2193,8 @@ export class CanvasCore {
       return who && (c.author.id.toLowerCase() === who || c.author.name.toLowerCase() === who)
     })
     if (!sets.length) throw new ToolError(a.change_set ? `No change set "${a.change_set}" to undo` : `No changes by "${a.author ?? 'that agent'}" to undo`)
+    board.saveNow()
+    this.registry.safety.snapshot(board, 'auto', sets.length === 1 ? `Before undoing “${sets[0].intent}”` : `Before undoing ${sets.length} change sets`, caller.name)
     const kept: { id: string; reason: string }[] = []
     let reverted = 0
     board.doc.transact(() => {

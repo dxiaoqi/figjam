@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import { Command } from 'commander'
 import { callCore } from './client'
-import type { AnyToolName, CallerInfo } from '@aifig/shared'
+import { TEMPLATE_IDS, type AnyToolName, type CallerInfo } from '@aifig/shared'
 
 const program = new Command()
 program
@@ -44,8 +44,9 @@ program
   .option('-p, --port <port>', 'port', (v) => Number(v))
   .action(async (opts) => {
     const { startCore } = await import('@aifig/core')
+    const { tokenPath: tokenPathFor } = await import('@aifig/core/auth')
     const { port } = await startCore(opts.port)
-    console.log(`ai-figma core listening on http://127.0.0.1:${port}`)
+    console.log(`ai-figma core listening on http://127.0.0.1:${port} — open the canvas with \`aifig open\` (API, MCP and sync require the access token in ${tokenPathFor()})`)
   })
 
 program
@@ -66,9 +67,22 @@ program
   )
 
 program
-  .command('new-board <title>')
-  .description('create a board')
-  .action((title) => run('create_board', { title }, (r) => console.log(`✓ created ${r.board.id} "${r.board.title}"`)))
+  .command('new-board [title]')
+  .description('create a board, e.g. aifig new-board --template research-synthesis --lang zh-CN')
+  .option('-t, --template <id>', `start from a template: ${TEMPLATE_IDS.join(' | ')}`)
+  .option('-l, --lang <language>', 'template language: en | zh-CN')
+  .action((title, opts) =>
+    run('create_board', { title, template: opts.template, language: opts.lang }, (r) => console.log(`✓ created ${r.board.id} "${r.board.title}"${r.template ? ` from ${r.template} (${r.board.blockCount} blocks)` : ''}`)),
+  )
+
+program
+  .command('templates')
+  .description('list board templates')
+  .action(() =>
+    run('list_templates', {}, (r) => {
+      for (const t of r.templates) console.log(`${t.id.padEnd(22)} ${t.title} — ${t.description}`)
+    }),
+  )
 
 program
   .command('read')
@@ -383,10 +397,277 @@ for (const action of ['accept', 'reject'] as const) {
     })
 }
 
+const KIND_LABEL: Record<string, string> = { auto: 'auto', checkpoint: 'checkpoint', 'before-restore': 'pre-restore', recovered: 'recovered', opened: 'opened' }
+
+program
+  .command('versions')
+  .description('version history of the board (newest first)')
+  .option('-n, --limit <n>', 'how many', (v) => Number(v))
+  .action((o) =>
+    run('list_versions', { limit: o.limit }, (r) => {
+      if (!r.versions.length) return console.log('No versions yet — they are taken automatically as the board changes, or with `aifig checkpoint "name"`.')
+      for (const v of r.versions) {
+        const at = new Date(v.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
+        console.log(`${v.id}  ${at.padEnd(20)}  ${(KIND_LABEL[v.kind] ?? v.kind).padEnd(11)}  ${String(v.blockCount).padStart(4)} blocks  ${v.name}`)
+      }
+    }),
+  )
+
+program
+  .command('checkpoint <name...>')
+  .description('save a named checkpoint of the board')
+  .action((name: string[]) => run('create_version', { name: name.join(' ') }, (r) => console.log(`✓ checkpoint ${r.version.id} “${r.version.name}” (${r.version.blockCount} blocks)`)))
+
+program
+  .command('restore <version>')
+  .description('restore a version (the current state is checkpointed first; as an agent it goes through review)')
+  .action((version: string) =>
+    run('restore_version', { version }, (r) => {
+      if (r.unchanged) return console.log('The board already matches that version.')
+      const s = r.summary
+      console.log(`✓ restored ${r.restored}: ${s.added} back, ${s.removed} removed, ${s.changed} changed`)
+      console.log(r.changeSet ? csLine(r) : `  undo with: aifig --human restore ${r.checkpoint}`)
+    }),
+  )
+
+program
+  .command('backups')
+  .description('print (or --open) the backup folder')
+  .option('--open', 'open it in the file manager')
+  .action(async (o) => {
+    const r = await callCore('open_backup_folder', { board: program.opts().board, reveal: !!o.open }, { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' })
+    if (!r.ok) {
+      console.error(`✗ ${r.error}`)
+      process.exit(1)
+    }
+    console.log((r.result as { path: string }).path)
+  })
+
+program
+  .command('token')
+  .description('print the local access token (for MCP-over-HTTP configs); --rotate replaces it')
+  .option('--rotate', 'generate a new token; clients reading AIFIG_HOME pick it up, pasted configs must be updated')
+  .action(async (o) => {
+    const { loadOrCreateToken, rotateToken, tokenPath } = await import('@aifig/core/auth')
+    const t = o.rotate ? rotateToken() : loadOrCreateToken()
+    if (o.rotate) console.error(`✓ rotated ${tokenPath()} — reconnect HTTP MCP clients and reopen browser tabs with \`aifig open\``)
+    console.log(t)
+  })
+
+program
+  .command('open')
+  .description('open the canvas in your browser, signed in with the access token')
+  .option('--dev', 'open the Vite dev server (npm run dev) instead of the core')
+  .option('--print', 'print the link instead of opening it')
+  .action(async (o) => {
+    const { ensureCore, base } = await import('./client')
+    await ensureCore()
+    const { loadOrCreateToken } = await import('@aifig/core/auth')
+    const origin = o.dev ? `http://127.0.0.1:${process.env.AIFIG_UI_PORT ?? 47820}` : base()
+    const link = `${origin}/#token=${loadOrCreateToken()}`
+    if (o.print) return console.log(link)
+    const { spawn } = await import('node:child_process')
+    const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
+    spawn(cmd, [link], { stdio: 'ignore', detached: true }).on('error', () => console.log(link)).unref()
+  })
+
+program
+  .command('permissions [action] [subject] [capability] [target]')
+  .description('list grants and pending requests; `allow agent:<client> network <host|*>`; `revoke agent:<client> [capability] [target]`')
+  .action(async (action, subject, capability, target) => {
+    const { coreFetch } = await import('./client')
+    const actor = { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' }
+    if (action === 'allow' || action === 'revoke') {
+      const r = (await (await coreFetch(`/api/permissions/${action === 'allow' ? 'grant' : 'revoke'}`, { method: 'POST', body: JSON.stringify({ subject, capability, target, actor }) })).json()) as any
+      if (!r.ok) {
+        console.error(`✗ ${r.error}`)
+        process.exit(1)
+      }
+      console.log(action === 'allow' ? `✓ ${subject} may use ${capability} for ${target}` : `✓ removed ${r.removed} grant(s)`)
+      return
+    }
+    const r = (await (await coreFetch('/api/permissions')).json()) as any
+    if (program.opts().json) return console.log(JSON.stringify(r, null, 2))
+    if (!r.grants.length) console.log('No grants. Agents are asked in the canvas before they touch the network or secrets.')
+    for (const g of r.grants) console.log(`${g.subject.padEnd(24)} ${g.capability.padEnd(8)} ${g.target}`)
+    for (const p of r.pending) console.log(`pending: ${p.actor.name} wants ${p.capability} for ${p.target} (${p.reason})`)
+  })
+
+program
+  .command('activity')
+  .description('recent network, secret, permission and auth events')
+  .option('-n, --limit <n>', 'how many', (v) => Number(v), 30)
+  .option('-c, --category <category>', 'network | secret | permission | auth')
+  .action(async (o) => {
+    const { coreFetch } = await import('./client')
+    const q = new URLSearchParams({ limit: String(o.limit), ...(o.category ? { category: o.category } : {}) })
+    const { entries } = (await (await coreFetch(`/api/activity?${q}`)).json()) as any
+    if (program.opts().json) return console.log(JSON.stringify(entries, null, 2))
+    if (!entries.length) console.log('No activity yet.')
+    for (const e of entries) console.log(`${new Date(e.at).toISOString().slice(0, 19).replace('T', ' ')}  ${e.category.padEnd(10)} ${e.outcome.padEnd(7)} ${e.actor.name}: ${e.action}${e.target ? ` ${e.target}` : ''}${e.via ? ` (${e.via})` : ''}${e.detail ? ` — ${e.detail}` : ''}`)
+  })
+
 program
   .command('call <tool> [json]')
   .description('call any Canvas API tool with a JSON argument object')
   .action((tool, jsonArg) => run(tool, jsonArg ? JSON.parse(jsonArg) : {}))
+
+// ---- skills -------------------------------------------------------------------
+
+const skill = program.command('skill').description('create, develop, install and enable skills (SKILL.md + canvas/blocks.json)')
+
+function printValidation(r: { name: string; errors: string[]; warnings: string[] }, ok: string) {
+  for (const w of r.warnings) console.log(`  ⚠ ${w}`)
+  if (r.errors.length) {
+    console.log(`✗ ${r.name}: ${r.errors.length} problem${r.errors.length === 1 ? '' : 's'}`)
+    for (const e of r.errors) console.log(`  • ${e}`)
+    return false
+  }
+  console.log(ok)
+  return true
+}
+
+skill
+  .command('new')
+  .description('scaffold a skill folder: SKILL.md + canvas/blocks.json with an example type, layout and prompt')
+  .argument('<name>', 'kebab-case, e.g. persona-kit')
+  .option('-d, --dir <dir>', 'parent folder', '.')
+  .option('--tools <tools>', 'comma-separated tools for an L1 skill, e.g. web.search')
+  .action(async (name: string, o) => {
+    const { writeSkillFolder, loadSkill } = await import('@aifig/core')
+    const path = await import('node:path')
+    const dir = path.resolve(o.dir, name)
+    if (fs.existsSync(dir) && fs.readdirSync(dir).length) {
+      console.error(`✗ ${dir} already exists and is not empty`)
+      process.exit(1)
+    }
+    const tools = o.tools ? String(o.tools).split(',').map((t: string) => t.trim()).filter(Boolean) : []
+    writeSkillFolder(dir, {
+      name,
+      description: `Describe what ${name} does and when an agent should use it (this is what agents read first).`,
+      capability: tools.length ? 'L1' : 'L0',
+      tools,
+      instructions: `# ${name}\n\nTell agents how to use your block types: what goes in each field, how to connect them, which layout to use.\n\n- \`${name}.item\` — one item per card. Fill \`status\` and \`owner\`.\n`,
+      blocks: {
+        types: {
+          item: {
+            label: 'Item',
+            plural: 'Items',
+            base: 'card',
+            color: 'blue',
+            icon: 'Tag',
+            description: 'An example type — rename it and change the fields.',
+            fields: [
+              { key: 'status', label: 'Status', kind: 'enum', options: ['todo', 'doing', 'done'], default: 'todo' },
+              { key: 'owner', label: 'Owner', kind: 'text' },
+            ],
+            template: { rows: ['status', 'owner'] },
+          },
+        },
+        relations: [],
+        layouts: [{ id: 'board', label: 'Status board', intent: 'cluster', field: 'status' }],
+        actions: [],
+        prompts: [{ id: 'start', label: 'Get started', text: `Create a few ${name}.item cards and apply the ${name}.board layout.` }],
+      },
+    })
+    const r = loadSkill(dir, 'dev')
+    printValidation(r, `✓ created ${dir}\n  next: aifig skill dev ${path.relative(process.cwd(), dir).startsWith('..') ? dir : path.relative(process.cwd(), dir) || '.'}   (live reload into the canvas)`)
+  })
+
+skill
+  .command('validate')
+  .description('check a skill folder without installing it')
+  .argument('[dir]', 'skill folder', '.')
+  .action(async (dir: string) => {
+    const { loadSkill } = await import('@aifig/core')
+    const r = loadSkill(dir, 'dev')
+    if (!printValidation(r, `✓ ${r.name} ${r.version} (${r.capability}) — ${r.canvas.types.length} type(s), ${r.canvas.layouts.length} layout(s), ${r.canvas.actions.length} action(s)`)) process.exit(1)
+  })
+
+skill
+  .command('dev')
+  .description('develop a skill: validate on every save and hot-reload it into boards that have it enabled')
+  .argument('[dir]', 'skill folder', '.')
+  .option('--enable', 'also enable it on the board (default: the board open in the canvas)')
+  .action(async (dir: string, o) => {
+    const path = await import('node:path')
+    const abs = path.resolve(dir)
+    let first = true
+    const reload = async () => {
+      const r = await callCore('load_dev_skill', { path: abs }, { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' })
+      if (!r.ok) return console.error(`✗ ${r.error}`)
+      const v = r.result as { name: string; version: string; errors: string[]; warnings: string[]; types: string[]; boardsUpdated: string[] }
+      const stamp = new Date().toLocaleTimeString()
+      const ok = printValidation(v, `✓ [${stamp}] ${v.name} ${v.version} — ${v.types.length} type(s)${v.boardsUpdated.length ? ` · reloaded on ${v.boardsUpdated.length} board(s)` : ''}`)
+      if (ok && first && o.enable) {
+        const e = await callCore('enable_skill', { board: program.opts().board, name: v.name }, { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' })
+        console.log(e.ok ? `✓ enabled ${v.name} on the board` : `✗ ${e.error}`)
+      }
+      first = false
+    }
+    await reload()
+    console.log(`  watching ${abs} — Ctrl-C to stop`)
+    let timer: ReturnType<typeof setTimeout> | null = null
+    fs.watch(abs, { recursive: true }, (_e, file) => {
+      if (file && /(^|\/)\.|~$|\.swp$/.test(String(file))) return
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(reload, 150)
+    })
+  })
+
+skill
+  .command('list')
+  .description('skills on this machine, and which are enabled on the board')
+  .action(() =>
+    run('list_skills', {}, (r) => {
+      for (const s of r.skills) {
+        const tools = s.tools.length ? ` · tools: ${s.tools.map((t: { name: string; available: boolean }) => `${t.name}${t.available ? '' : ' (not configured)'}`).join(', ')}` : ''
+        console.log(`${s.enabled ? '●' : '○'} ${s.name.padEnd(22)} ${s.version.padEnd(8)} ${s.capability} ${s.source.padEnd(8)} ${s.types.map((t: { id: string }) => t.id).join(', ')}${tools}${s.errors ? `  ✗ ${s.errors.length} problem(s)` : ''}`)
+      }
+    }),
+  )
+
+skill
+  .command('show')
+  .description("a skill's instructions, types, layouts and actions")
+  .argument('<name>')
+  .action((name: string) =>
+    run('get_skill', { name }, (r) => {
+      console.log(`${r.name} ${r.version} (${r.capability})\n${r.description}\n`)
+      console.log(r.instructions)
+      console.log(`\nTypes: ${r.types.map((t: { id: string; fields: { key: string }[] }) => `${t.id} [${t.fields.map((f) => f.key).join(', ')}]`).join('; ')}`)
+      if (r.layouts.length) console.log(`Layouts: ${r.layouts.map((l: { id: string }) => l.id).join(', ')}`)
+      if (r.actions.length) console.log(`Actions: ${r.actions.map((a: { id: string; tool: string }) => `${a.id} (${a.tool})`).join(', ')}`)
+    }),
+  )
+
+skill
+  .command('install')
+  .description('validate a skill folder and copy it into ~/.aifig/skills')
+  .argument('<dir>')
+  .action(async (dir: string) => {
+    const path = await import('node:path')
+    return run('install_skill', { path: path.resolve(dir) }, (r) => console.log(`✓ installed ${r.installed} ${r.version} → ${r.path}`))
+  })
+
+for (const verb of ['enable', 'disable'] as const) {
+  skill
+    .command(verb)
+    .description(`${verb} a skill on the board`)
+    .argument('<name>')
+    .action((name: string) => run(`${verb}_skill` as AnyToolName, { name }, (r) => console.log(`✓ ${verb}d ${name}${r.types?.length ? ` — types: ${r.types.join(', ')}` : ''}`)))
+}
+
+skill
+  .command('activity')
+  .description('skill activity log for the board (tool calls, permissions)')
+  .option('-s, --skill <name>')
+  .action((o) =>
+    run('list_activity', { skill: o.skill, limit: 50 }, (r) => {
+      for (const e of r.activity) console.log(`${new Date(e.at).toLocaleString()}  ${String(e.source?.id ?? '').padEnd(18)} ${String(e.category === 'permission' ? 'permission' : e.action).padEnd(10)} ${String(e.outcome).padEnd(8)} ${e.target ?? ''} ${e.detail ?? ''}`)
+      if (r.grants.length) console.log(`\nAllowed: ${r.grants.map((g: { subject: string; target: string }) => `${g.subject.replace(/^skill:/, '')} → ${g.target}`).join(', ')}  (revoke: aifig permissions revoke <skill:name> tool <tool>)`)
+    }),
+  )
 
 program.parseAsync(process.argv, { from: 'node' }).catch((e) => {
   console.error(`✗ ${(e as Error).message}`)

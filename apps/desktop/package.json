@@ -35,6 +35,10 @@
         "to": "ui"
       },
       {
+        "from": "../../skills/builtin",
+        "to": "skills"
+      },
+      {
         "from": "../../node_modules/@resvg",
         "to": "node_modules/@resvg"
       }

@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
+import { signIn } from './lib/core-auth.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'phase0-gaps')
@@ -38,6 +39,7 @@ const faq = id('FAQ: what counts as a seat?')
 const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--no-sandbox'] })
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, recordVideo: { dir: out, size: { width: 1440, height: 900 } } })
 const page = await context.newPage()
+await signIn(page)
 page.on('pageerror', (e) => console.log('[pageerror]', e.message))
 const ed = (fn, arg) => page.evaluate(fn, arg)
 const shot = async (name) => {

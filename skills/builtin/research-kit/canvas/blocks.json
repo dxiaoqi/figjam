@@ -1,0 +1,77 @@
+{
+  "$schema": "https://aifig.dev/schemas/skill-blocks-1.json",
+  "version": 1,
+  "types": {
+    "quote": {
+      "label": "Quote",
+      "plural": "Quotes",
+      "base": "sticky",
+      "color": "teal",
+      "icon": "Mic",
+      "glyph": "❝",
+      "description": "A verbatim quote from a participant.",
+      "fields": [
+        { "key": "participant", "label": "Participant", "kind": "text", "placeholder": "P3" },
+        { "key": "source", "label": "Source", "kind": "text", "placeholder": "Interview" },
+        { "key": "sentiment", "label": "Sentiment", "kind": "enum", "options": ["positive", "neutral", "negative"] },
+        { "key": "stage", "label": "Stage", "kind": "text", "placeholder": "Onboarding" }
+      ],
+      "template": { "summary": ["participant", "source", "sentiment"] },
+      "prefixes": ["rq:"]
+    },
+    "insight": {
+      "label": "Insight",
+      "plural": "Insights",
+      "base": "card",
+      "color": "purple",
+      "icon": "Sparkles",
+      "glyph": "✦",
+      "description": "A finding backed by several quotes.",
+      "fields": [
+        { "key": "theme", "label": "Theme", "kind": "text" },
+        { "key": "confidence", "label": "Confidence", "kind": "enum", "options": ["low", "medium", "high"], "default": "medium" },
+        { "key": "evidence", "label": "Evidence", "kind": "number", "unit": "quotes" },
+        { "key": "stage", "label": "Stage", "kind": "text" }
+      ],
+      "template": { "rows": ["theme", "confidence", "evidence"] }
+    },
+    "opportunity": {
+      "label": "Opportunity",
+      "plural": "Opportunities",
+      "base": "card",
+      "color": "green",
+      "icon": "Target",
+      "glyph": "◎",
+      "description": "A “How might we…” framed from an insight.",
+      "fields": [
+        { "key": "impact", "label": "Impact", "kind": "enum", "options": ["low", "medium", "high"], "default": "medium" },
+        { "key": "effort", "label": "Effort", "kind": "enum", "options": ["low", "medium", "high"], "default": "medium" }
+      ],
+      "template": { "rows": ["impact", "effort"] }
+    }
+  },
+  "relations": [
+    { "from": "quote", "to": "insight", "relation": "supports" },
+    { "from": "insight", "to": "opportunity", "relation": "inspires" },
+    { "from": "quote", "to": "question", "relation": "raises" }
+  ],
+  "layouts": [
+    { "id": "affinity", "label": "Affinity map", "intent": "cluster", "types": ["insight"], "field": "theme", "description": "Insights grouped by theme." },
+    { "id": "opportunity-matrix", "label": "Opportunity matrix", "intent": "matrix", "types": ["opportunity"], "rows": "impact", "cols": "effort" },
+    { "id": "journey", "label": "Journey", "intent": "matrix", "types": ["quote", "insight"], "rows": "type", "cols": "stage", "description": "Quotes and insights along the journey stages." }
+  ],
+  "actions": [
+    {
+      "id": "find-sources",
+      "label": "Find related sources",
+      "description": "Web-search the insight and add results as stickies for review.",
+      "tool": "web.search",
+      "args": { "query": "{{title}}" },
+      "appliesTo": ["insight"],
+      "output": { "mode": "blocks", "relation": "supports" }
+    }
+  ],
+  "prompts": [
+    { "id": "synthesize", "label": "Synthesize quotes into insights", "file": "prompts/synthesize.md" }
+  ]
+}

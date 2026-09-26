@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { authHeaders, wsProtocols } from './lib/core-auth.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const port = 47930 + Math.floor(Math.random() * 40) * 2
@@ -32,14 +33,14 @@ const check = (name, ok, detail = '') => {
 }
 const HUMAN = { id: 'human:regress', name: 'You', client: 'test', kind: 'human' }
 const agent = (n) => ({ id: `regress-agent:${n}:${Date.now()}`, name: 'Regress Bot', client: 'regress', kind: 'agent' })
-const call = async (caller, tool, args = {}) => (await fetch(`${base}/api/call`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tool, args, caller }) })).json()
+const call = async (caller, tool, args = {}) => (await fetch(`${base}/api/call`, { method: 'POST', headers: authHeaders(home), body: JSON.stringify({ tool, args, caller }) })).json()
 const tag = Date.now().toString(36)
 
 // ---- bug 1: default board resolution -------------------------------------------------
 const A = (await call(HUMAN, 'create_board', { title: `Regress A ${tag}` })).result.board.id
 const B = (await call(HUMAN, 'create_board', { title: `Regress B ${tag}` })).result.board.id
 const canvas = async (board) => {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/sync/${board}`)
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/sync/${board}`, wsProtocols(home))
   await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = j)))
   return { ws, view: (focused) => ws.send(JSON.stringify({ type: 'viewport', bounds: { x: 0, y: 0, w: 1200, h: 800 }, focused })) }
 }
@@ -51,7 +52,7 @@ for (let i = 0; i < 5; i++) {
   cB.view(false)
   await sleep(20)
 }
-const active1 = (await (await fetch(`${base}/api/boards`)).json()).active
+const active1 = (await (await fetch(`${base}/api/boards`, { headers: authHeaders(home) })).json()).active
 check('bug 1: an unfocused canvas on another board does not steal the default board', active1 === A, active1)
 
 const s1 = agent(1)
@@ -67,7 +68,7 @@ cB.view(true)
 await sleep(100)
 const again = (await call(s2, 'get_board', { format: 'json' })).result
 check('bug 1: within a session the default stays put even if the focused canvas changes', again.board.id === A && !again.warnings, again.board?.id)
-const state = JSON.parse(fs.readFileSync(path.join((await (await fetch(`${base}/api/health`)).json()).home, 'state.json'), 'utf8'))
+const state = JSON.parse(fs.readFileSync(path.join((await (await fetch(`${base}/api/health`, { headers: authHeaders(home) })).json()).home, 'state.json'), 'utf8'))
 check('bug 1: the active board is persisted (survives a core restart)', state.activeBoardId === B, JSON.stringify(state))
 cA.ws.close()
 cB.ws.close()

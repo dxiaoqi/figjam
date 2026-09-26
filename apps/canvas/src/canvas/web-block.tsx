@@ -1,5 +1,6 @@
+import { t } from '../i18n'
 import { Code2, ExternalLink, Globe, Play, TriangleAlert } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { toast } from 'sonner'
 import { intersects, type BlockRenderProps, type Editor } from '@aifig/canvas-engine'
 import {
@@ -18,6 +19,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useBoard } from '../board-context'
 import { callCore } from '../lib/core'
+import { desktop } from '../lib/desktop'
 import { useAssetUrl } from './shapes'
 
 /** Snippet state writes are the snippet's own; they don't go on the person's undo stack. */
@@ -36,22 +38,101 @@ function releaseCapture() {
 
 type BridgeMsg = { aifig: 1; type: string; id?: number; data?: unknown; mem?: number; nodes?: number; message?: string; error?: string }
 
-function reply(frame: HTMLIFrameElement | null, id: number | undefined, data?: unknown, error?: string) {
-  frame?.contentWindow?.postMessage({ aifig: 1, type: 'reply', id, data, error }, '*')
+/** Posts to the running snippet, whichever element hosts it. */
+type Post = (msg: unknown) => void
+
+/** Electron: each snippet is a <webview> in its own in-memory partition (storage, cache, permissions); the main process enforces the rest. */
+const useWebview = !!desktop?.snippetWebviews
+const partitionFor = (boardId: string, blockId: string) => `snippet-${`${boardId}-${blockId}`.replace(/[^\w-]/g, '_').slice(0, 96)}`
+
+interface WebviewElement extends HTMLElement {
+  send(channel: string, ...args: unknown[]): void
+}
+
+/**
+ * The frame a snippet runs in. Browser: a sandboxed, credentialless iframe on the snippet host; messages via
+ * postMessage. Desktop: a <webview> (its own top-level page) whose preload relays messages over IPC.
+ */
+function SnippetFrame({
+  src,
+  title,
+  embed,
+  partition,
+  onMessage,
+  post,
+  frameRef,
+  capture,
+}: {
+  src: string
+  title: string
+  embed: boolean
+  partition: string
+  onMessage: (m: unknown) => void
+  post: RefObject<Post | null>
+  frameRef?: RefObject<HTMLElement | null>
+  capture?: boolean
+}) {
+  const el = useRef<HTMLElement | null>(null)
+  const handler = useRef(onMessage)
+  handler.current = onMessage
+  useEffect(() => {
+    const node = el.current
+    if (!node) return
+    if (frameRef) frameRef.current = node
+    if (useWebview) {
+      const wv = node as WebviewElement
+      const on = (e: Event) => {
+        const ev = e as Event & { channel: string; args: unknown[] }
+        if (ev.channel === 'aifig') handler.current(ev.args[0])
+      }
+      wv.addEventListener('ipc-message', on)
+      post.current = (m) => {
+        try {
+          wv.send('aifig', m)
+        } catch {
+          // not attached yet: the snippet asks again once it is ready
+        }
+      }
+      return () => {
+        wv.removeEventListener('ipc-message', on)
+        post.current = null
+      }
+    }
+    const frame = node as HTMLIFrameElement
+    const on = (e: MessageEvent) => e.source === frame.contentWindow && handler.current(e.data)
+    window.addEventListener('message', on)
+    post.current = (m) => frame.contentWindow?.postMessage(m, '*')
+    return () => {
+      window.removeEventListener('message', on)
+      post.current = null
+    }
+  }, [src, post, frameRef])
+  const common = capture
+    ? { title: 'preview', 'aria-hidden': true, tabIndex: -1, className: 'aifig-web-capture', 'data-web-capture': '' }
+    : { title, className: 'aifig-web-frame', 'data-web-frame': '' }
+  if (useWebview) return <webview ref={el as RefObject<HTMLElement>} src={src} partition={partition} webpreferences="contextIsolation=yes,sandbox=yes,nodeIntegration=no" {...common} />
+  return (
+    <iframe
+      ref={el as RefObject<HTMLIFrameElement>}
+      src={src}
+      sandbox={embed ? EMBED_SANDBOX : INLINE_SANDBOX}
+      allow={embed ? EMBED_ALLOW : ''}
+      referrerPolicy="no-referrer"
+      {...common}
+      {...({ credentialless: true } as Record<string, boolean>)}
+    />
+  )
 }
 
 /** The narrow bridge: the snippet's own state blob, permission checks (all denied in v1), heartbeat, exit, preview. */
-function useBridge(
-  frame: React.RefObject<HTMLIFrameElement | null>,
-  opts: { block: Block; editor: Editor; readOnly?: boolean; onHeartbeat?: (m: BridgeMsg) => void; onActivity?: () => void; onExit?: () => void; onThumb?: (png: string) => void; onReady?: () => void },
-) {
+function useBridge(opts: { block: Block; editor: Editor; readOnly?: boolean; onHeartbeat?: (m: BridgeMsg) => void; onActivity?: () => void; onExit?: () => void; onThumb?: (png: string) => void; onReady?: () => void }) {
   const ref = useRef(opts)
   ref.current = opts
-  useEffect(() => {
-    const on = (e: MessageEvent) => {
-      const f = frame.current
-      if (!f || e.source !== f.contentWindow) return
-      const m = e.data as BridgeMsg
+  const post = useRef<Post | null>(null)
+  const onMessage = useRef((raw: unknown) => {
+    const reply = (id: number | undefined, data?: unknown, error?: string) => post.current?.({ aifig: 1, type: 'reply', id, data, error })
+    {
+      const m = raw as BridgeMsg
       if (!m || m.aifig !== 1 || typeof m.type !== 'string') return
       const { editor, block } = ref.current
       const cur = editor.block(block.id)
@@ -69,30 +150,29 @@ function useBridge(
           if (typeof m.data === 'string') ref.current.onThumb?.(m.data)
           return
         case 'state:get':
-          return reply(f, m.id, web?.state ?? null)
+          return reply(m.id, web?.state ?? null)
         case 'state:set': {
-          if (!cur || !web) return reply(f, m.id, undefined, 'Snippet not found')
+          if (!cur || !web) return reply(m.id, undefined, 'Snippet not found')
           let json: string
           try {
             json = JSON.stringify(m.data ?? null)
           } catch {
-            return reply(f, m.id, undefined, 'State must be JSON')
+            return reply(m.id, undefined, 'State must be JSON')
           }
-          if (new TextEncoder().encode(json).byteLength > SNIPPET_LIMITS.stateBytes) return reply(f, m.id, undefined, `State is limited to ${SNIPPET_LIMITS.stateBytes / 1024} KB`)
+          if (new TextEncoder().encode(json).byteLength > SNIPPET_LIMITS.stateBytes) return reply(m.id, undefined, `State is limited to ${SNIPPET_LIMITS.stateBytes / 1024} KB`)
           // preview captures run the snippet read-only: same answers, no side effects
-          if (ref.current.readOnly) return reply(f, m.id, true)
+          if (ref.current.readOnly) return reply(m.id, true)
           editor.doc.transact(() => editor.blocksMap.set(cur.id, { ...cur, web: { ...web, state: JSON.parse(json) } }), SNIPPET_ORIGIN)
-          return reply(f, m.id, true)
+          return reply(m.id, true)
         }
         case 'permission':
-          return reply(f, m.id, { permission: String(m.data), status: web ? checkSnippetPermission(web, String(m.data)) : 'denied' })
+          return reply(m.id, { permission: String(m.data), status: web ? checkSnippetPermission(web, String(m.data)) : 'denied' })
         default:
-          return reply(f, m.id, undefined, `Unknown request "${m.type}"`)
+          return reply(m.id, undefined, `Unknown request "${m.type}"`)
       }
     }
-    window.addEventListener('message', on)
-    return () => window.removeEventListener('message', on)
-  }, [frame])
+  }).current
+  return { post, onMessage }
 }
 
 function Poster({ web, thumbUrl }: { web: WebSnippet; thumbUrl: string | null }) {
@@ -122,8 +202,7 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
   const thumbUrl = useAssetUrl(editor, fresh ?? (web?.thumbFor?.startsWith(hash) ? (web.thumb ?? lastThumb) : undefined))
   const [stopped, setStopped] = useState<string | null>(null)
   const [captureSlot, setCaptureSlot] = useState(false)
-  const frame = useRef<HTMLIFrameElement>(null)
-  const capture = useRef<HTMLIFrameElement>(null)
+  const frame = useRef<HTMLElement | null>(null)
   const beat = useRef({ at: 0, ready: false, activity: 0, startedAt: 0 })
   const lastState = useRef<string>('')
 
@@ -133,7 +212,7 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
   const stop = (reason: string) => {
     setStopped(reason)
     if (editor.editingId === block.id) editor.stopEditing()
-    toast.warning('Snippet stopped', { description: reason })
+    toast.warning(t('snippet.stopped'), { description: reason })
   }
 
   // running: watchdog (heartbeat, memory), idle and offscreen → back to the preview
@@ -141,20 +220,20 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
     if (!running || !web) return
     setStopped(null)
     beat.current = { at: 0, ready: false, activity: Date.now(), startedAt: Date.now() }
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       const now = Date.now()
       const r = editor.visualRect(block.id)
       if (!r || !intersects(r, editor.viewportPageBounds())) return editor.stopEditing()
       if (web.mode === 'inline') {
         const since = beat.current.at || beat.current.startedAt
-        if (now - since > SNIPPET_LIMITS.heartbeatMs + (beat.current.ready ? 0 : 4000)) return stop('It stopped responding (possibly an endless loop), so it was paused to keep the canvas fast.')
+        if (now - since > SNIPPET_LIMITS.heartbeatMs + (beat.current.ready ? 0 : 4000)) return stop(t('snippet.stopHang'))
       } else if (document.activeElement === frame.current) beat.current.activity = now
       if (now - beat.current.activity > SNIPPET_LIMITS.idleMs) editor.stopEditing()
     }, 500)
-    return () => clearInterval(t)
+    return () => clearInterval(timer)
   }, [running, web?.mode, block.id, editor])
 
-  useBridge(frame, {
+  const live = useBridge({
     block,
     editor,
     onReady: () => {
@@ -163,8 +242,8 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
     },
     onHeartbeat: (m) => {
       beat.current.at = Date.now()
-      if ((m.mem ?? 0) > SNIPPET_LIMITS.heapBytes) stop('It used too much memory.')
-      else if ((m.nodes ?? 0) > SNIPPET_LIMITS.domNodes) stop('It created too many elements.')
+      if ((m.mem ?? 0) > SNIPPET_LIMITS.heapBytes) stop(t('snippet.stopMemory'))
+      else if ((m.nodes ?? 0) > SNIPPET_LIMITS.domNodes) stop(t('snippet.stopNodes'))
     },
     onActivity: () => (beat.current.activity = Date.now()),
     onExit: () => editor.stopEditing(),
@@ -176,7 +255,7 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
     const json = JSON.stringify(web?.state ?? null)
     if (json === lastState.current) return
     lastState.current = json
-    frame.current?.contentWindow?.postMessage({ aifig: 1, type: 'state', data: web?.state ?? null }, '*')
+    live.post.current?.({ aifig: 1, type: 'state', data: web?.state ?? null })
   }, [running, web?.state])
 
   // preview capture: run the snippet briefly (sandboxed, offscreen) and let it snapshot itself
@@ -208,7 +287,7 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
     }
   }, [needCapture, thumbKey, block.id, editor])
 
-  useBridge(capture, {
+  const preview = useBridge({
     block,
     editor,
     readOnly: true,
@@ -228,37 +307,13 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
   return (
     <div className={cn('aifig-web', running && 'is-running')} data-web-mode={web.mode}>
       {!running && <Poster web={web} thumbUrl={thumbUrl} />}
-      {running && (
-        <iframe
-          ref={frame}
-          key={hash}
-          src={src}
-          title={snippetLabel(web)}
-          sandbox={web.mode === 'url' ? EMBED_SANDBOX : INLINE_SANDBOX}
-          allow={web.mode === 'url' ? EMBED_ALLOW : ''}
-          referrerPolicy="no-referrer"
-          className="aifig-web-frame"
-          data-web-frame
-          {...({ credentialless: true } as Record<string, boolean>)}
-        />
+      {running && src && (
+        <SnippetFrame key={hash} src={src} title={snippetLabel(web)} embed={web.mode === 'url'} partition={partitionFor(boardId, block.id)} onMessage={live.onMessage} post={live.post} frameRef={frame} />
       )}
-      {captureSlot && needCapture && (
-        <iframe
-          ref={capture}
-          src={`${src}&capture=1`}
-          title="preview"
-          sandbox={INLINE_SANDBOX}
-          referrerPolicy="no-referrer"
-          aria-hidden
-          tabIndex={-1}
-          className="aifig-web-capture"
-          data-web-capture
-          {...({ credentialless: true } as Record<string, boolean>)}
-        />
-      )}
+      {captureSlot && needCapture && <SnippetFrame src={`${src}&capture=1`} title="preview" embed={false} partition={partitionFor(boardId, block.id)} onMessage={preview.onMessage} post={preview.post} capture />}
       <div className="aifig-web-badge">
         {web.mode === 'url' ? <Play className="size-3" fill="currentColor" /> : <Code2 className="size-3" />}
-        <span className="truncate">{running ? `${snippetLabel(web)} · Esc to stop` : snippetLabel(web)}</span>
+        <span className="truncate">{running ? t('snippet.escStop', { label: snippetLabel(web) }) : snippetLabel(web)}</span>
       </div>
       {web.mode === 'url' && web.url && (
         <a
@@ -270,17 +325,17 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
           rel="noopener noreferrer"
           onPointerDown={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
-          title={`Open ${web.url}`}
+          title={t('snippet.open', { url: web.url })}
         >
-          {running ? `Not playing? Watch on ${web.provider ?? 'the site'}` : `Watch on ${web.provider ?? 'the site'}`}
+          {t(running ? 'snippet.notPlaying' : 'snippet.watchOn', { site: web.provider ?? t('snippet.theSite') })}
           <ExternalLink className="size-3" />
         </a>
       )}
-      {!running && !stopped && <div className="aifig-web-hint">Double-click to {web.mode === 'url' ? 'open' : 'run'}</div>}
+      {!running && !stopped && <div className="aifig-web-hint">{t(web.mode === 'url' ? 'snippet.hintOpen' : 'snippet.hintRun')}</div>}
       {stopped && !running && (
         <div className="aifig-web-stopped" data-web-stopped>
           <TriangleAlert className="size-4 shrink-0" />
-          <span>{stopped} Double-click to try again.</span>
+          <span>{t('snippet.tryAgain', { reason: stopped })}</span>
         </div>
       )}
     </div>

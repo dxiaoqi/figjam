@@ -6,6 +6,7 @@ import { useBoard } from '../board-context'
 import { useEditorState } from '../canvas/editor-context'
 import { callCore } from '../lib/core'
 import { cardHeight, nextColor } from '../canvas/shapes'
+import { useT } from '../i18n'
 
 const CARD_W: Record<SizeToken, number> = { s: 240, m: 280, l: 360, xl: 360 }
 
@@ -19,6 +20,7 @@ export function StylePanel() {
   const editor = useEditorState()
   const { boardId, theme } = useBoard()
   const dark = theme === 'dark'
+  const t = useT()
   const selected = editor.selectedBlocks()
   const blocks = selected.filter((b) => b.kind !== 'frame' && b.kind !== 'image' && b.kind !== 'web')
   const frames = selected.filter((b) => b.kind === 'frame')
@@ -51,13 +53,13 @@ export function StylePanel() {
     <div className="pointer-events-auto mr-3 flex w-[212px] flex-col gap-3 rounded-2xl chrome p-3 text-xs">
       {colored.length > 0 && (
         <div className="space-y-2">
-          <div className="text-[11px] font-medium text-muted-foreground">Color</div>
+          <div className="text-[11px] font-medium text-muted-foreground">{t('style.color')}</div>
           <div className="grid grid-cols-9 gap-1">
             {COLOR_TOKENS.map((c) => (
               <button
                 key={c}
-                aria-label={c}
-                title={c}
+                aria-label={t(`color.${c}`)}
+                title={t(`color.${c}`)}
                 onClick={() => setColor(c)}
                 className={cn('aspect-square rounded-full border border-black/5 transition-transform hover:scale-110', colors.size === 1 && colors.has(c) && 'ring-2 ring-foreground/70 ring-offset-1 ring-offset-background')}
                 style={{ background: COLORS[c][dark ? 'dark' : 'light'].bg }}
@@ -68,7 +70,7 @@ export function StylePanel() {
       )}
       {blocks.length > 0 && (
         <div className="space-y-2">
-          <div className="text-[11px] font-medium text-muted-foreground">Size</div>
+          <div className="text-[11px] font-medium text-muted-foreground">{t('style.size')}</div>
           <div className="flex gap-1 rounded-lg bg-muted p-0.5">
             {sizeOptions.map((s) => (
               <button
@@ -85,16 +87,16 @@ export function StylePanel() {
       {(frames.length === 1 || sameParent) && (
         <div className="flex flex-col gap-1 border-t pt-2">
           {frames.length === 1 && (
-            <button className="flex h-8 items-center gap-2 rounded-lg px-2 text-left hover:bg-accent" onClick={() => run('tidy', { frame: frames[0].id }, 'Frame tidied')}>
-              <Sparkles className="size-3.5" /> Tidy frame
+            <button className="flex h-8 items-center gap-2 rounded-lg px-2 text-left hover:bg-accent" onClick={() => run('tidy', { frame: frames[0].id }, t('style.tidied'))}>
+              <Sparkles className="size-3.5" /> {t('style.tidyFrame')}
             </button>
           )}
           {sameParent && (
             <button
               className="flex h-8 items-center gap-2 rounded-lg px-2 text-left hover:bg-accent"
-              onClick={() => run('arrange', { ids: blocks.map((b) => b.id), layout: 'grid' }, 'Arranged in a grid')}
+              onClick={() => run('arrange', { ids: blocks.map((b) => b.id), layout: 'grid' }, t('style.arranged'))}
             >
-              <LayoutGrid className="size-3.5" /> Arrange in grid
+              <LayoutGrid className="size-3.5" /> {t('style.arrangeGrid')}
             </button>
           )}
         </div>

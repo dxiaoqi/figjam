@@ -26,6 +26,7 @@ import { useBoard } from '../board-context'
 import { reportLayout } from '../lib/layout-report'
 import { RichEditor, RichText } from './rich-editor'
 import { WebBlock as WebBlockLazy } from './web-block'
+import { t } from '../i18n'
 import { applyPrefix, filterActive, matchesFilter, TypeFooter, TypeHeader, useTypeFilter } from './types-ui'
 
 // ---- next color (shared by the toolbar and creation tools) --------------------
@@ -147,7 +148,7 @@ function MoreToggle({ block, editing }: { block: Block; editing: boolean }) {
         toggle(expanded)
       }}
     >
-      {expanded ? 'Show more' : 'Show less'}
+      {t(expanded ? 'block.showMore' : 'block.showLess')}
       {expanded ? <ChevronDown className="size-3" strokeWidth={2.25} /> : <ChevronUp className="size-3" strokeWidth={2.25} />}
     </button>
   )
@@ -186,9 +187,9 @@ function Sticky({ block, editing, editor }: BlockRenderProps) {
       <div ref={innerRef} className="aifig-sticky-inner">
         <TypeHeader block={block} />
         {editing ? (
-          <RichEditor engine={editor} value={block.text} placeholder={block.type ? 'Write…' : 'Write an idea… (/ to set a type)'} onChange={onChange} onTab={() => continueSticky(editor, block)} />
+          <RichEditor engine={editor} value={block.text} placeholder={t(block.type ? 'block.writeTyped' : 'block.writeIdea')} onChange={onChange} onTab={() => continueSticky(editor, block)} />
         ) : (
-          <RichText value={block.text} placeholder="Double-click to write" />
+          <RichText value={block.text} placeholder={t('block.dblclickWrite')} />
         )}
         <TypeFooter block={block} editor={editor} />
       </div>
@@ -212,7 +213,7 @@ function Card({ block, editing, editor }: BlockRenderProps) {
               ref={titleRef}
               className="title"
               value={block.title ?? ''}
-              placeholder="Title"
+              placeholder={t('block.title')}
               onChange={(e) => editor.updateBlock(block.id, { title: e.target.value })}
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing || e.keyCode === 229) return
@@ -222,11 +223,11 @@ function Card({ block, editing, editor }: BlockRenderProps) {
                 }
               }}
             />
-            <RichEditor engine={editor} className="body" autoFocus={false} value={block.text} placeholder="Details…" onChange={(text) => editor.updateBlock(block.id, { text })} />
+            <RichEditor engine={editor} className="body" autoFocus={false} value={block.text} placeholder={t('block.details')} onChange={(text) => editor.updateBlock(block.id, { text })} />
           </>
         ) : (
           <>
-            <div className={`title ${block.title ? '' : 'aifig-placeholder'}`}>{block.title || 'Untitled card'}</div>
+            <div className={`title ${block.title ? '' : 'aifig-placeholder'}`}>{block.title || t('block.untitledCard')}</div>
             {block.text && <RichText className="body" value={block.text} />}
           </>
         )}
@@ -249,7 +250,7 @@ function Text({ block, editing, editor }: BlockRenderProps) {
         <RichEditor
           engine={editor}
           value={block.text}
-          placeholder="Heading"
+          placeholder={t('block.heading')}
           onChange={(text) => {
             const m = measureText(text, size)
             const w = Math.max(m.w, block.w)
@@ -257,7 +258,7 @@ function Text({ block, editing, editor }: BlockRenderProps) {
           }}
         />
       ) : (
-        <RichText value={block.text} placeholder="Heading" />
+        <RichText value={block.text} placeholder={t('block.heading')} />
       )}
     </div>
   )
@@ -304,7 +305,7 @@ function ImageBlock({ block, editor }: BlockRenderProps) {
   const url = useAssetUrl(editor, block.asset)
   return (
     <div className="aifig-image">
-      {url ? <img src={url} alt={block.text || 'Image'} draggable={false} /> : <div className="aifig-image-loading">Loading image…</div>}
+      {url ? <img src={url} alt={block.text || t('block.image')} draggable={false} /> : <div className="aifig-image-loading">{t('block.loadingImage')}</div>}
     </div>
   )
 }

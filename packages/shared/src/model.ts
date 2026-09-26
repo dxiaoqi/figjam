@@ -1,7 +1,7 @@
 import type { RouteStyle } from './routing'
 import type { ColorToken, SizeToken } from './tokens'
 import type { WebSnippet } from './snippet'
-import type { BlockTypeId, FieldValue, Relation } from './types'
+import type { FieldValue, Relation, TypeId } from './types'
 
 export type BlockKind = 'sticky' | 'card' | 'text' | 'frame' | 'image' | 'web'
 export const BLOCK_KINDS: BlockKind[] = ['sticky', 'card', 'text', 'frame', 'image', 'web']
@@ -36,12 +36,12 @@ export interface Block {
   /** Degrees clockwise around the block center. */
   rotation?: number
   /** Built-in block type (stickies and cards). Untyped blocks are plain. */
-  type?: BlockTypeId
+  type?: TypeId
   /**
    * Field values per type. Demoting keeps them, so promoting back restores them; `_color` remembers the
    * block's own color from before it was first typed.
    */
-  typeData?: Partial<Record<BlockTypeId, Record<string, FieldValue>>> & { _color?: ColorToken }
+  typeData?: Record<string, Record<string, FieldValue>>
   /** Text blocks placed by a matrix layout as row / column labels (replaced on the next matrix tidy). */
   layoutRole?: 'axis'
   /** Rendered height the content needs (reported by the canvas, which measures real layout). */
@@ -184,6 +184,7 @@ export interface AgentPresence {
 export type ServerMessage =
   | { type: 'presence'; agents: AgentPresence[] }
   | { type: 'board-deleted'; boardId: string }
+  | import('./security').SecurityServerMessage
 
 export type ClientMessage =
   | { type: 'viewport'; bounds: Rect; focused?: boolean }

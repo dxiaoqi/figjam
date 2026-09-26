@@ -103,9 +103,9 @@ export const SURFACES = {
     surface: '#FFFFFF',
     border: '#E7E5E4',
     ink: '#1C1917',
-    muted: '#78716C',
+    muted: '#756E69',
     frame: '#F4F4F2',
-    connector: '#A8A29E',
+    connector: '#908B88',
   },
   dark: {
     canvas: '#141416',

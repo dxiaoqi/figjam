@@ -1,32 +1,39 @@
-import { Check, CircleHelp, Filter, FlaskConical, Lightbulb, Quote, Sparkles, SquareCheck, X, type LucideIcon } from 'lucide-react'
+import { Check, Filter, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useCamera, useEditorVersion, type Editor } from '@aifig/canvas-engine'
 import {
-  BLOCK_TYPE_IDS,
-  BLOCK_TYPES,
   COLORS,
   detectPrefix,
+  fieldSummary,
   matchesQuery,
   suggestRelation,
+  templateRows,
+  typeDef,
   typeFields,
   typePatch,
   type Block,
-  type BlockTypeId,
+  type BlockTypeDef,
   type FieldValue,
+  type TypeId,
 } from '@aifig/shared'
 import { cn } from '@/lib/utils'
+import { en as LABEL_KEYS } from '../i18n/en'
 import { useBoard } from '../board-context'
 import { useCommentPrefs } from './comment-prefs'
 import { useEditor } from './editor-context'
+import { currentTypes, typeIcon, useTypes } from './type-registry'
+import { getLocale, t, useT, type MessageKey } from '../i18n'
 
-export const TYPE_ICONS: Record<BlockTypeId, LucideIcon> = {
-  insight: Sparkles,
-  question: CircleHelp,
-  quote: Quote,
-  hypothesis: FlaskConical,
-  idea: Lightbulb,
-  todo: SquareCheck,
-}
+// Built-in types are translated; skill types show the labels their skill declares.
+const builtin = (d: BlockTypeDef) => !d.skill && `type.${d.id}.label` in LABEL_KEYS
+export const typeLabel = (d: BlockTypeDef) => (builtin(d) ? t(`type.${d.id}.label` as MessageKey) : d.label)
+export const typePlural = (d: BlockTypeDef) => (builtin(d) ? t(`type.${d.id}.plural` as MessageKey) : d.plural)
+const fieldLabel = (d: BlockTypeDef, key: string, fallback: string) => (builtin(d) && `field.${key}` in LABEL_KEYS ? t(`field.${key}` as MessageKey) : fallback)
+const optionLabel = (d: BlockTypeDef, o: string) => (builtin(d) && `option.${o}` in LABEL_KEYS ? t(`option.${o}` as MessageKey) : o)
+const fieldPlaceholder = (d: BlockTypeDef, key: string, fallback?: string) => (builtin(d) && `field.placeholder.${key}` in LABEL_KEYS ? t(`field.placeholder.${key}` as MessageKey) : fallback)
+
+export { typeIcon }
+const accentOf = (id: TypeId) => COLORS[typeDef(id, currentTypes()).color].light.accent
 
 export const isTypeable = (b?: Block) => !!b && (b.kind === 'sticky' || b.kind === 'card')
 
@@ -60,28 +67,28 @@ export const autoType = store<boolean>('aifig:auto-type', true)
 export const useAutoType = () => useSyncExternalStore(autoType.subscribe, autoType.get)
 
 export interface TypeFilter {
-  type: BlockTypeId | null
+  type: TypeId | null
   where: Record<string, FieldValue>
 }
 export const typeFilter = store<TypeFilter>('', { type: null, where: {} })
 export const useTypeFilter = () => useSyncExternalStore(typeFilter.subscribe, typeFilter.get)
 export const filterActive = (f: TypeFilter) => !!f.type
-export const matchesFilter = (b: Block, f: TypeFilter) => !f.type || matchesQuery(b, { type: f.type, where: f.where })
+export const matchesFilter = (b: Block, f: TypeFilter) => !f.type || matchesQuery(b, { type: f.type, where: f.where }, currentTypes())
 
 // ---- promote / demote (local, undoable) --------------------------------------------
 
-export function setBlocksType(editor: Editor, ids: string[], type: BlockTypeId | null, fields?: Record<string, FieldValue>) {
+export function setBlocksType(editor: Editor, ids: string[], type: TypeId | null, fields?: Record<string, FieldValue>) {
   const updates = ids
     .map((id) => editor.block(id))
     .filter(isTypeable)
-    .map((b) => ({ id: b!.id, patch: typePatch(b!, type, fields) }))
+    .map((b) => ({ id: b!.id, patch: typePatch(b!, type, fields, currentTypes()) }))
     .filter((u) => Object.keys(u.patch).length)
   if (updates.length) editor.updateBlocks(updates)
 }
 
 export function setField(editor: Editor, b: Block, key: string, value: FieldValue) {
   if (!b.type) return
-  editor.updateBlock(b.id, typePatch(b, undefined, { [key]: value }))
+  editor.updateBlock(b.id, typePatch(b, undefined, { [key]: value }, currentTypes()))
 }
 
 /** Promote a sticky typed with a known prefix once editing ends ("? why churn" → Question "why churn"). */
@@ -89,31 +96,35 @@ export function applyPrefix(editor: Editor, id: string) {
   if (!autoType.get()) return
   const b = editor.block(id)
   if (!b || b.type || b.kind !== 'sticky') return
-  const hit = detectPrefix(b.text)
+  const hit = detectPrefix(b.text, currentTypes())
   if (!hit) return
-  editor.updateBlock(id, { ...typePatch(b, hit.type), text: hit.text })
+  editor.updateBlock(id, { ...typePatch(b, hit.type, {}, currentTypes()), text: hit.text })
 }
 
 // ---- rendering inside blocks ------------------------------------------------------
 
 export function TypeHeader({ block }: { block: Block }) {
+  const reg = useTypes()
   if (!block.type) return null
-  const def = BLOCK_TYPES[block.type]
-  const Icon = TYPE_ICONS[block.type]
+  const def = typeDef(block.type, reg)
+  const Icon = typeIcon(block.type, reg)
   return (
-    <div className="aifig-type-header" data-type-header={block.type}>
+    <div className="aifig-type-header" data-type-header={block.type} title={def.skill ? `${def.label} · ${def.skill}` : typeLabel(def)}>
       <Icon className="size-3.5" strokeWidth={2.25} />
-      {def.label}
+      {typeLabel(def)}
     </div>
   )
 }
 
 const STATUS_DOT: Record<string, string> = { unverified: 'bg-stone-400', supported: 'bg-emerald-500', refuted: 'bg-red-500' }
 
-/** Collapsed fields: a one-line summary; click to edit (todo's checkbox toggles directly). */
+/** Collapsed fields: a one-line summary (and a skill type's template rows); click to edit. */
 export function TypeFooter({ block, editor }: { block: Block; editor: Editor }) {
-  if (!block.type || !BLOCK_TYPES[block.type].fields.length) return null
-  const f = typeFields(block)
+  const reg = useTypes()
+  if (!block.type) return null
+  const def = typeDef(block.type, reg)
+  if (!def.fields.length) return null
+  const f = typeFields(block, reg)
   const open = (e: React.MouseEvent) => {
     e.stopPropagation()
     window.dispatchEvent(new CustomEvent('aifig:edit-fields', { detail: block.id }))
@@ -132,12 +143,12 @@ export function TypeFooter({ block, editor }: { block: Block; editor: Editor }) 
             setField(editor, block, 'done', !f.done)
           }}
           className={cn('flex size-4 items-center justify-center rounded-[4px] border border-current/40', f.done && 'border-transparent bg-current/80')}
-          aria-label={f.done ? 'Mark not done' : 'Mark done'}
+          aria-label={t(f.done ? 'types.markNotDone' : 'types.markDone')}
         >
           {f.done && <Check className="size-3 text-[var(--fade-bg)]" strokeWidth={3} />}
         </button>
         <button data-ui onPointerDown={stop} onClick={open} className={cn('truncate', !f.owner && 'opacity-50')}>
-          {f.owner ? `@${f.owner}` : 'Add owner'}
+          {f.owner ? `@${f.owner}` : t('types.addOwner')}
         </button>
       </>
     )
@@ -145,16 +156,41 @@ export function TypeFooter({ block, editor }: { block: Block; editor: Editor }) 
     body = (
       <button data-ui onPointerDown={stop} onClick={open} className="flex items-center gap-1.5 truncate">
         <span className={cn('size-2 shrink-0 rounded-full', STATUS_DOT[String(f.status)] ?? 'bg-stone-400')} />
-        <span className="capitalize">{String(f.status)}</span>
-        <span className="opacity-60">· {String(f.confidence)}</span>
+        <span className="capitalize">{optionLabel(def, String(f.status))}</span>
+        <span className="opacity-60">· {optionLabel(def, String(f.confidence))}</span>
       </button>
     )
-  } else {
+  } else if (block.type === 'quote') {
     const parts = [f.interviewee, f.source].filter(Boolean)
     body = (
       <button data-ui onPointerDown={stop} onClick={open} className={cn('truncate', !parts.length && 'opacity-50')}>
-        {parts.length ? `— ${parts.join(', ')}` : 'Add who & source'}
+        {parts.length ? `— ${parts.join(', ')}` : t('types.addWho')}
       </button>
+    )
+  } else {
+    const rows = templateRows(block, reg)
+    const sum = fieldSummary(block, reg)
+    const showSummary = !!sum || !rows.length
+    return (
+      <>
+        {rows.length > 0 && (
+          <div className="aifig-type-rows" data-type-rows>
+            {rows.map((r) => (
+              <button key={r.key} data-ui onPointerDown={stop} onClick={open} className="aifig-type-row" data-field-row={r.key}>
+                <span className="aifig-type-row-label">{r.label}</span>
+                <span className={cn('aifig-type-row-value', !r.value && 'opacity-40')}>{r.value || '—'}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {showSummary && (
+          <div className="aifig-type-footer" data-type-footer>
+            <button data-ui onPointerDown={stop} onClick={open} className={cn('truncate', !sum && 'opacity-50')}>
+              {sum || `Add ${def.fields.map((d) => d.label.toLowerCase()).slice(0, 2).join(' & ')}`}
+            </button>
+          </div>
+        )}
+      </>
     )
   }
   return (
@@ -171,12 +207,19 @@ export function TypeFilterBar() {
   useEditorVersion(editor)
   const f = useTypeFilter()
   const { mode: commentMode } = useCommentPrefs()
-  const blocks = editor.blocks().filter(isTypeable)
-  const counts = useMemo(() => Object.fromEntries(BLOCK_TYPE_IDS.map((t) => [t, blocks.filter((b) => b.type === t).length])), [blocks])
-  const present = BLOCK_TYPE_IDS.filter((t) => counts[t])
+  useT()
+  const docVersion = editor.getDocVersion()
+  const blocks = useMemo(() => editor.blocks().filter(isTypeable), [editor, docVersion])
+  const reg = useTypes()
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {}
+    for (const b of blocks) if (b.type) c[b.type] = (c[b.type] ?? 0) + 1
+    return c
+  }, [blocks])
+  const present = [...Object.keys(reg), ...Object.keys(counts).filter((t) => !reg[t])].filter((t) => counts[t])
   if ((!present.length && !f.type) || commentMode) return null
-  const def = f.type ? BLOCK_TYPES[f.type] : null
-  const facetFields = def?.fields.filter((x) => x.kind !== 'text') ?? []
+  const def = f.type ? typeDef(f.type, reg) : null
+  const facetFields = def?.fields.filter((x) => x.kind === 'enum' || x.kind === 'boolean') ?? []
   const matching = f.type ? blocks.filter((b) => matchesFilter(b, f)) : []
   return (
     <div className="pointer-events-auto absolute top-3 left-1/2 z-[300] flex max-w-[calc(100vw-420px)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 max-md:top-16 max-md:max-w-[calc(100vw-24px)]" data-type-filter>
@@ -185,7 +228,7 @@ export function TypeFilterBar() {
           <Filter className="size-3" />
         </span>
         {present.map((t) => {
-          const Icon = TYPE_ICONS[t]
+          const Icon = typeIcon(t, reg)
           const on = f.type === t
           return (
             <button
@@ -194,8 +237,8 @@ export function TypeFilterBar() {
               onClick={() => typeFilter.set(on ? { type: null, where: {} } : { type: t, where: {} })}
               className={cn('flex h-7 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium transition-colors', on ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-accent hover:text-foreground')}
             >
-              <Icon className="size-3.5" style={on ? undefined : { color: COLORS[BLOCK_TYPES[t].color].light.accent }} />
-              {BLOCK_TYPES[t].plural}
+              <Icon className="size-3.5" style={on ? undefined : { color: COLORS[typeDef(t, reg).color].light.accent }} />
+              {typePlural(typeDef(t, reg))}
               <span className="tabular-nums opacity-60">{counts[t]}</span>
             </button>
           )
@@ -204,11 +247,11 @@ export function TypeFilterBar() {
       {def && facetFields.length > 0 && (
         <div className="chrome flex items-center gap-0.5 rounded-xl p-1 animate-in fade-in slide-in-from-left-1 duration-150">
           {facetFields.flatMap((fd) =>
-            (fd.kind === 'enum' ? fd.options : ['true', 'false']).map((opt) => {
+            (fd.kind === 'enum' ? fd.options : ['true', 'false']).map((opt: string) => {
               const val: FieldValue = fd.kind === 'boolean' ? opt === 'true' : opt
               const on = f.where[fd.key] === val
-              const n = blocks.filter((b) => b.type === f.type && typeFields(b)[fd.key] === val).length
-              const label = fd.kind === 'boolean' ? (val ? fd.label : `Not ${fd.label.toLowerCase()}`) : opt
+              const n = blocks.filter((b) => b.type === f.type && typeFields(b, reg)[fd.key] === val).length
+              const label = fd.kind === 'boolean' ? (val ? fieldLabel(def, fd.key, fd.label) : t('types.not', { label: fieldLabel(def, fd.key, fd.label).toLowerCase() })) : optionLabel(def, opt)
               return (
                 <button
                   key={`${fd.key}:${opt}`}
@@ -232,12 +275,12 @@ export function TypeFilterBar() {
       {def && (
         <div className="chrome flex items-center gap-1 rounded-xl py-1 pr-1 pl-2.5 text-[12px] text-muted-foreground">
           <span data-filter-count>
-            {matching.length} of {blocks.length}
+            {t('types.ofTotal', { n: matching.length, total: blocks.length })}
           </span>
           <button onClick={() => editor.select(matching.map((b) => b.id))} className="h-7 rounded-lg px-2 font-medium text-foreground hover:bg-accent">
-            Select
+            {t('types.select')}
           </button>
-          <button onClick={() => typeFilter.set({ type: null, where: {} })} className="flex size-7 items-center justify-center rounded-lg hover:bg-accent" aria-label="Clear filter">
+          <button onClick={() => typeFilter.set({ type: null, where: {} })} className="flex size-7 items-center justify-center rounded-lg hover:bg-accent" aria-label={t('types.clearFilter')}>
             <X className="size-3.5" />
           </button>
         </div>
@@ -287,49 +330,56 @@ export function FieldsPopover() {
   }, [])
   const close = useMemo(() => () => setId(null), [])
   useOutside(ref, close, !!id)
+  const reg = useTypes()
   const b = id ? editor.block(id) : undefined
   if (!b?.type) return null
-  const def = BLOCK_TYPES[b.type]
+  const def = typeDef(b.type, reg)
   const at = anchorBelow(editor, b.id, 260)
   if (!at) return null
-  const f = typeFields(b)
+  const f = typeFields(b, reg)
   return (
     <div ref={ref} data-ui data-fields-popover className="chrome pointer-events-auto absolute z-[320] w-[260px] rounded-xl p-3 text-[12px] animate-in fade-in zoom-in-95 duration-150" style={at}>
       <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
         {(() => {
-          const Icon = TYPE_ICONS[b.type!]
+          const Icon = typeIcon(b.type!, reg)
           return <Icon className="size-3.5" />
         })()}
-        {def.label}
+        {typeLabel(def)}
+        {def.skill && <span className="ml-auto font-normal tracking-normal normal-case opacity-70">{def.skill}</span>}
       </div>
       <div className="flex flex-col gap-2.5">
         {def.fields.map((fd) => (
           <label key={fd.key} className="flex flex-col gap-1">
-            <span className="text-muted-foreground">{fd.label}</span>
+            <span className="text-muted-foreground">{fieldLabel(def, fd.key, fd.label)}</span>
             {fd.kind === 'enum' ? (
               <div className="flex gap-1">
-                {fd.options.map((o) => (
+                {fd.options.map((o: string) => (
                   <button
                     key={o}
                     data-field-option={`${fd.key}=${o}`}
                     onClick={() => setField(editor, b, fd.key, o)}
                     className={cn('h-7 flex-1 rounded-md px-1.5 capitalize transition-colors', f[fd.key] === o ? 'bg-foreground text-background' : 'bg-muted/70 hover:bg-accent')}
                   >
-                    {o}
+                    {optionLabel(def, o)}
                   </button>
                 ))}
               </div>
             ) : fd.kind === 'boolean' ? (
               <button onClick={() => setField(editor, b, fd.key, !f[fd.key])} className={cn('h-7 rounded-md px-2 text-left', f[fd.key] ? 'bg-foreground text-background' : 'bg-muted/70')}>
-                {f[fd.key] ? 'Yes' : 'No'}
+                {t(f[fd.key] ? 'common.yes' : 'common.no')}
               </button>
             ) : (
               <input
                 data-field-input={fd.key}
                 defaultValue={String(f[fd.key] ?? '')}
-                placeholder={fd.placeholder}
+                placeholder={fieldPlaceholder(def, fd.key, fd.kind === 'text' ? fd.placeholder : fd.unit)}
                 maxLength={120}
-                onChange={(e) => setField(editor, b, fd.key, e.target.value)}
+                inputMode={fd.kind === 'number' ? 'decimal' : undefined}
+                onChange={(e) => {
+                  if (fd.kind !== 'number') return setField(editor, b, fd.key, e.target.value)
+                  const n = Number(e.target.value.replace(/[,\s]/g, ''))
+                  if (e.target.value.trim() && Number.isFinite(n)) setField(editor, b, fd.key, n)
+                }}
                 onKeyDown={(e) => {
                   e.stopPropagation()
                   if (e.key === 'Enter') close()
@@ -360,20 +410,23 @@ export function TypePalette() {
   const ref = useRef<HTMLDivElement>(null)
   const close = useMemo(() => () => setSt(null), [])
   useOutside(ref, close, !!st)
+  useT()
+  const locale = getLocale()
 
-  const options: { id: BlockTypeId | null; label: string }[] = useMemo(() => {
-    const all = [...BLOCK_TYPE_IDS.map((t) => ({ id: t as BlockTypeId | null, label: BLOCK_TYPES[t].label })), { id: null, label: 'Plain (no type)' }]
+  const reg = useTypes()
+  const options: { id: TypeId | null; label: string; en: string; skill?: string }[] = useMemo(() => {
+    const all = [...Object.values(reg).map((d) => ({ id: d.id as TypeId | null, label: typeLabel(d), en: d.label, skill: d.skill })), { id: null, label: t('types.plainNone'), en: 'Plain', skill: undefined }]
     const q = st?.query.toLowerCase() ?? ''
-    return all.filter((o) => !q || o.label.toLowerCase().startsWith(q) || (o.id ?? 'plain').startsWith(q))
-  }, [st?.query])
+    return all.filter((o) => !q || o.label.toLowerCase().startsWith(q) || o.en.toLowerCase().startsWith(q) || (o.id ?? 'plain').startsWith(q) || (o.skill ?? '').startsWith(q))
+  }, [st?.query, reg, locale])
 
-  const choose = (o: { id: BlockTypeId | null }) => {
+  const choose = (o: { id: TypeId | null }) => {
     if (!st) return
     if (st.slash) {
       const b = editor.block(st.ids[0])
       if (b) {
         document.querySelector(`[data-block-id="${b.id}"] .aifig-rich-host`)?.dispatchEvent(new Event('aifig-clear'))
-        editor.updateBlock(b.id, { ...typePatch(b, o.id), text: '' })
+        editor.updateBlock(b.id, { ...typePatch(b, o.id, {}, reg), text: '' })
       }
     } else setBlocksType(editor, st.ids, o.id)
     setSt(null)
@@ -435,10 +488,10 @@ export function TypePalette() {
   return (
     <div ref={ref} data-ui data-type-palette className="chrome pointer-events-auto absolute z-[320] w-[220px] rounded-xl p-1 text-[13px] animate-in fade-in zoom-in-95 duration-150" style={at}>
       <div className="px-2 pt-1 pb-1.5 text-[11px] text-muted-foreground">
-        Set as{st.query ? ` · “${st.query}”` : '…'}
+        {t('types.setAs')}{st.query ? ` · “${st.query}”` : '…'}
       </div>
       {options.map((o, i) => {
-        const Icon = o.id ? TYPE_ICONS[o.id] : null
+        const Icon = o.id ? typeIcon(o.id, reg) : null
         return (
           <button
             key={o.id ?? 'plain'}
@@ -447,13 +500,13 @@ export function TypePalette() {
             onClick={() => choose(o)}
             className={cn('flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left', i === index && 'bg-accent')}
           >
-            {Icon ? <Icon className="size-4" style={{ color: COLORS[BLOCK_TYPES[o.id!].color].light.accent }} /> : <span className="size-4" />}
+            {Icon ? <Icon className="size-4" style={{ color: accentOf(o.id!) }} /> : <span className="size-4" />}
             <span className="flex-1">{o.label}</span>
-            {o.id && BLOCK_TYPES[o.id].prefixes[0] && <kbd className="font-mono text-[10px] text-muted-foreground">{BLOCK_TYPES[o.id].prefixes[0]}</kbd>}
+            {o.skill ? <span className="text-[10px] text-muted-foreground">{o.skill}</span> : o.id && reg[o.id]?.prefixes[0] && <kbd className="font-mono text-[10px] text-muted-foreground">{reg[o.id].prefixes[0]}</kbd>}
           </button>
         )
       })}
-      {!options.length && <div className="px-2 py-2 text-xs text-muted-foreground">No type matches</div>}
+      {!options.length && <div className="px-2 py-2 text-xs text-muted-foreground">{t('types.noMatch')}</div>}
     </div>
   )
 }
@@ -470,7 +523,7 @@ export function useRelationSuggestions(editor: Editor | null) {
         if (ch.action !== 'add') return
         const c = map.get(id)
         if (!c || c.relation || !c.from || !c.to) return
-        const rel = suggestRelation(editor.block(c.from)?.type, editor.block(c.to)?.type)
+        const rel = suggestRelation(editor.block(c.from)?.type, editor.block(c.to)?.type, currentTypes())
         if (rel) queueMicrotask(() => editor.doc.transact(() => map.set(id, { ...map.get(id)!, relation: rel }), editor.origin))
       })
     }

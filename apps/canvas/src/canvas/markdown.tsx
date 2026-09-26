@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { ReactNode } from 'react'
 
 /**
@@ -84,7 +85,7 @@ function renderInline(nodes: Inline[], key = 'i'): ReactNode[] {
         return <em key={k}>{renderInline(n.children!, k)}</em>
       case 'link':
         return SAFE_URL.test(n.href!) ? (
-          <a key={k} href={n.href} target="_blank" rel="noopener noreferrer" title={`${n.href} — ⌘/Ctrl-click to open`}>
+          <a key={k} href={n.href} target="_blank" rel="noopener noreferrer" title={t('block.linkTitle', { href: n.href ?? '' })}>
             {renderInline(n.children!, k)}
           </a>
         ) : (

@@ -5,10 +5,14 @@ import { COLORS, SURFACES, type Author, type Block } from '@aifig/shared'
 import { useBoard, useProviderState } from '../board-context'
 import { BoardMenu } from '../chrome/BoardMenu'
 import { ContextMenu } from '../chrome/ContextMenu'
+import { ActivityDialog } from '../chrome/ActivityDialog'
 import { AssistantSettings } from '../chrome/AssistantSettings'
+import { PermissionPrompt } from '../chrome/PermissionPrompt'
 import { EmptyState } from '../chrome/EmptyState'
 import { ReviewPanel } from '../chrome/ReviewPanel'
 import { StatusBanner } from '../chrome/StatusBanner'
+import { DataNotices } from '../chrome/DataNotices'
+import { VersionHistory } from '../chrome/VersionHistory'
 import { StylePanel } from '../chrome/StylePanel'
 import { Toolbar } from '../chrome/Toolbar'
 import { TopRight } from '../chrome/TopRight'
@@ -19,12 +23,16 @@ import { CommentLayer } from './CommentLayer'
 import { HeldNotice } from './HeldNotice'
 import { ReviewGhosts } from './ReviewGhosts'
 import { SnippetDialog } from '../chrome/SnippetDialog'
+import { SkillsPanel } from '../chrome/SkillsPanel'
+import { SaveTypeDialog } from '../chrome/SkillPrompts'
+import { bindBoardSkills } from './type-registry'
 import { FieldsPopover, TypeFilterBar, TypePalette, useRelationSuggestions } from './types-ui'
 import { EditorContext } from './editor-context'
 import { desktop } from '../lib/desktop'
 import { downloadDocument, downloadSnapshot } from '../lib/export'
 import { draftForPastedText, draftForTool, importImages, nextColor, shapeDefs } from './shapes'
 import { toast } from 'sonner'
+import { relationLabel, t, useT } from '../i18n'
 
 const ME: Author = { kind: 'human', id: 'human:ui', name: 'You' }
 
@@ -55,6 +63,7 @@ function createEditor(doc: Editor['doc']) {
     gridSize: 8,
     toolKeys: { s: 'sticky', c: 'card', t: 'text' },
     lodStyle,
+    relationLabel,
     createForTool: (tool) => draftForTool(tool),
     createForConnectorDrop: (from) => {
       const d = draftForTool('sticky')!
@@ -62,7 +71,7 @@ function createEditor(doc: Editor['doc']) {
     },
     onDoubleClickCanvas: (at) => editor.createWithTool('sticky', at),
     onFiles: (files, at) => {
-      importImages(editor, files, at).catch(() => toast.error('Couldn’t read that image — try PNG, JPEG, GIF or WebP.'))
+      importImages(editor, files, at).catch(() => toast.error(t('tool.imageError')))
     },
     onPasteText: (text, at) => {
       if (!text.trim()) return
@@ -77,13 +86,16 @@ export function BoardCanvas() {
   const { provider } = useBoard()
   const { synced } = useProviderState()
   const [editor, setEditor] = useState<Editor | null>(null)
+  useT()
   useRelationSuggestions(editor)
+  useEffect(() => bindBoardSkills(provider.doc), [provider])
 
   useEffect(() => {
     if (!synced) return
     const e = createEditor(provider.doc)
     setEditor(e)
-    if (import.meta.env.DEV) (window as any).editor = e
+    // `?perf` exposes the editor to `npm run bench` in production builds
+    if (import.meta.env.DEV || new URLSearchParams(location.search).has('perf')) (window as any).editor = e
     return () => {
       e.dispose()
       setEditor(null)
@@ -147,6 +159,8 @@ export function BoardCanvas() {
           return window.dispatchEvent(new Event('aifig:toggle-minimap'))
         case 'assistant-settings':
           return window.dispatchEvent(new Event('aifig:assistant-settings'))
+        case 'activity':
+          return window.dispatchEvent(new Event('aifig:activity'))
         case 'export':
           if (payload === 'png' || payload === 'svg') return downloadSnapshot(boardId, document.title.replace(/ — ai-figma$/, ''), payload, { ids: ids.length ? ids : undefined, theme: themeMode })
           return downloadDocument(boardId, payload === 'json' ? 'json' : 'md')
@@ -182,13 +196,19 @@ export function BoardCanvas() {
           <ReviewPanel />
           <ContextMenu />
           <AssistantSettings />
+          <ActivityDialog />
+          <PermissionPrompt />
           <SnippetDialog />
+          <SkillsPanel />
+          <SaveTypeDialog />
           <StatusBanner />
+          <DataNotices />
+          <VersionHistory />
         </EditorContext.Provider>
       ) : (
         <div className="absolute inset-0 z-[1000] flex items-center justify-center">
           <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Opening board…
+            <Loader2 className="size-4 animate-spin" /> {t('app.openingBoard')}
           </div>
         </div>
       )}

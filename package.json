@@ -28,9 +28,15 @@
     "website": "npm run dev -w @aifig/website",
     "website:build": "npm run build -w @aifig/website",
     "test:api": "node scripts/api-regressions.mjs",
+    "test:skills": "node scripts/skills-tests.mjs",
+    "test:security": "node scripts/security-checks.mjs",
     "test:aesthetics": "node scripts/aesthetics.mjs",
     "test:aesthetics:update": "node scripts/aesthetics.mjs --update",
-    "test:e2e": "node scripts/engine-e2e.mjs"
+    "test:e2e": "node scripts/engine-e2e.mjs",
+    "test:data-safety": "node --import tsx --test tests/data-safety/*.test.ts && node scripts/data-safety.mjs",
+    "test:onboarding": "node scripts/onboarding-e2e.mjs",
+    "bench": "node scripts/bench/run.mjs",
+    "test:contrast": "tsx scripts/contrast.ts"
   },
   "dependencies": {
     "tsx": "^4.23.15"

@@ -1,4 +1,4 @@
-import { Moon, Plug, Sun } from 'lucide-react'
+import { Moon, Plug, Settings, Sun } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -7,6 +7,9 @@ import type { AgentPresence } from '@aifig/shared'
 import { useAgentsOnBoard, useBoard } from '../board-context'
 import { ConnectDialog } from './ConnectDialog'
 import { HistoryMenu } from './HistoryMenu'
+import { openSettings } from './SettingsDialog'
+import { useT } from '../i18n'
+import { SkillsButton } from './SkillsPanel'
 
 export function useNow(interval = 1000) {
   const [now, setNow] = useState(Date.now())
@@ -32,6 +35,7 @@ export function AgentAvatar({ agent, active, className }: { agent: Pick<AgentPre
 function AgentsList() {
   const agents = useAgentsOnBoard()
   const now = useNow()
+  const t = useT()
   if (!agents.length) return null
   const sorted = [...agents].sort((a, b) => b.lastActive - a.lastActive)
   const lead = sorted[0]
@@ -48,14 +52,14 @@ function AgentsList() {
             </TooltipTrigger>
             <TooltipContent side="bottom">
               {a.name}
-              {a.status ? ` — ${a.status}` : now - a.lastActive < 15_000 ? ' — active' : ' — idle'}
+              {a.status ? ` — ${a.status}` : ` — ${t(now - a.lastActive < 15_000 ? 'agents.active' : 'agents.idle')}`}
             </TooltipContent>
           </Tooltip>
         ))}
       </div>
       <div className="flex max-w-[220px] min-w-0 flex-col leading-tight">
         <span className="truncate text-xs font-medium">{sorted.length === 1 ? lead.name : `${lead.name} +${sorted.length - 1}`}</span>
-        <span className="truncate text-[11px] text-muted-foreground">{leadActive ? (lead.status ?? 'Working…') : 'Idle'}</span>
+        <span className="truncate text-[11px] text-muted-foreground">{leadActive ? (lead.status ?? t('agents.working')) : t('agents.idleCap')}</span>
       </div>
     </div>
   )
@@ -64,6 +68,7 @@ function AgentsList() {
 export function TopRight() {
   const { theme, setTheme } = useBoard()
   const [connectOpen, setConnectOpen] = useState(false)
+  const t = useT()
   useEffect(() => {
     const open = () => setConnectOpen(true)
     window.addEventListener('aifig:connect', open)
@@ -73,18 +78,27 @@ export function TopRight() {
     <div className="pointer-events-auto m-3 flex items-center gap-2">
       <AgentsList />
       <div className="chrome flex h-10 items-center gap-0.5 rounded-xl px-1">
+        <SkillsButton />
         <HistoryMenu />
         <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-lg px-2.5 text-[13px]" onClick={() => setConnectOpen(true)}>
           <Plug className="size-4" strokeWidth={1.75} />
-          <span className="hidden sm:inline">Connect agent</span>
+          <span className="hidden sm:inline">{t('top.connect')}</span>
         </Button>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-8 rounded-lg" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">
+            <Button variant="ghost" size="icon" className="size-8 rounded-lg" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label={t('top.toggleTheme')}>
               {theme === 'dark' ? <Sun className="size-4" strokeWidth={1.75} /> : <Moon className="size-4" strokeWidth={1.75} />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</TooltipContent>
+          <TooltipContent side="bottom">{t(theme === 'dark' ? 'top.lightMode' : 'top.darkMode')}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="size-8 rounded-lg" onClick={openSettings} aria-label={t('top.settings')} data-open-settings>
+              <Settings className="size-4" strokeWidth={1.75} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t('top.settings')}</TooltipContent>
         </Tooltip>
       </div>
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
