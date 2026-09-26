@@ -299,6 +299,7 @@ function buildMenu() {
         },
         { type: 'separator' },
         { id: 'save-as', label: tr('saveAs'), accelerator: 'CmdOrCtrl+Shift+S', click: () => saveAs() },
+        { id: 'version-history', label: tr('versionHistory'), click: send('version-history') },
         {
           id: 'export',
           label: tr('export'),

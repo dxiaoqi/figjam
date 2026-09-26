@@ -91,6 +91,13 @@ await win.click('[data-new-board-create]')
 await win.waitForTimeout(1000)
 check('File ▸ New Board… opens the template dialog, then creates and opens a board', dialogOpened && (await call('list_boards', {})).boards.length === before + 1 && (await win.title()).startsWith('Untitled board'))
 
+// File ▸ Version History… (native menu → renderer)
+await app.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('version-history').click())
+const versionsOpened = await win.waitForSelector('[data-version-history] [data-version-list]', { timeout: 5000 }).then(() => true, () => false)
+await win.keyboard.press('Escape')
+await win.waitForTimeout(300)
+check('File ▸ Version History… opens the version history of the open board', versionsOpened && (await win.locator('[data-version-history]').count()) === 0)
+
 // open a .aifig file (as if double-clicked in the OS) and Save As
 const src = (await call('list_boards', {})).boards[0]
 const file = path.join(tmp, 'Research notes.aifig')
