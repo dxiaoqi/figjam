@@ -72,9 +72,14 @@ export class SpatialGrid {
   query(b: Box): string[] {
     const out: string[] = []
     const [x1, y1, x2, y2] = this.range(b)
-    const seen = x1 === x2 && y1 === y2 ? null : new Set<string>()
     const bx2 = b.x + b.w
     const by2 = b.y + b.h
+    // far-zoom viewports cover more cells than there are boxes: a straight scan is cheaper
+    if ((x2 - x1 + 1) * (y2 - y1 + 1) > this.boxes.size) {
+      for (const [id, r] of this.boxes) if (r.x < bx2 && r.x + r.w > b.x && r.y < by2 && r.y + r.h > b.y) out.push(id)
+      return out
+    }
+    const seen = x1 === x2 && y1 === y2 ? null : new Set<string>()
     for (let cx = x1; cx <= x2; cx++)
       for (let cy = y1; cy <= y2; cy++) {
         const cell = this.cells.get(key(cx, cy))

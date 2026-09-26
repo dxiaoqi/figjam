@@ -167,11 +167,16 @@ interface LodCache {
   region: Box
   z: number
   key: string
+  at: number
 }
 
 const LOD_MARGIN = 0.25
 const LOD_MAX_PX = 4800
 const LOD_RESCALE = 1.6
+/** Rebuild the far-zoom bitmap at most this often while the camera moves. */
+const LOD_REBUILD_MS = 250
+/** Use the cached bitmap only when the viewport holds more blocks than this. */
+const LOD_BITMAP_MIN_BLOCKS = 3000
 
 function lodKey(editor: Editor, host: HTMLElement) {
   return `${editor.getDocVersion()}|${editor.editingId}|${editor.previewIds().length ? editor.getVersion() : ''}|${host.ownerDocument.documentElement.className}`
@@ -188,26 +193,52 @@ function renderLodCache(editor: Editor, host: HTMLElement, dpr: number, key: str
   const ctx = canvas.getContext('2d')!
   ctx.setTransform(k, 0, 0, k, -region.x * k, -region.y * k)
   paintLod(editor, ctx, region, k / dpr, host)
-  return { canvas, region, z: k / dpr, key }
+  return { canvas, region, z: k / dpr, key, at: performance.now() }
 }
 
-function drawLod(editor: Editor, canvas: HTMLCanvasElement, host: HTMLElement, cache: { current: LodCache | null }, sharpen: () => void) {
+/** Far-zoom drawing state: the cached bitmap, and how many blocks the last direct paint drew. */
+interface LodState {
+  bitmap: LodCache | null
+  painted: number
+}
+
+function drawLod(editor: Editor, canvas: HTMLCanvasElement, host: HTMLElement, state: LodState, sharpen: () => void, moving = false) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const dpr = window.devicePixelRatio || 1
   const { x, y, z } = editor.camera
-  const key = lodKey(editor, host)
-  let c = cache.current
-  const scale = c ? z / c.z : 1
-  if (!c || c.key !== key || !containsBox(c.region, editor.viewportPageBounds()) || scale > LOD_RESCALE || scale < 1 / LOD_RESCALE) c = cache.current = renderLodCache(editor, host, dpr, key, c)
-  else if (c.z !== z) sharpen()
+  const vp = editor.viewportPageBounds()
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.clearRect(0, 0, canvas.width, canvas.height)
+  const direct = () => {
+    ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * x, dpr * y)
+    state.painted = paintLod(editor, ctx, vp, z, host)
+  }
+  // painting the viewport is cheap unless it holds thousands of blocks; blitting a big bitmap every frame costs
+  // fill rate too, so only use it when it pays off
+  if (state.painted < LOD_BITMAP_MIN_BLOCKS) {
+    state.bitmap = null
+    return direct()
+  }
+  const key = lodKey(editor, host)
+  let c = state.bitmap
+  const scale = c ? z / c.z : 1
+  const valid = c && c.key === key && containsBox(c.region, vp) && scale <= LOD_RESCALE && scale >= 1 / LOD_RESCALE
+  if (!valid && c && (moving || performance.now() - c.at < LOD_REBUILD_MS)) {
+    // the camera is moving (zooming out, flinging): paint just the viewport and rebuild once it rests
+    direct()
+    sharpen()
+    return
+  }
+  if (!valid) c = state.bitmap = renderLodCache(editor, host, dpr, key, c)
+  else if (c!.z !== z) sharpen()
   ctx.imageSmoothingEnabled = true
-  ctx.drawImage(c.canvas, (c.region.x * z + x) * dpr, (c.region.y * z + y) * dpr, c.region.w * z * dpr, c.region.h * z * dpr)
+  ctx.drawImage(c!.canvas, (c!.region.x * z + x) * dpr, (c!.region.y * z + y) * dpr, c!.region.w * z * dpr, c!.region.h * z * dpr)
 }
 
+/** Paint blocks and connectors in `area`; returns how many blocks were drawn. */
 function paintLod(editor: Editor, ctx: CanvasRenderingContext2D, area: Box, z: number, host: HTMLElement) {
+  let painted = 0
   const vp = expand(area, 40 / z)
   const css = getComputedStyle(host)
   const connectorColor = css.getPropertyValue('--ae-connector').trim() || '#908b88'
@@ -218,6 +249,7 @@ function paintLod(editor: Editor, ctx: CanvasRenderingContext2D, area: Box, z: n
     const r = editor.pageRect(b.id)
     const vr = editor.visualRect(b.id)
     if (!r || !vr || !intersects(vp, vr)) continue
+    painted++
     const s = style(b)
     const radius = editor.shape(b.kind)?.radius ?? 4
     const rot = editor.rotationOf(b.id)
@@ -261,6 +293,7 @@ function paintLod(editor: Editor, ctx: CanvasRenderingContext2D, area: Box, z: n
     if (!route) continue
     ctx.stroke(new Path2D(route.d))
   }
+  return painted
 }
 
 // ---- overlay (screen space) ------------------------------------------------
@@ -560,7 +593,8 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
   const ref = useRef<HTMLDivElement>(null)
   const worldRef = useRef<HTMLDivElement>(null)
   const lodRef = useRef<HTMLCanvasElement>(null)
-  const lodCache = useRef<LodCache | null>(null)
+  const lodState = useRef<LodState>({ bitmap: null, painted: 0 })
+  const cameraAt = useRef(0)
   const sharpen = useRef<() => void>(() => {})
   const region = useRef<Box | null>(null)
   const mounted = useRef(new Set<string>())
@@ -576,8 +610,8 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
     sharpen.current = () => {
       clearTimeout(sharpenTimer)
       sharpenTimer = setTimeout(() => {
-        lodCache.current = null
-        if (lodOn.current && lodRef.current) drawLod(editor, lodRef.current, el, lodCache, sharpen.current)
+        lodState.current.bitmap = null
+        if (lodOn.current && lodRef.current) drawLod(editor, lodRef.current, el, lodState.current, sharpen.current)
       }, 160)
     }
     const resize = () => {
@@ -587,8 +621,8 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
         const dpr = window.devicePixelRatio || 1
         c.width = Math.round(el.clientWidth * dpr)
         c.height = Math.round(el.clientHeight * dpr)
-        lodCache.current = null
-        if (lodOn.current) drawLod(editor, c, el, lodCache, sharpen.current)
+        lodState.current.bitmap = null
+        if (lodOn.current) drawLod(editor, c, el, lodState.current, sharpen.current)
       }
       setTick((t) => t + 1)
     }
@@ -599,6 +633,7 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
     // camera moves bypass React: transform the world layer directly and only re-render when the
     // rendered region or level of detail needs to change
     const applyCamera = () => {
+      cameraAt.current = performance.now()
       const cam = editor.camera
       if (worldRef.current) worldRef.current.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})`
       let step = 24 * cam.z
@@ -610,7 +645,7 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
       if (wantLod !== lodOn.current || !region.current || !containsBox(region.current, vp)) setTick((t) => t + 1)
       else if (lodOn.current && lodRef.current) {
         cancelAnimationFrame(raf)
-        raf = requestAnimationFrame(() => lodRef.current && drawLod(editor, lodRef.current, el, lodCache, sharpen.current))
+        raf = requestAnimationFrame(() => lodRef.current && drawLod(editor, lodRef.current, el, lodState.current, sharpen.current, true))
       }
     }
     const off = editor.onCamera(applyCamera)
@@ -659,7 +694,7 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
 
   useLayoutEffect(() => {
     const c = lodRef.current
-    if (c && lod && ref.current) drawLod(editor, c, ref.current, lodCache, sharpen.current)
+    if (c && lod && ref.current) drawLod(editor, c, ref.current, lodState.current, sharpen.current, performance.now() - cameraAt.current < 160)
   })
   useEffect(() => {
     if (!deferred) return

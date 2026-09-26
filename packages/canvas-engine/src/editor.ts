@@ -440,6 +440,12 @@ export class Editor {
       const extra = this.previewIds()
       if (extra.length) ids = [...new Set([...ids, ...extra])]
     }
+    const all = this.blocks()
+    // most of the board (far zoom): filtering the sorted list beats sorting the hits
+    if (ids.length * 4 > all.length) {
+      const set = new Set(ids)
+      return all.filter((blk) => set.has(blk.id))
+    }
     return this.sortByOrder(ids)
       .map((id) => this.blocksMap.get(id))
       .filter(Boolean) as Block[]
