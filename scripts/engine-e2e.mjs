@@ -1151,6 +1151,7 @@ await shot('permission-prompt.png')
 check('an agent fetching a URL shows one permission prompt with who, what and where', promptText.includes('Claude Code') && promptText.includes('example.com') && promptText.includes('add_image'), promptText.slice(0, 120))
 await page.locator('[data-permission-deny]').click().catch(() => {})
 const askedRes = await asked
+await promptEl.waitFor({ state: 'detached', timeout: 3000 }).catch(() => {})
 check('Deny in the prompt reaches the agent as a clear refusal', !askedRes.ok && askedRes.error.includes('declined') && (await promptEl.count()) === 0, askedRes.error)
 await ed(() => window.dispatchEvent(new Event('aifig:activity')))
 await page.locator('[data-activity-dialog]').waitFor({ timeout: 3000 }).catch(() => {})
