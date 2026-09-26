@@ -8,6 +8,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { authedFetch, wsProtocols } from './lib/core-auth.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const port = 48010 + Math.floor(Math.random() * 40) * 2
@@ -24,9 +25,10 @@ const check = (name, ok, detail = '') => {
 }
 const core = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
 for (let i = 0; i < 100 && !(await fetch(`${base}/api/health`).then((r) => r.ok, () => false)); i++) await sleep(100)
+const api = (p, init) => authedFetch(`${base}${p}`, init, home)
 const HUMAN = { id: 'human:skills', name: 'You', client: 'test', kind: 'human' }
 const AGENT = { id: `claude-code:${Date.now()}`, name: '', client: 'claude-code', kind: 'agent' }
-const call = async (caller, tool, args = {}) => (await fetch(`${base}/api/call`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tool, args, caller }) })).json()
+const call = async (caller, tool, args = {}) => (await api('/api/call', { method: 'POST', body: JSON.stringify({ tool, args, caller }) })).json()
 const cli = (...args) => spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), ...args], { encoding: 'utf8', env })
 const board = (await call(HUMAN, 'create_board', { title: 'Skills test' })).result.board.id
 const get = async () => (await call(HUMAN, 'get_board', { board, format: 'json' })).result
@@ -112,23 +114,46 @@ await call(HUMAN, 'enable_skill', { board, name: 'research-kit' })
 await call(HUMAN, 'load_dev_skill', { path: path.join(root, 'tests/fixtures/skills/probe-kit') })
 await call(HUMAN, 'enable_skill', { board, name: 'probe-kit' })
 const probe = (await call(HUMAN, 'create_blocks', { board, at: { x: 1600, y: 0 }, blocks: [{ title: 'Onboarding benchmarks', type: 'probe-kit.probe', fields: { level: 2 } }] })).result.created[0].id
-const r1 = (await call(AGENT, 'run_skill_action', { board, skill: 'probe-kit', action: 'search', ids: [probe] })).result
-const pend = (await call(HUMAN, 'list_activity', { board })).result
-check('first use of a tool asks the person (needs_permission, prompt pending)', r1.status === 'needs_permission' && pend.pending.length === 1 && pend.pending[0].tools[0] === 'web.search', JSON.stringify(r1))
-const g1 = (await call(HUMAN, 'grant_skill_permission', { board, request: r1.request, decision: 'allow_once' })).result
+const noCanvas = await call(AGENT, 'run_skill_action', { board, skill: 'probe-kit', action: 'search', ids: [probe] })
+check('with no canvas open to ask, a skill tool call is refused with how to approve it', !noCanvas.ok && noCanvas.error.includes('Open the ai-figma canvas'), noCanvas.error)
+// a canvas: receives the prompt over the sync socket, answers through the permissions API
+const ws = new WebSocket(`ws://127.0.0.1:${port}/sync/${board}`, wsProtocols(home))
+await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = j)))
+const prompts = []
+ws.onmessage = (m) => {
+  if (typeof m.data !== 'string') return
+  const msg = JSON.parse(m.data)
+  if (msg.type === 'permission') prompts.push(msg.request)
+}
+const answerNext = async (decision) => {
+  for (let i = 0; i < 50 && !prompts.length; i++) await sleep(50)
+  const p = prompts.shift()
+  if (p) await api('/api/permissions/answer', { method: 'POST', body: JSON.stringify({ id: p.id, decision }) })
+  return p
+}
+const runAs = (who) => call(who, 'run_skill_action', { board, skill: 'probe-kit', action: 'search', ids: [probe] })
+let pending = runAs(AGENT)
+const p1 = await answerNext('allow-once')
+const r1 = await pending
 const ideas = (await allBlocks()).filter((b) => b.type === 'idea' && b.pending)
-check('“Allow once” runs the action: results arrive as blocks for review', g1.result?.status === 'ok' && ideas.length === 3 && ideas.some((b) => b.text.includes('Source B')), JSON.stringify(g1.result))
-const r2 = (await call(AGENT, 'run_skill_action', { board, skill: 'probe-kit', action: 'search', ids: [probe] })).result
-check('“Allow once” is consumed: the next call asks again', r2.status === 'needs_permission')
-const g2 = (await call(HUMAN, 'grant_skill_permission', { board, request: r2.request, decision: 'allow_board' })).result
-const r3 = (await call(AGENT, 'run_skill_action', { board, skill: 'probe-kit', action: 'search', ids: [probe] })).result
-check('“Always allow on this board” runs later calls directly', g2.result?.status === 'ok' && r3.status === 'ok', JSON.stringify(r3))
-await call(HUMAN, 'revoke_skill_permission', { board, skill: 'probe-kit', tool: 'web.search' })
-const r4 = (await call(AGENT, 'run_skill_action', { board, skill: 'probe-kit', action: 'search', ids: [probe] })).result
-await call(HUMAN, 'grant_skill_permission', { board, request: r4.request, decision: 'deny' })
+check('first use of a tool prompts in the canvas, naming the skill, tool and board', p1?.capability === 'tool' && p1.target === 'web.search' && p1.source.kind === 'skill' && p1.source.id === 'probe-kit' && p1.source.board === board, JSON.stringify(p1))
+check('“Allow once” runs the action: results arrive as blocks for review', r1.ok && r1.result.status === 'ok' && ideas.length === 3 && ideas.some((b) => b.text.includes('Source B')), JSON.stringify(r1.error ?? r1.result))
+pending = runAs(HUMAN)
+const p2 = await answerNext('allow-always')
+const r2 = await pending
+check('the skill is the actor: a person clicking the action is still asked on first use', !!p2 && r2.ok, JSON.stringify(r2.error))
+const r3 = await runAs(AGENT)
+check('“Always allow” is remembered for that skill and tool', r3.ok && !prompts.length, JSON.stringify(r3.error))
+const grants = (await (await api('/api/permissions')).json()).grants
+check('the grant lives in the shared permission store as skill:<name> · tool · <tool>', grants.some((g) => g.subject === 'skill:probe-kit' && g.capability === 'tool' && g.target === 'web.search'), JSON.stringify(grants))
+await api('/api/permissions/revoke', { method: 'POST', body: JSON.stringify({ subject: 'skill:probe-kit', capability: 'tool', target: 'web.search' }) })
+pending = runAs(AGENT)
+await answerNext('deny')
+const r4 = await pending
+check('after revoking it asks again; denying runs nothing and tells the agent', !r4.ok && r4.error.includes('declined'), r4.error)
+ws.close()
 const act = (await call(HUMAN, 'list_activity', { board, skill: 'probe-kit' })).result.activity
-check('revoking asks again; denying runs nothing', r4.status === 'needs_permission' && act[0].status === 'denied')
-check('the activity log records enable, requests, decisions and tool calls', ['enable', 'permission', 'tool'].every((k) => act.some((e) => e.kind === k)) && act.filter((e) => e.kind === 'tool' && e.status === 'ok').length === 3, act.map((e) => `${e.kind}:${e.status}`).join(' '))
+check('the shared activity log records enable, permission decisions and tool calls for the skill', act.some((e) => e.action === 'enable') && act.some((e) => e.category === 'permission' && e.source?.id === 'probe-kit') && act.filter((e) => e.action === 'run' && e.outcome === 'ok').length === 3 && act.some((e) => e.action === 'run' && e.outcome === 'denied'), act.map((e) => `${e.category}:${e.action}:${e.outcome}`).join(' '))
 const noTool = await call(AGENT, 'run_skill_action', { board, skill: 'competitor-kit', action: 'fetch-homepage', ids: [probe] })
 check('actions of skills not enabled, or with unconfigured tools, fail clearly', !noTool.ok && noTool.error.includes('not enabled'), noTool.error)
 
@@ -176,12 +201,11 @@ const skillDir = saved.result?.path
 const exported = skillDir ? spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'skill', 'validate', skillDir], { encoding: 'utf8', env }) : null
 check('“Save as block type” infers fields and types the block', saved.ok && saved.result.fields.map((f) => `${f.key}:${f.kind}`).join() === 'price:number,segment:text,open_source:boolean' && vb.type === saved.result.type && vb.typeData[saved.result.type].price === 49, JSON.stringify(saved.error ?? saved.result?.fields))
 check('…and writes a standard skill folder that validates', exported?.status === 0 && fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8').startsWith('---\nname: skills-test-types'), exported?.stdout)
-const zip = Buffer.from(await (await fetch(`${base}${saved.result.export}`)).arrayBuffer())
+const zip = Buffer.from(await (await api(saved.result.export)).arrayBuffer())
 check('…which downloads as a zip', zip.subarray(0, 2).toString() === 'PK' && zip.includes(Buffer.from('skills-test-types/SKILL.md')), `${zip.length} bytes`)
 
 await mcp.close()
-core.kill()
-fs.rmSync(home, { recursive: true, force: true })
-fs.rmSync(work, { recursive: true, force: true })
+await new Promise((r) => (core.once('exit', r), core.kill()))
+for (const d of [home, work]) fs.rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 console.log(failures ? `\n${failures} check(s) failed` : '\nall skill checks passed')
 process.exit(failures ? 1 : 0)

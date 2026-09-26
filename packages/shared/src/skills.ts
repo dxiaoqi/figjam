@@ -81,29 +81,6 @@ export function skillTypeRegistry(skills: Iterable<Pick<BoardSkill, 'canvas'>>):
   return out
 }
 
-/** Activity log entry (§3.3 audit): tool calls, permission decisions, enabling/disabling. */
-export interface SkillActivityEntry {
-  id: string
-  at: number
-  skill: string
-  kind: 'tool' | 'permission' | 'enable' | 'disable' | 'install' | 'save-type'
-  tool?: string
-  action?: string
-  by: string
-  status: 'ok' | 'error' | 'denied' | 'pending' | 'allowed'
-  detail?: string
-}
-
-export interface SkillPermissionRequest {
-  id: string
-  at: number
-  skill: string
-  capability: SkillCapability
-  tools: string[]
-  action?: { id: string; label: string; ids: string[] }
-  requestedBy: string
-}
-
 export const SKILL_ICONS = [
   'Sparkles', 'CircleHelp', 'Quote', 'FlaskConical', 'Lightbulb', 'SquareCheck', 'Tag', 'User', 'Users', 'Building2', 'Store', 'Swords',
   'Target', 'Flag', 'Star', 'Heart', 'ThumbsUp', 'ThumbsDown', 'AlertTriangle', 'Bug', 'Rocket', 'Calendar', 'Clock', 'MapPin',
@@ -119,10 +96,3 @@ export const SKILL_NAME = /^[a-z0-9]+(-[a-z0-9]+)*$/
 
 export type { ColorToken }
 
-/** A standing permission for a skill to call a tool on one board (revocable from the activity log). */
-export interface SkillGrant {
-  skill: string
-  tool: string
-  by: string
-  at: number
-}

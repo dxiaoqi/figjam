@@ -4,7 +4,7 @@ import path from 'node:path'
 import { customAlphabet } from 'nanoid'
 import * as Y from 'yjs'
 import { skillTypeRegistry } from '@aifig/shared'
-import type { SkillActivityEntry, Asset, Block, BoardSkill, BoardSummary, ChangeSet, Connector, SkillPermissionRequest, Rect, SkillGrant, Thread, TypeRegistry } from '@aifig/shared'
+import type { Asset, Block, BoardSkill, BoardSummary, ChangeSet, Connector, Rect, Thread, TypeRegistry } from '@aifig/shared'
 
 export const newId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 10)
 
@@ -27,10 +27,6 @@ export class Board {
   readonly threads = this.doc.getMap<Thread>('threads')
   /** Skills enabled on this board (snapshots, so types render without the skill folder). */
   readonly skills = this.doc.getMap<BoardSkill>('skills')
-  /** Audit log of skill activity: tool calls, permission decisions, enable/disable. */
-  readonly activity = this.doc.getArray<SkillActivityEntry>('activity')
-  readonly permissionRequests = this.doc.getMap<SkillPermissionRequest>('permissionRequests')
-  readonly skillGrants = this.doc.getMap<SkillGrant>('skillGrants')
 
   /** Built-in types plus the types of the skills enabled on this board. */
   types(): TypeRegistry {

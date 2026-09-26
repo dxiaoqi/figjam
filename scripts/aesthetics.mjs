@@ -11,6 +11,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import pixelmatch from 'pixelmatch'
 import { PNG } from 'pngjs'
 import { scenarios } from '../tests/aesthetics/scenarios.mjs'
+import { authHeaders } from './lib/core-auth.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dir = path.join(root, 'tests/aesthetics')
@@ -32,7 +33,7 @@ const core = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'core'],
 for (let i = 0; i < 50; i++) {
   await new Promise((r) => setTimeout(r, 200))
   try {
-    if ((await fetch(`http://127.0.0.1:${port}/api/health`)).ok) break
+    if ((await fetch(`http://127.0.0.1:${port}/api/health`, { headers: authHeaders(home) })).ok) break
   } catch {
     /* starting */
   }
@@ -56,7 +57,7 @@ for (const s of scenarios) {
     const board = (await call('create_board', { title: s.title })).json.board.id
     for (const step of s.steps) await call(step.tool, { board, ...step.args })
     // review as a person would, so snapshots show the final look rather than the suggestion layer
-    const reviewed = await fetch(`http://127.0.0.1:${port}/api/call`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tool: 'review_change_set', args: { board, id: 'all', action: 'accept' }, caller: { id: 'human:aesthetics', name: 'Reviewer', client: 'test', kind: 'human' } }) }).then((r) => r.json())
+    const reviewed = await fetch(`http://127.0.0.1:${port}/api/call`, { method: 'POST', headers: authHeaders(home), body: JSON.stringify({ tool: 'review_change_set', args: { board, id: 'all', action: 'accept' }, caller: { id: 'human:aesthetics', name: 'Reviewer', client: 'test', kind: 'human' } }) }).then((r) => r.json())
     if (!reviewed.ok) throw new Error(`review failed: ${reviewed.error}`)
     const lint = (await call('lint_layout', { board })).json
     const strict = lint.issues.filter((i) => STRICT_RULES.includes(i.rule))

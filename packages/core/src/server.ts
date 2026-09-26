@@ -6,8 +6,8 @@ import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import { WebSocketServer, type WebSocket } from 'ws'
 import * as syncProtocol from 'y-protocols/sync'
-import type { ClientMessage, ServerMessage } from '@aifig/shared'
-import { CORE_PORT, SNIPPET_PORT, snippetOrigin, type CallRequest } from '@aifig/shared'
+import type { CallerInfo, Capability, ClientMessage, PermissionDecision, ServerMessage } from '@aifig/shared'
+import { CAPABILITIES, CORE_PORT, SNIPPET_PORT, snippetOrigin, type CallRequest } from '@aifig/shared'
 import { startSnippetHost } from './snippet-host'
 import { zipFolder } from './zip'
 import { randomUUID } from 'node:crypto'
@@ -15,8 +15,12 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { CanvasCore } from './api'
 import { buildMcpServer } from './mcp'
+import { ActivityLog } from './activity'
 import { Assistant } from './assistant'
+import { localPolicy, presentedToken, selectWsProtocol, tokenGuard } from './auth'
 import { aifigHome, type Board } from './board'
+import { PermissionBroker } from './permissions'
+import { auditedStore, openSecretStore } from './secrets'
 
 const MSG_SYNC = 0
 
@@ -29,19 +33,38 @@ function send(ws: WebSocket, data: Uint8Array | string) {
   if (ws.readyState === ws.OPEN) ws.send(data)
 }
 
+const MAX_BODY = 40 * 1024 * 1024
+
 function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let data = ''
-    req.on('data', (c) => (data += c))
+    req.on('data', (c) => {
+      data += c
+      if (data.length > MAX_BODY) {
+        reject(new Error('Request body too large'))
+        req.destroy()
+      }
+    })
     req.on('end', () => resolve(data))
     req.on('error', reject)
   })
 }
 
-function json(res: http.ServerResponse, status: number, body: unknown) {
-  res.writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*' })
+// No CORS headers: only the canvas (same origin, or via the dev proxy) and non-browser clients talk to the core.
+function json(res: http.ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
+  res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers })
   res.end(JSON.stringify(body))
 }
+
+const APP_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'no-referrer',
+  'x-frame-options': 'DENY',
+  'content-security-policy': "frame-ancestors 'none'",
+  'cross-origin-opener-policy': 'same-origin',
+}
+
+const PERSON: CallerInfo = { id: 'human:ui', name: 'You', client: 'ui', kind: 'human' }
 
 const MIME: Record<string, string> = {
   '.html': 'text/html',
@@ -56,7 +79,18 @@ const MIME: Record<string, string> = {
 export async function startCore(port = CORE_PORT) {
   const core = new CanvasCore()
   core.init()
-  const assistant = new Assistant(core)
+  const home = aifigHome()
+  fs.mkdirSync(home, { recursive: true, mode: 0o700 })
+  // boards, the token, grants and the activity log live here: keep other OS users out
+  if (process.platform !== 'win32') fs.chmodSync(home, 0o700)
+  const guard = tokenGuard(home)
+  const policy = localPolicy(port)
+  const activity = ActivityLog.at(home)
+  const permissions = PermissionBroker.at(home, activity)
+  const secrets = auditedStore(openSecretStore(), activity)
+  core.security = { permissions, activity }
+  const assistant = new Assistant(core, secrets, activity, Assistant.settingsPath(home))
+  await assistant.load()
   const snippets = await startSnippetHost(core.registry, port === CORE_PORT ? SNIPPET_PORT : port + 1)
   const conns = new Set<Conn>()
   const bound = new WeakSet<Board>()
@@ -81,6 +115,31 @@ export async function startCore(port = CORE_PORT) {
     for (const c of conns) send(c.ws, s)
   }
   core.presence.onChange = broadcastPresence
+  const broadcast = (msg: ServerMessage) => {
+    const s = JSON.stringify(msg)
+    for (const c of conns) send(c.ws, s)
+  }
+  permissions.prompter = {
+    available: () => conns.size > 0,
+    show: (request) => broadcast({ type: 'permission', request }),
+    settled: (id, decision) => broadcast({ type: 'permission-settled', id, decision }),
+  }
+  activity.onRecord((entry) => broadcast({ type: 'activity', entry }))
+
+  /** Host (DNS rebinding), Origin (foreign pages) and the access token, for every API / MCP / sync request. */
+  const gate = (req: http.IncomingMessage, surface: string): { status: number; error: string } | null => {
+    const deny = (status: number, error: string, why: string) => {
+      if (surface !== 'health' || why !== 'token') activity.record(
+        { category: 'auth', action: 'reject', outcome: 'denied', actor: { id: 'unknown', name: 'Unknown client', client: 'unknown', kind: 'agent' }, target: surface, via: why, detail: req.headers.origin ? `origin ${req.headers.origin}` : undefined },
+        { throttleKey: `${surface}:${why}:${req.headers.origin ?? ''}` },
+      )
+      return { status, error }
+    }
+    if (!policy.hostOk(req.headers.host)) return deny(403, 'Forbidden host', 'host')
+    if (!policy.originOk(req.headers.origin)) return deny(403, 'Forbidden origin', 'origin')
+    if (!guard.check(presentedToken(req))) return deny(401, 'Missing or invalid ai-figma access token. Run `aifig token` to see it.', 'token')
+    return null
+  }
 
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
   const distDir = process.env.AIFIG_UI_DIST ?? path.join(root, 'apps', 'canvas', 'dist')
@@ -94,6 +153,8 @@ export async function startCore(port = CORE_PORT) {
   const mcpSessions = new Map<string, StreamableHTTPServerTransport>()
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`]
   const handleMcp = async (req: http.IncomingMessage, res: http.ServerResponse) => {
+    const denied = gate(req, 'mcp')
+    if (denied) return json(res, denied.status, { jsonrpc: '2.0', error: { code: -32001, message: denied.error }, id: null }, denied.status === 401 ? { 'www-authenticate': 'Bearer realm="ai-figma"' } : {})
     const sid = req.headers['mcp-session-id'] as string | undefined
     let body: unknown
     if (req.method === 'POST') {
@@ -134,12 +195,51 @@ export async function startCore(port = CORE_PORT) {
       }
     }
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET,POST' })
+      // no cross-origin access; same-origin requests never preflight
+      res.writeHead(403, { 'cache-control': 'no-store' })
       return res.end()
     }
     try {
+      if (url.pathname.startsWith('/api/')) {
+        const denied = gate(req, url.pathname === '/api/health' ? 'health' : 'api')
+        // liveness stays answerable without the token (for clients deciding whether to start a core); details don't
+        if (denied && url.pathname === '/api/health' && denied.status === 401) return json(res, 200, { ok: true, name: 'aifig-core', auth: 'token', authenticated: false })
+        if (denied) return json(res, denied.status, { ok: false, error: denied.error }, denied.status === 401 ? { 'www-authenticate': 'Bearer realm="ai-figma"' } : {})
+      }
       if (url.pathname === '/api/health') {
-        return json(res, 200, { ok: true, name: 'aifig-core', home: aifigHome(), bin: binPath, mcp: mcpLaunch, mcpUrl: `http://127.0.0.1:${port}/mcp`, snippetOrigin: snippets.ok ? snippetOrigin(snippets.port) : null, boards: core.registry.all().length, pid: process.pid })
+        return json(res, 200, { ok: true, name: 'aifig-core', auth: 'token', authenticated: true, home, bin: binPath, mcp: mcpLaunch, mcpUrl: `http://127.0.0.1:${port}/mcp`, token: guard.token, snippetOrigin: snippets.ok ? snippetOrigin(snippets.port) : null, boards: core.registry.all().length, pid: process.pid, secrets: { backend: secrets.backend, persistent: secrets.persistent, osBacked: secrets.osBacked } })
+      }
+      if (url.pathname === '/api/activity' && req.method === 'GET') {
+        const category = url.searchParams.get('category') ?? undefined
+        return json(res, 200, { entries: activity.list({ limit: Number(url.searchParams.get('limit') ?? 200), category: category as never }) })
+      }
+      if (url.pathname === '/api/permissions' && req.method === 'GET') return json(res, 200, { pending: permissions.pending(), grants: permissions.grants() })
+      if (url.pathname === '/api/permissions/answer' && req.method === 'POST') {
+        const body = JSON.parse((await readBody(req)) || '{}') as { id?: string; decision?: PermissionDecision }
+        if (!['allow-once', 'allow-always', 'deny'].includes(body.decision ?? '')) return json(res, 400, { ok: false, error: 'decision must be allow-once, allow-always or deny' })
+        return json(res, 200, { ok: permissions.answer(String(body.id ?? ''), body.decision!) })
+      }
+      if ((url.pathname === '/api/permissions/grant' || url.pathname === '/api/permissions/revoke') && req.method === 'POST') {
+        const body = JSON.parse((await readBody(req)) || '{}') as { subject?: string; capability?: Capability; target?: string; actor?: CallerInfo }
+        const subject = String(body.subject ?? '')
+        if (!/^(agent|skill):[\w.@-]+$/.test(subject)) return json(res, 400, { ok: false, error: 'subject must look like agent:<client> or skill:<id>' })
+        if (body.capability && !(body.capability in CAPABILITIES)) return json(res, 400, { ok: false, error: `capability must be one of ${Object.keys(CAPABILITIES).join(', ')}` })
+        const actor = body.actor?.kind === 'human' ? body.actor : PERSON
+        if (url.pathname.endsWith('/grant')) {
+          if (!body.capability || !body.target) return json(res, 400, { ok: false, error: 'capability and target are required' })
+          permissions.grant(subject, body.capability, String(body.target), actor)
+          return json(res, 200, { ok: true, grants: permissions.grants() })
+        }
+        return json(res, 200, { ok: true, removed: permissions.revoke(subject, body.capability, body.target, actor), grants: permissions.grants() })
+      }
+      if (url.pathname === '/api/assistant/settings' && req.method === 'GET') return json(res, 200, assistant.settings())
+      if (url.pathname === '/api/assistant/settings' && req.method === 'POST') {
+        try {
+          const r = await assistant.save(JSON.parse((await readBody(req)) || '{}'), PERSON)
+          return json(res, 200, { ok: true, ...r, ...assistant.settings() })
+        } catch (e) {
+          return json(res, 200, { ok: false, error: (e as Error).message })
+        }
       }
       if (url.pathname === '/api/boards' && req.method === 'GET') {
         return json(res, 200, { boards: core.registry.all().map((b) => b.summary()), active: core.activeBoardId })
@@ -151,9 +251,7 @@ export async function startCore(port = CORE_PORT) {
       }
       if (url.pathname === '/api/assistant/status') return json(res, 200, assistant.status())
       if (url.pathname === '/api/assistant/config' && req.method === 'POST') {
-        // only the local desktop shell / tests reach this (the server binds to 127.0.0.1); settings stay in memory
-        const origin = req.headers.origin
-        if (origin && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) return json(res, 403, { ok: false, error: 'Forbidden' })
+        // the desktop shell hands over settings from safeStorage; they stay in memory here
         assistant.configure(JSON.parse((await readBody(req)) || '{}'))
         return json(res, 200, { ok: true, ...assistant.status() })
       }
@@ -209,10 +307,11 @@ export async function startCore(port = CORE_PORT) {
       }
       // built canvas app (npm run build) — optional single-process mode
       if (req.method === 'GET' && fs.existsSync(distDir)) {
+        if (!policy.hostOk(req.headers.host)) return json(res, 403, { ok: false, error: 'Forbidden host' })
         const rel = url.pathname === '/' ? '/index.html' : url.pathname
         let file = path.join(distDir, path.normalize(rel))
         if (!file.startsWith(distDir) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(distDir, 'index.html')
-        res.writeHead(200, { 'content-type': MIME[path.extname(file)] ?? 'application/octet-stream' })
+        res.writeHead(200, { 'content-type': MIME[path.extname(file)] ?? 'application/octet-stream', ...APP_HEADERS })
         return fs.createReadStream(file).pipe(res)
       }
       json(res, 404, { ok: false, error: 'Not found' })
@@ -221,8 +320,13 @@ export async function startCore(port = CORE_PORT) {
     }
   })
 
-  const wss = new WebSocketServer({ noServer: true })
+  const wss = new WebSocketServer({ noServer: true, handleProtocols: selectWsProtocol })
   server.on('upgrade', (req, socket, head) => {
+    const denied = gate(req, 'sync')
+    if (denied) {
+      socket.write(`HTTP/1.1 ${denied.status} ${denied.status === 401 ? 'Unauthorized' : 'Forbidden'}\r\nConnection: close\r\n\r\n`)
+      return socket.destroy()
+    }
     const m = (req.url ?? '').match(/^\/sync\/([^/?#]+)/)
     const board = m ? core.registry.get(decodeURIComponent(m[1])) : undefined
     if (!board) {
@@ -275,8 +379,7 @@ export async function startCore(port = CORE_PORT) {
     server.once('error', reject)
     server.listen(port, '127.0.0.1', () => resolve())
   })
-  fs.mkdirSync(aifigHome(), { recursive: true })
-  fs.writeFileSync(path.join(aifigHome(), 'core.json'), JSON.stringify({ port, pid: process.pid, startedAt: Date.now() }))
+  fs.writeFileSync(path.join(home, 'core.json'), JSON.stringify({ port, pid: process.pid, startedAt: Date.now() }))
 
   const shutdown = () => {
     core.registry.flush()
@@ -284,5 +387,5 @@ export async function startCore(port = CORE_PORT) {
   }
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)
-  return { core, server, port }
+  return { core, server, port, token: guard.token, activity, permissions, secrets }
 }

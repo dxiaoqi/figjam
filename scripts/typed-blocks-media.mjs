@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
+import { authHeaders, signIn } from './lib/core-auth.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'typed-blocks')
@@ -41,6 +42,7 @@ cli('--board', board, '--human', 'accept')
 const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--no-sandbox'] })
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, recordVideo: { dir: out, size: { width: 1440, height: 900 } } })
 const page = await context.newPage()
+await signIn(page)
 page.on('pageerror', (e) => console.log('[pageerror]', e.message))
 const ed = (fn, arg) => page.evaluate(fn, arg)
 const shot = async (name) => {
@@ -113,7 +115,7 @@ await sleep(500)
 
 fs.writeFileSync(path.join(out, 'export-by-type.md'), cli('--board', board, 'export', '--format', 'md'))
 fs.writeFileSync(path.join(out, 'query-unverified.txt'), `$ aifig query --type hypothesis --status unverified\n${cli('--board', board, 'query', '--type', 'hypothesis', '--status', 'unverified')}\n$ aifig types\n${cli('types')}`)
-const png = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.png`).then((r) => r.arrayBuffer())
+const png = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.png`, { headers: authHeaders() }).then((r) => r.arrayBuffer())
 fs.writeFileSync(path.join(out, '08-export-snapshot.png'), Buffer.from(png))
 const video = await page.video().path()
 await context.close()

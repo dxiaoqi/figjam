@@ -1,7 +1,7 @@
-import { Plus, ShieldQuestion, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { COLOR_TOKENS, COLORS, SKILL_ICONS, type FieldDef, type SkillPermissionRequest } from '@aifig/shared'
+import { COLOR_TOKENS, COLORS, SKILL_ICONS, type FieldDef } from '@aifig/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -9,70 +9,7 @@ import { useBoard } from '../board-context'
 import { useEditor } from '../canvas/editor-context'
 import { iconByName } from '../canvas/type-registry'
 import { callCore } from '../lib/core'
-import { reportActionResult } from '../lib/skills'
 import { S } from '../lib/strings'
-
-/** First-use permission prompt for L1 skill tools (requests live in the board document). */
-export function PermissionPrompt() {
-  const { provider, boardId } = useBoard()
-  const [reqs, setReqs] = useState<SkillPermissionRequest[]>([])
-  const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    const map = provider.doc.getMap<SkillPermissionRequest>('permissionRequests')
-    const update = () => setReqs([...map.values()].sort((a, b) => a.at - b.at))
-    update()
-    map.observe(update)
-    return () => map.unobserve(update)
-  }, [provider])
-  const req = reqs[0]
-  const decide = async (decision: 'allow_once' | 'allow_board' | 'deny') => {
-    if (!req) return
-    setBusy(true)
-    try {
-      const r = await callCore<{ result?: { status: string; results?: { status: string; created?: number; error?: string }[] } }>('grant_skill_permission', { board: boardId, request: req.id, decision })
-      if (r.result) reportActionResult(r.result)
-    } catch (e) {
-      toast.error((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Dialog open={!!req} onOpenChange={(o) => !o && !busy && decide('deny')}>
-      <DialogContent className="sm:max-w-md" data-permission-prompt>
-        {req && (
-          <>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <ShieldQuestion className="size-5 text-amber-600" /> {S.permission.title(req.skill)}
-              </DialogTitle>
-              <DialogDescription>{S.permission.body(req.tools.join(', '))}</DialogDescription>
-            </DialogHeader>
-            <div className="rounded-lg bg-muted/60 p-3 text-[12px] leading-relaxed">
-              {req.action && <div className="font-medium">{S.permission.action(req.action.label)}</div>}
-              <div className="mt-1 font-mono text-[11px]">{req.tools.join(', ')}</div>
-              <div className="mt-1 text-muted-foreground">
-                {req.capability} · {req.requestedBy}
-              </div>
-              <p className="mt-2 text-muted-foreground">{S.permission.note}</p>
-            </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button variant="ghost" disabled={busy} onClick={() => decide('deny')} data-permission="deny">
-                {S.permission.deny}
-              </Button>
-              <Button variant="outline" disabled={busy} onClick={() => decide('allow_once')} data-permission="once">
-                {S.permission.once}
-              </Button>
-              <Button disabled={busy} onClick={() => decide('allow_board')} data-permission="board">
-                {S.permission.board}
-              </Button>
-            </div>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
 
 /** Guess fields from “Key: value” lines, like the core does, so the dialog can show and edit them first. */
 function guessFields(text: string): FieldDef[] {

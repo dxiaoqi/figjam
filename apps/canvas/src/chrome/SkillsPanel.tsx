@@ -1,7 +1,7 @@
 import { ChevronDown, FolderInput, Puzzle, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { COLORS, type SkillActivityEntry, type SkillGrant } from '@aifig/shared'
+import { COLORS, type ActivityEntry, type PermissionGrant } from '@aifig/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { useBoard } from '../board-context'
 import { renderMarkdown } from '../canvas/markdown'
 import { iconByName, useBoardSkills } from '../canvas/type-registry'
+import { apiFetch } from '../lib/auth'
 import { callCore } from '../lib/core'
 import { S } from '../lib/strings'
 
@@ -175,13 +176,17 @@ function SkillCard({ s, onChange }: { s: SkillRow; onChange: () => void }) {
 
 function ActivityList() {
   const { boardId } = useBoard()
-  const [data, setData] = useState<{ activity: SkillActivityEntry[]; grants: SkillGrant[] } | null>(null)
-  const load = useCallback(() => callCore<{ activity: SkillActivityEntry[]; grants: SkillGrant[] }>('list_activity', { board: boardId, limit: 100 }).then(setData, () => {}), [boardId])
+  const [data, setData] = useState<{ activity: ActivityEntry[]; grants: PermissionGrant[] } | null>(null)
+  const load = useCallback(() => callCore<{ activity: ActivityEntry[]; grants: PermissionGrant[] }>('list_activity', { board: boardId, limit: 100 }).then(setData, () => {}), [boardId])
   useEffect(() => {
     load()
     const t = setInterval(load, 2000)
     return () => clearInterval(t)
   }, [load])
+  const revoke = async (g: PermissionGrant) => {
+    await apiFetch('/api/permissions/revoke', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ subject: g.subject, capability: g.capability, target: g.target }) })
+    load()
+  }
   if (!data) return null
   return (
     <div className="flex flex-col gap-3 text-[12px]" data-skill-activity>
@@ -189,17 +194,11 @@ function ActivityList() {
         <div>
           <div className="mb-1 font-semibold">{S.skills.allowed}</div>
           {data.grants.map((g) => (
-            <div key={`${g.skill}:${g.tool}`} className="flex items-center gap-2 rounded-lg border px-2 py-1.5">
+            <div key={`${g.subject}:${g.target}`} className="flex items-center gap-2 rounded-lg border px-2 py-1.5">
               <span className="flex-1">
-                {g.skill} → <code className="font-mono">{g.tool}</code> <span className="text-muted-foreground">· {g.by}</span>
+                {g.subject.replace(/^skill:/, '')} → <code className="font-mono">{g.target}</code>
               </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 text-[11px]"
-                data-revoke={`${g.skill}:${g.tool}`}
-                onClick={() => callCore('revoke_skill_permission', { board: boardId, skill: g.skill, tool: g.tool }).then(load)}
-              >
+              <Button size="sm" variant="ghost" className="h-6 text-[11px]" data-revoke={`${g.subject.replace(/^skill:/, '')}:${g.target}`} onClick={() => revoke(g)}>
                 {S.skills.revoke}
               </Button>
             </div>
@@ -211,20 +210,20 @@ function ActivityList() {
       ) : (
         <div className="max-h-80 overflow-y-auto rounded-lg border">
           {data.activity.map((e) => (
-            <div key={e.id} className="flex gap-2 border-b px-2.5 py-1.5 last:border-0" data-activity-entry={e.kind}>
-              <span className={cn('mt-1 size-1.5 shrink-0 rounded-full', e.status === 'ok' || e.status === 'allowed' ? 'bg-emerald-500' : e.status === 'pending' ? 'bg-amber-500' : 'bg-red-500')} />
+            <div key={e.id} className="flex gap-2 border-b px-2.5 py-1.5 last:border-0" data-activity-entry={e.category === 'permission' ? 'permission' : e.action}>
+              <span className={cn('mt-1 size-1.5 shrink-0 rounded-full', e.outcome === 'ok' || e.outcome === 'allowed' ? 'bg-emerald-500' : 'bg-red-500')} />
               <div className="min-w-0 flex-1">
                 <div>
-                  <span className="font-medium">{e.skill}</span> · {e.kind}
-                  {e.tool ? (
+                  <span className="font-medium">{e.source?.id}</span> · {e.category === 'permission' ? 'permission' : e.action}
+                  {e.target ? (
                     <>
                       {' '}
-                      · <code className="font-mono">{e.tool}</code>
+                      · <code className="font-mono">{e.target}</code>
                     </>
                   ) : null}{' '}
-                  · <span className="text-muted-foreground">{e.status}</span>
+                  · <span className="text-muted-foreground">{e.outcome}{e.via ? ` (${e.via})` : ''}</span>
                 </div>
-                {e.detail && <div className="truncate text-[11px] text-muted-foreground">{e.detail}</div>}
+                {(e.detail || e.actor) && <div className="truncate text-[11px] text-muted-foreground">{[e.actor?.name, e.detail].filter(Boolean).join(' · ')}</div>}
               </div>
               <span className="shrink-0 text-[11px] text-muted-foreground">{new Date(e.at).toLocaleTimeString()}</span>
             </div>

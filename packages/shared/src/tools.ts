@@ -279,7 +279,7 @@ export const toolDefs = {
   run_skill_action: {
     title: 'Run a skill action',
     description:
-      'Run an action an enabled skill defines (it calls a tool by name, e.g. web search) on blocks. The first use of a tool on a board asks the person for permission in the canvas; until they allow it the result is `needs_permission`. Every call is logged.',
+      'Run an action an enabled skill defines (it calls a tool by name, e.g. web search) on blocks. The first time a skill uses a tool the person is asked in the canvas (the call waits for their answer); results arrive as a change set. Every call is logged.',
     input: { board, skill: z.string(), action: z.string(), ids: z.array(z.string()).min(1).describe('Blocks to run it on') },
   },
   list_types: {
@@ -406,10 +406,6 @@ export const humanToolDefs = {
   disable_skill: { input: { board, name: z.string() } },
   install_skill: { input: { path: z.string().describe('Folder containing SKILL.md') } },
   load_dev_skill: { input: { path: z.string() } },
-  grant_skill_permission: {
-    input: { board, request: z.string(), decision: z.enum(['allow_once', 'allow_board', 'deny']) },
-  },
-  revoke_skill_permission: { input: { board, skill: z.string(), tool: z.string().optional() } },
   list_activity: { input: { board, skill: z.string().optional(), limit: z.number().optional() } },
   save_block_type: {
     input: {

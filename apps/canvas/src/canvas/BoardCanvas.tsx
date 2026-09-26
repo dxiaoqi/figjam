@@ -5,7 +5,9 @@ import { COLORS, SURFACES, type Author, type Block } from '@aifig/shared'
 import { useBoard, useProviderState } from '../board-context'
 import { BoardMenu } from '../chrome/BoardMenu'
 import { ContextMenu } from '../chrome/ContextMenu'
+import { ActivityDialog } from '../chrome/ActivityDialog'
 import { AssistantSettings } from '../chrome/AssistantSettings'
+import { PermissionPrompt } from '../chrome/PermissionPrompt'
 import { EmptyState } from '../chrome/EmptyState'
 import { ReviewPanel } from '../chrome/ReviewPanel'
 import { StatusBanner } from '../chrome/StatusBanner'
@@ -20,7 +22,7 @@ import { HeldNotice } from './HeldNotice'
 import { ReviewGhosts } from './ReviewGhosts'
 import { SnippetDialog } from '../chrome/SnippetDialog'
 import { SkillsPanel } from '../chrome/SkillsPanel'
-import { PermissionPrompt, SaveTypeDialog } from '../chrome/SkillPrompts'
+import { SaveTypeDialog } from '../chrome/SkillPrompts'
 import { bindBoardSkills } from './type-registry'
 import { FieldsPopover, TypeFilterBar, TypePalette, useRelationSuggestions } from './types-ui'
 import { EditorContext } from './editor-context'
@@ -151,6 +153,8 @@ export function BoardCanvas() {
           return window.dispatchEvent(new Event('aifig:toggle-minimap'))
         case 'assistant-settings':
           return window.dispatchEvent(new Event('aifig:assistant-settings'))
+        case 'activity':
+          return window.dispatchEvent(new Event('aifig:activity'))
         case 'export':
           if (payload === 'png' || payload === 'svg') return downloadSnapshot(boardId, document.title.replace(/ — ai-figma$/, ''), payload, { ids: ids.length ? ids : undefined, theme: themeMode })
           return downloadDocument(boardId, payload === 'json' ? 'json' : 'md')
@@ -186,9 +190,10 @@ export function BoardCanvas() {
           <ReviewPanel />
           <ContextMenu />
           <AssistantSettings />
+          <ActivityDialog />
+          <PermissionPrompt />
           <SnippetDialog />
           <SkillsPanel />
-          <PermissionPrompt />
           <SaveTypeDialog />
           <StatusBanner />
         </EditorContext.Provider>

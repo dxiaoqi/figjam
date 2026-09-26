@@ -19,14 +19,17 @@ npm install
 npm run dev
 ```
 
-Open **http://127.0.0.1:47820**. `npm run dev` starts two processes:
+Open the link `npm run dev` prints (`http://127.0.0.1:47820/#token=…`), or run `npx aifig open --dev`. The core only
+answers clients holding its per-install access token (see [Security](#security)); the link signs this browser in once.
+`npm run dev` starts two processes:
 
 | Process | Port | What it is |
 |---|---|---|
 | core | 47821 | Owns every board as a Yjs document, persists to disk, serves the Canvas API (HTTP) and live sync (WebSocket) |
 | ui | 47820 | The canvas app (Vite + React + our own canvas engine), a client of the core. `/api` and `/sync` are proxied to the core |
 
-Run them separately with `npm run core` and `npm run ui`. If the browser ever shows
+Run them separately with `npm run core` and `npm run ui`. Opening the plain address shows a sign-in screen where you can
+paste the token from `npx aifig token`. If the browser ever shows
 `504 (Outdated Optimize Dep)` (for example after changing dependencies), run `npm run dev:clean`, which clears
 Vite's dependency cache and re-bundles, then reload the page. For a single process, `npm start` builds the UI and
 the core serves it on port 47821.
@@ -39,12 +42,13 @@ npm run desktop:dev      # same, but load the Vite dev server for hot reload (ru
 npm run desktop:build    # package it (electron-builder; add `-- --dir` for an unpacked build)
 ```
 
-The desktop app runs the core with Electron's own Node, so nothing else needs to be installed. It has native menus
+The desktop app runs the core with Electron's own Node, so nothing else needs to be installed, and signs in to it on its own. It has native menus
 and shortcuts (New Board ⌘N, Open… ⌘O, Open Recent, Save As… ⇧⌘S, Export PNG/SVG/JSON/Markdown, Undo/Redo, zoom,
 minimap, Appearance), opens `.aifig` files from anywhere (Save As keeps the chosen file in sync), follows the OS
 light/dark setting, and its **Connect agent** dialog points agents at the bundled CLI/MCP.
 
-Boards live in `~/.aifig/boards/<id>.aifig` (Yjs state) with a readable `<id>.json` next to it. Override the
+Boards live in `~/.aifig/boards/<id>.aifig` (Yjs state) with a readable `<id>.json` next to it. The same folder (kept
+at `0700`) holds `access-token`, `permissions.json` and `activity.jsonl`. Override the
 location with `AIFIG_HOME`, and ports with `AIFIG_CORE_PORT` / `AIFIG_UI_PORT`. `~/.aifig/state.json` remembers the
 board last active in the canvas, which is the default for tools called without `board` (agents should pass it anyway).
 
@@ -85,17 +89,21 @@ claude mcp add ai-figma -- node /absolute/path/to/ai-figma/bin/aifig.mjs mcp
 }
 ```
 
-**Local HTTP** (Streamable HTTP, while the core runs — nothing to launch):
+The stdio server and the CLI read the access token from `AIFIG_HOME` themselves — nothing to configure.
+
+**Local HTTP** (Streamable HTTP, while the core runs — nothing to launch) needs the token as a header:
 
 ```bash
-claude mcp add --transport http ai-figma http://127.0.0.1:47821/mcp
+claude mcp add --transport http ai-figma http://127.0.0.1:47821/mcp --header "Authorization: Bearer $(npx aifig token)"
 ```
 
-(Cursor: `{ "mcpServers": { "ai-figma": { "url": "http://127.0.0.1:47821/mcp" } } }`.) The endpoint only answers
-on `127.0.0.1` and rejects other `Host` headers (DNS-rebinding protection).
+(Cursor: `{ "mcpServers": { "ai-figma": { "url": "http://127.0.0.1:47821/mcp", "headers": { "Authorization": "Bearer <token>" } } } }`.)
+The endpoint only answers on `127.0.0.1`, rejects other `Host` headers (DNS rebinding) and browser `Origin`s other than
+the app, and requires the token on every request. Keep configs with the token out of shared or committed files;
+`aifig token --rotate` replaces it.
 
-The **Connect agent** button in the canvas shows all of these with the correct paths filled in (in the desktop app,
-for its bundled CLI). The agent's name
+The **Connect agent** button in the canvas shows all of these with the correct paths and the token filled in (in the
+desktop app, for its bundled CLI). The agent's name
 and color come from its MCP client info (Claude Code, Cursor, Codex); set `AIFIG_AGENT_NAME` to override.
 
 [`skills/ai-figma-canvas/SKILL.md`](skills/ai-figma-canvas/SKILL.md) is an Agent Skill that teaches agents how to
@@ -146,6 +154,11 @@ aifig tidy --frame "Synthesis" --by matrix --field status
 aifig snippet --url https://www.figma.com/proto/…  # or --html @demo.html --css @demo.css --js @demo.js
 aifig snippet-update <id> --js @demo.js
 aifig call <tool> '<json args>'                    # anything in the Canvas API
+aifig open [--dev] [--print]                       # open the canvas in a browser, signed in
+aifig token [--rotate]                             # the local access token (for HTTP MCP configs)
+aifig permissions                                  # remembered grants and pending requests
+aifig permissions allow agent:claude-code network example.com   # or revoke agent:claude-code
+aifig activity [-c network|secret|permission|auth] # recent network / secret / permission / auth events
 ```
 
 Global flags: `--board <id|title>`, `--as "<agent name>"` (shown on the canvas), `--human` (apply directly without
@@ -248,7 +261,70 @@ the app) into `sandbox="allow-scripts"` iframes (opaque origin, credentialless),
 only channel is `aifig.getState()` / `aifig.setState(obj)` for the snippet's own state (≤16 KB).
 `aifig.requestPermission('network' | 'neighbors')` is the hook for v2 grants (denied in v1). A heartbeat watchdog stops
 snippets that hang (endless loops) or use too much memory. URL embeds run as their own origin without top navigation.
-In the desktop app, the window's session also denies permission prompts and navigation for anything that isn't the app.
+In the desktop app, snippets run in `<webview>`s instead, each in its own in-memory partition (`snippet-<board>-<block>`:
+separate storage, cache, cookies and permission state). The main process decides every webview's settings (sandboxed,
+context-isolated, no Node, no popups; only inline snippets get a small preload that relays the bridge), refuses any
+other source or a persistent/shared partition, keeps inline snippets on their own document, and cancels requests from
+snippet partitions to this machine or the LAN. The window itself is sandboxed and denies permission prompts and
+navigation for anything that isn't the app.
+
+## Security
+
+**Access token.** On first start the core creates `AIFIG_HOME/access-token` (32 random bytes, mode `0600`, folder
+`0700`). The HTTP API, MCP over HTTP and the sync WebSocket (token as a subprotocol) all require it; so does every other
+route except a bare liveness answer from `/api/health`. The core listens on `127.0.0.1` only, checks `Host` (DNS
+rebinding) and `Origin` (other web pages) on every request, and sends no CORS headers. The CLI and stdio MCP read the
+token file, the desktop app gets it from its shell, a browser gets it once from the `aifig open` link (a `#fragment`,
+never sent to a server) and keeps it in localStorage. `AIFIG_TOKEN` overrides the file; `aifig token --rotate` replaces
+it (running cores notice).
+
+**Permissions and activity.** Agents, skills and the built-in assistant ask the core's permission broker before they
+touch the network or a secret. People (the canvas, `--human`) are trusted; an agent needs a remembered grant or a yes in
+the canvas prompt (Deny / Allow once / Always allow this agent), otherwise the tool call fails with an explanation. With
+no canvas open the answer is no, and the error says how to allow it ahead of time. Grants are per agent client (or
+skill) and host, stored in `permissions.json`. Every decision, fetch, secret access and rejected client goes to
+`activity.jsonl` (names and hosts only, credentials redacted) and the **Activity & permissions** dialog (board menu, or
+File menu in the desktop app). Outbound fetches by the core (images by URL, video posters) never go to loopback, private, link-local or
+metadata addresses, and redirects are re-checked. For Skills: `core.security.permissions.request({ capability, target,
+actor, source: { kind: 'skill', id }, reason })` and `activity.record(…)`, types in `@aifig/shared` (`security.ts`).
+
+**API keys.** Keys are only persisted in an OS keychain and never in boards or plain files:
+
+| Where you set the key | Stored in | No keychain available |
+|---|---|---|
+| Desktop app (Assistant Settings) | Electron `safeStorage` (macOS Keychain, Windows DPAPI, Linux Secret Service/KWallet) | Kept in memory for this session; Linux `basic_text` counts as no keychain |
+| Browser canvas / core | `SecretStore`: macOS Keychain via `security` (secret passed on stdin, not argv), Linux `secret-tool` | Kept in memory for this session |
+
+The settings dialog says which one applies. Tests use `AIFIG_SECRET_STORE=mock` (core) and `AIFIG_DESKTOP_KEYCHAIN=mock`
+or `none` (desktop), both in-memory or obfuscated test doubles that are never selected automatically.
+
+Verifying on macOS:
+
+1. Desktop: `npm run desktop`, File › Assistant Settings…, choose Anthropic, paste a key, Save. Keychain Access shows an
+   **ai-figma Safe Storage** item (the encryption key Electron keeps in your login keychain), and
+   `strings ~/Library/Application\ Support/ai-figma/assistant.bin | grep sk-` finds nothing.
+2. Browser/core: `npm run dev`, open the signed-in link, board menu › Assistant settings…, save a key. Then `security find-generic-password -s ai-figma -a assistant.anthropic`
+   lists the item (add `-w` to print it after a Keychain prompt), `grep -r sk- ~/.aifig` finds nothing, and
+   `aifig activity -c secret` shows `store assistant.anthropic (macos-keychain)`.
+3. Restart the core: the assistant stays configured (the key is read back from the Keychain).
+
+### Threat model
+
+| Threat | Mitigation |
+|---|---|
+| A website you visit calls `127.0.0.1:47821` (CSRF, reading boards) | Token required; `Origin` must be the app; no CORS headers; preflights refused |
+| DNS rebinding (`evil.example` resolving to 127.0.0.1) | `Host` must be a loopback name on the core/UI port (API, MCP, WebSocket, app files) |
+| Other users on the same machine, or the LAN | Listens on 127.0.0.1 only; token file `0600`, `AIFIG_HOME` `0700`; the token is never printed to log files |
+| Prompt-injected agent exfiltrating data or reaching local services via the core | Network needs a grant or a yes in the canvas; SSRF guard blocks loopback/private/metadata addresses; everything is logged |
+| Malicious web snippet | Separate site, opaque origin, strict CSP (no network), sandboxed frame / webview with its own partition, narrow state bridge, watchdog |
+| API keys leaking into files, boards or logs | OS keychain or session memory only; boards never hold keys; logs record names, never values |
+| The app window being framed | `X-Frame-Options: DENY`, `frame-ancestors 'none'` |
+
+Out of scope: malware running as your own user (it can read the token file, your keychain session and the boards, and
+could call the permission API directly — prompts guard the agent tool surface, not arbitrary local code); a
+compromised Electron/Chromium; physical access. Known gaps: the SSRF check resolves DNS before the fetch (a rebinding
+race remains); URL embeds may load any https page inside their own partition; `/api/call` trusts the `caller` a token
+holder declares (the CLI's `--human`), so permission prompts apply to MCP agents rather than to every local client.
 
 ## How it fits together
 
@@ -338,6 +414,8 @@ npm run typecheck                                     # every workspace
 npm run test:e2e                                      # canvas engine + app, real pointer/keyboard input (84 checks)
 npm run test:aesthetics                               # agent-output aesthetics vs baselines (update: test:aesthetics:update)
 node scripts/desktop-e2e.mjs                          # Electron app (window, menus, files, theme, bundled MCP, keychain)
+npm run test:api                                      # Canvas API regressions (own isolated core)
+npm run test:security                                 # token, Host/Origin, WebSocket, permissions, activity, secrets, SSRF
 node scripts/mcp-http-smoke.mjs                       # MCP over local HTTP
 node scripts/mcp-smoke.mjs                            # MCP over stdio
 node scripts/mvp-run.mjs <out-dir>                    # the recorded Phase 0 validation run

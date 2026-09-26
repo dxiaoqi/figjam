@@ -27,6 +27,7 @@
     "desktop:build": "node apps/desktop/scripts/build.mjs",
     "test:api": "node scripts/api-regressions.mjs",
     "test:skills": "node scripts/skills-tests.mjs",
+    "test:security": "node scripts/security-checks.mjs",
     "test:aesthetics": "node scripts/aesthetics.mjs",
     "test:aesthetics:update": "node scripts/aesthetics.mjs --update",
     "test:e2e": "node scripts/engine-e2e.mjs"

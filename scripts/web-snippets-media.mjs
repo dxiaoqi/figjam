@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
+import { authHeaders, signIn } from './lib/core-auth.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'web-snippets')
@@ -38,6 +39,7 @@ const loop = call(['--human'], 'create_snippet', { title: 'Runaway loop', html: 
 const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--no-sandbox'] })
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, recordVideo: { dir: out, size: { width: 1440, height: 900 } } })
 const page = await context.newPage()
+await signIn(page)
 page.on('pageerror', (e) => console.log('[pageerror]', e.message))
 const ed = (fn, arg) => page.evaluate(fn, arg)
 const shot = async (name) => {
@@ -112,7 +114,7 @@ await shot('06-board-dark.png')
 await page.getByRole('button', { name: 'Toggle theme' }).click()
 await sleep(400)
 
-const png = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.png`).then((r) => r.arrayBuffer())
+const png = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.png`, { headers: authHeaders() }).then((r) => r.arrayBuffer())
 fs.writeFileSync(path.join(out, '07-export-snapshot.png'), Buffer.from(png))
 fs.writeFileSync(path.join(out, 'export.md'), cli('--board', board, 'export', '--format', 'md'))
 const video = await page.video().path()

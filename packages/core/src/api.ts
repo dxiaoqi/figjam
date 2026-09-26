@@ -2,6 +2,10 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
+import { hostOf } from '@aifig/shared'
+import type { ActivityLog } from './activity'
+import { guardedFetch, NetGuardError } from './net-guard'
+import { deniedMessage, type PermissionAsk, type PermissionBroker } from './permissions'
 import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
 import { bytesToBase64, COLOR_TOKENS, fitHeight, imageInfo, matchColor, maxBlockHeight, measureSticky, stickyContentHeight } from '@aifig/shared'
 import {
@@ -25,6 +29,7 @@ import {
   MAX_SKILL_TYPE_FIELDS,
   SKILL_NAME,
   stripMarkdown,
+  type ActivityEntry,
   type BoardSkill,
   type FieldDef,
   type SkillAction,
@@ -64,7 +69,6 @@ import {
   type LayoutItem,
 } from './layout'
 import { McpTools } from './mcp-client'
-import { BoardPermissions, type SkillAuditLog, type SkillPermissionBroker } from './skill-permissions'
 import { PresenceHub, identify } from './presence'
 import { SkillLibrary, userSkillsDir, writeSkillFolder } from './skills'
 
@@ -276,9 +280,9 @@ export class CanvasCore {
   private sessionBoards = new Map<string, string>()
   private persistTimer: ReturnType<typeof setTimeout> | null = null
   readonly skills = new SkillLibrary()
-  /** Swap for the shared security foundation when it lands (see permissions.ts). */
-  perms: SkillPermissionBroker & SkillAuditLog = new BoardPermissions()
   readonly mcpTools = new McpTools()
+  /** Set by the server; without them (unit use) outbound fetches are refused. */
+  security: { permissions?: PermissionBroker; activity?: ActivityLog } = {}
 
   private get statePath() {
     return path.join(aifigHome(), 'state.json')
@@ -445,16 +449,8 @@ export class CanvasCore {
         return this.applySkillLayout(a, caller)
       case 'run_skill_action':
         return this.runSkillAction(a, caller)
-      case 'grant_skill_permission':
-        return this.grantSkillPermission(a, caller)
-      case 'revoke_skill_permission': {
-        const board = this.board(a.board)
-        return { board: board.id, revoked: this.perms.revoke(board, a.skill, a.tool, caller.name) }
-      }
-      case 'list_activity': {
-        const board = this.board(a.board)
-        return { board: board.id, activity: this.perms.list(board, { skill: a.skill, limit: a.limit }), grants: [...board.skillGrants.values()], pending: [...board.permissionRequests.values()] }
-      }
+      case 'list_activity':
+        return this.skillActivity(a)
       case 'save_block_type':
         return this.saveBlockType(a, caller)
       case 'create_snippet':
@@ -684,12 +680,40 @@ export class CanvasCore {
     return web
   }
 
-  private async posterFor(board: Board, web: WebSnippet) {
+  /**
+   * Fetch something from the network on the caller's behalf: asks the permission broker (people are trusted,
+   * agents need a grant or a yes in the canvas), refuses local/private addresses, and logs the outcome.
+   */
+  async fetchFor(caller: CallerInfo, url: string, source: PermissionAsk['source'], reason: string, opts: { policy?: string; maxBytes?: number; timeoutMs?: number } = {}) {
+    const { permissions, activity } = this.security
+    if (!permissions || !activity) throw new ToolError('Network access is not available')
+    const target = hostOf(url)
+    if (!opts.policy) {
+      const ask: PermissionAsk = { capability: 'network', target, actor: caller, source, reason }
+      const decision = await permissions.request(ask)
+      if (!decision.granted) {
+        activity.record({ category: 'network', action: 'fetch', outcome: 'denied', actor: caller, source, target, via: decision.via })
+        throw new ToolError(deniedMessage(ask, decision))
+      }
+    }
+    try {
+      const r = await guardedFetch(url, { maxBytes: opts.maxBytes, timeoutMs: opts.timeoutMs })
+      activity.record({ category: 'network', action: 'fetch', outcome: r.ok ? 'ok' : 'error', actor: caller, source, target: hostOf(r.finalUrl) === target ? target : `${target} → ${hostOf(r.finalUrl)}`, via: opts.policy ?? 'permission', detail: r.ok ? `${r.bytes.byteLength} bytes` : `HTTP ${r.status}` })
+      return r
+    } catch (e) {
+      activity.record({ category: 'network', action: 'fetch', outcome: e instanceof NetGuardError ? 'denied' : 'error', actor: caller, source, target, via: opts.policy ?? 'permission', detail: (e as Error).message })
+      if (e instanceof NetGuardError) throw new ToolError(e.message)
+      throw new ToolError(`Download failed for ${target}: ${(e as Error).message}`)
+    }
+  }
+
+  private async posterFor(board: Board, web: WebSnippet, caller: CallerInfo) {
     if (!web.posterUrl || (web.thumb && web.thumbFor === snippetHash(web))) return web
     try {
-      const r = await fetch(web.posterUrl, { signal: AbortSignal.timeout(4000) })
+      // poster URLs are derived by normalizeEmbedUrl for known providers, never taken from the caller
+      const r = await this.fetchFor(caller, web.posterUrl, { kind: 'tool', id: 'create_snippet', board: board.id }, 'Fetch the video poster', { policy: 'provider-poster', timeoutMs: 4000, maxBytes: SNIPPET_LIMITS.thumbBytes })
       if (!r.ok) return web
-      const bytes = new Uint8Array(await r.arrayBuffer())
+      const bytes = r.bytes
       const info = imageInfo(bytes)
       if (!info || bytes.byteLength > SNIPPET_LIMITS.thumbBytes) return web
       const id = `a${newId()}`
@@ -703,7 +727,7 @@ export class CanvasCore {
   private async createSnippet(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
     let web = this.snippetFrom(a)
-    web = await this.posterFor(board, web)
+    web = await this.posterFor(board, web, caller)
     const video = web.mode === 'url' && /YouTube|Vimeo|Loom/.test(web.provider ?? '')
     const w = snap(Math.min(Math.max(a.width ?? 480, 160), 1600))
     const h = snap(Math.min(Math.max(a.height ?? (video ? Math.round((w * 9) / 16) : 320), 120), 1200))
@@ -716,7 +740,7 @@ export class CanvasCore {
     const cur = board.blocks.get(a.id) ?? board.resolve(a.id)
     if (!cur || cur.kind !== 'web' || !cur.web) throw new ToolError(`No web snippet "${a.id}"`)
     let web = this.snippetFrom(a, cur.web)
-    web = await this.posterFor(board, web)
+    web = await this.posterFor(board, web, caller)
     const { changeSet } = this.edit(board, caller, a.intent, `Update snippet “${preview(web.title ?? '', 30)}”`, (rec) => {
       rec.updateBlock(cur.id, { web, text: web.title ?? '' })
     })
@@ -763,7 +787,7 @@ export class CanvasCore {
       description: s.description,
       version: s.version,
       capability: s.capability,
-      tools: s.permissions.tools.map((t) => ({ name: t, available: t.startsWith('aifig.') || this.mcpTools.available(t), allowed: board.skillGrants.has(`${s.name}:${t}`) })),
+      tools: s.permissions.tools.map((t) => ({ name: t, available: t.startsWith('aifig.') || this.mcpTools.available(t), allowed: !!this.security.permissions?.hasGrant(`skill:${s.name}`, 'tool', t) })),
       source: s.source,
       enabled: !!enabled,
       ...(enabled && enabled.version !== s.version ? { enabledVersion: enabled.version } : {}),
@@ -824,7 +848,7 @@ export class CanvasCore {
     const clash = s.canvas.types.find((t) => [...board.skills.values()].some((o) => o.name !== s.name && o.canvas.types.some((x) => x.id === t.id)))
     if (clash) throw new ToolError(`Type "${clash.id}" is already defined by another skill on this board`)
     board.doc.transact(() => board.skills.set(s.name, this.snapshotSkill(s, caller.name)), 'api')
-    this.perms.record(board, { skill: s.name, kind: 'enable', by: caller.name, status: 'ok', detail: `v${s.version} · ${s.capability}${s.permissions.tools.length ? ` · tools: ${s.permissions.tools.join(', ')}` : ''}` })
+    this.recordSkill(board, s.name, caller, { action: 'enable', outcome: 'ok', detail: `v${s.version} · ${s.capability}${s.permissions.tools.length ? ` · tools: ${s.permissions.tools.join(', ')}` : ''}` })
     return { board: board.id, enabled: s.name, types: s.canvas.types.map((t) => t.id), capability: s.capability, tools: s.permissions.tools, ...(s.warnings.length ? { warnings: s.warnings } : {}) }
   }
 
@@ -833,8 +857,7 @@ export class CanvasCore {
     if (!board.skills.has(a.name)) throw new ToolError(`“${a.name}” is not enabled on this board`)
     const used = [...board.blocks.values()].filter((b) => b.type && b.type.startsWith(`${a.name}.`)).length
     board.doc.transact(() => board.skills.delete(a.name), 'api')
-    this.perms.revoke(board, a.name, undefined, caller.name)
-    this.perms.record(board, { skill: a.name, kind: 'disable', by: caller.name, status: 'ok', detail: used ? `${used} block(s) keep their type and fields; they show as plain until it's enabled again` : undefined })
+    this.recordSkill(board, a.name, caller, { action: 'disable', outcome: 'ok', detail: used ? `${used} block(s) keep their type and fields; they show as plain until it's enabled again` : undefined })
     return { board: board.id, disabled: a.name, blocksKeepingType: used }
   }
 
@@ -918,9 +941,20 @@ export class CanvasCore {
     if (!action.tool.startsWith('aifig.') && !this.mcpTools.available(action.tool)) {
       throw new ToolError(`“${action.label}” needs the tool ${action.tool}, but no MCP server "${action.tool.split('.')[0]}" is configured (~/.aifig/mcp.json).`)
     }
-    if (this.perms.check(board, s.name, action.tool) !== 'granted') {
-      const req = this.perms.request(board, { skill: s.name, capability: s.capability, tools: [action.tool], action: { id: action.id, label: action.label, ids: blocks.map((b) => b.id) }, requestedBy: caller.name })
-      return { board: board.id, status: 'needs_permission', request: req.id, message: `“${s.name}” needs permission to use ${action.tool} on this board. The person was asked in the canvas; run the action again once they allow it.` }
+    // the skill is the actor: even when a person clicks the action, its first use of a tool is confirmed
+    const broker = this.security.permissions
+    if (!broker) throw new ToolError('Skill tools need the core\'s permission broker (not available in this process)')
+    const ask = {
+      capability: 'tool' as const,
+      target: action.tool,
+      actor: this.skillCaller(s.name),
+      source: { kind: 'skill' as const, id: s.name, board: board.id },
+      reason: `“${action.label}” on ${blocks.length} block${blocks.length === 1 ? '' : 's'}${caller.kind === 'agent' ? `, started by ${this.author(caller).name}` : ''}`,
+    }
+    const allowed = await broker.request(ask)
+    if (!allowed.granted) {
+      this.recordSkill(board, s.name, caller, { action: 'run', outcome: 'denied', target: action.tool, via: allowed.via, detail: action.label })
+      throw new ToolError(deniedMessage(ask, allowed))
     }
     return this.executeSkillAction(board, s, action, blocks, caller)
   }
@@ -968,28 +1002,29 @@ export class CanvasCore {
           created = ids.length
           if (ids.length) await this.call({ tool: 'connect', args: { board: board.id, connectors: ids.map((id) => ({ from: id, to: b.id, ...(out?.relation ? { relation: out.relation } : {}) })) }, caller: as })
         }
-        this.perms.record(board, { skill: s.name, kind: 'tool', tool: action.tool, action: action.id, by: caller.name, status: 'ok', detail: `${describeBlock(b)}${created ? ` → ${created} new block(s), waiting for review` : ''}` })
+        this.recordSkill(board, s.name, caller, { action: 'run', outcome: 'ok', target: action.tool, detail: `${action.label}: ${describeBlock(b)}${created ? ` → ${created} new block(s), waiting for review` : ''}` })
         results.push({ id: b.id, status: 'ok', created })
       } catch (e) {
         const msg = (e as Error).message
-        this.perms.record(board, { skill: s.name, kind: 'tool', tool: action.tool, action: action.id, by: caller.name, status: 'error', detail: `${describeBlock(b)}: ${msg}` })
+        this.recordSkill(board, s.name, caller, { action: 'run', outcome: 'error', target: action.tool, detail: `${action.label}: ${describeBlock(b)}: ${msg}` })
         results.push({ id: b.id, status: 'error', error: msg })
       }
     }
     return { board: board.id, status: results.every((r) => r.status === 'ok') ? 'ok' : 'partial', action: `${s.name}.${action.id}`, tool: action.tool, results }
   }
 
-  private async grantSkillPermission(a: Args, caller: CallerInfo) {
+  /** Skill entries go to the shared activity log (security foundation), tagged with the skill and board. */
+  private recordSkill(board: Board, skill: string, caller: CallerInfo, e: { action: string; outcome: ActivityEntry['outcome']; target?: string; via?: string; detail?: string }) {
+    this.security.activity?.record({ category: 'skill', ...e, actor: { id: caller.id, name: caller.kind === 'agent' ? this.author(caller).name : caller.name, client: caller.client, kind: caller.kind }, source: { kind: 'skill', id: skill, board: board.id } })
+  }
+
+  private skillActivity(a: Args) {
     const board = this.board(a.board)
-    const req = this.perms.resolve(board, a.request, a.decision, caller.name)
-    if (!req) throw new ToolError('That permission request is gone (already answered?)')
-    if (a.decision === 'deny' || !req.action) return { board: board.id, decision: a.decision }
-    const s = board.skills.get(req.skill)
-    const action = s?.canvas.actions.find((x) => x.id === req.action!.id)
-    const blocks = req.action.ids.map((id) => board.blocks.get(id)).filter((b): b is Block => !!b)
-    if (!s || !action || !blocks.length) return { board: board.id, decision: a.decision }
-    this.perms.check(board, s.name, action.tool)
-    return { board: board.id, decision: a.decision, result: await this.executeSkillAction(board, s, action, blocks, caller) }
+    const log = this.security.activity?.list({ limit: 500 }) ?? []
+    const activity = log.filter((e) => e.source?.kind === 'skill' && (!e.source.board || e.source.board === board.id) && (!a.skill || e.source.id === a.skill)).slice(0, a.limit ?? 200)
+    const grants = (this.security.permissions?.grants() ?? []).filter((g) => g.subject.startsWith('skill:') && (!a.skill || g.subject === `skill:${a.skill}`))
+    const pending = (this.security.permissions?.pending() ?? []).filter((p) => p.source.kind === 'skill')
+    return { board: board.id, activity, grants, pending }
   }
 
   /** No-code “Save as block type”: learn a type from a sticky/card, write a standard skill folder, enable it here. */
@@ -1028,7 +1063,7 @@ export class CanvasCore {
     const s = this.skills.get(skillName)
     if (!s || s.errors.length) throw new ToolError(`Saved, but the skill didn't validate:\n- ${(s?.errors ?? ['not found']).join('\n- ')}`)
     board.doc.transact(() => board.skills.set(s.name, this.snapshotSkill(s, caller.name)), 'api')
-    this.perms.record(board, { skill: s.name, kind: 'save-type', by: caller.name, status: 'ok', detail: `${label} (${fields.length} field${fields.length === 1 ? '' : 's'}) → ${dir}` })
+    this.recordSkill(board, s.name, caller, { action: 'save-type', outcome: 'ok', detail: `${label} (${fields.length} field${fields.length === 1 ? '' : 's'}) → ${dir}` })
     const full = `${skillName}.${typeId}`
     const values = Object.fromEntries(Object.entries(inferred.values).filter(([k]) => fields.some((f) => f.key === k)))
     const coerced = coerceFields(full, values, board.types()).fields
@@ -1478,9 +1513,9 @@ export class CanvasCore {
       if (!fs.existsSync(a.path)) throw new ToolError(`No file at ${a.path}`)
       bytes = new Uint8Array(fs.readFileSync(a.path))
     } else if (a.url) {
-      const r = await fetch(a.url, { signal: AbortSignal.timeout(15000) })
-      if (!r.ok) throw new ToolError(`Download failed (${r.status}) for ${a.url}`)
-      bytes = new Uint8Array(await r.arrayBuffer())
+      const r = await this.fetchFor(caller, String(a.url), { kind: 'tool', id: 'add_image', board: board.id }, 'Download an image to place on the board')
+      if (!r.ok) throw new ToolError(`Download failed (${r.status}) for ${hostOf(String(a.url))}`)
+      bytes = r.bytes
     } else if (a.data) {
       bytes = new Uint8Array(Buffer.from(String(a.data).replace(/^data:[^,]+,/, ''), 'base64'))
     } else throw new ToolError('Provide path, url or data')
