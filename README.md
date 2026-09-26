@@ -509,7 +509,33 @@ node scripts/mvp-run.mjs <out-dir>                    # the recorded Phase 0 val
 node scripts/shot.mjs out.png [--dark] [--w=390]      # screenshot the running canvas (headless Chrome)
 npm run test:contrast                                 # WCAG AA contrast of tokens and theme, light and dark
 npm run bench                                         # performance report + budgets (see below)
+npm run test:skills                                   # skill format, L0/L1, permissions, CLI, save as block type
+npm run ci                                            # all of the above in one run (see CI)
 ```
+
+### CI
+
+`npm run ci` runs typecheck, lint, every suite above, the bench budgets and the desktop e2e, one after another
+against a temporary `AIFIG_HOME` (it starts `npm run dev` for the suites that need it, on ports 47820/47821). It writes
+`ci-results/<step>.log`, `results.json` and `summary.md` and exits 1 when any step fails. `--only=` / `--skip=` take
+step ids (`typecheck, lint, api, security, data-safety, skills, contrast, onboarding, e2e, aesthetics, mcp-stdio,
+mcp-http, bench, desktop`). It needs Node 22+, `npm ci` and Chrome at `/usr/local/bin/google-chrome`; the desktop step
+and the bench's desktop cold start need a display (`DISPLAY`, e.g. Xvfb) and are skipped without one.
+
+Origin has no hosted runner: CI results are check runs that an Origin App reports on a commit, and they show up in the
+pull request's **Checks** tab (where they can be required before merging). With `ORIGIN_CHECKS_TOKEN` set (or
+`--report=origin`), `npm run ci` reports one check run per step in an "ai-figma CI" suite — queued, in progress, then
+passed / failed with the failing checks and the end of the log. To set it up:
+
+1. Create a private Origin App with the `repository:checks:write` scope and install it on this repository; mint an
+   installation token and add it as the `ORIGIN_CHECKS_TOKEN` secret (Cursor Dashboard › Cloud Agents › Secrets).
+2. Create a Cursor Automation for this repository with the triggers *Pull request opened* and *Pull request pushed*
+   (and *Push to branch* `main`), using an environment with Chrome, Xvfb and `npm ci`, and this prompt:
+   *Check out the pull request's head commit, run `ORIGIN_REPO=we-ding/genesis npm run ci`, and reply with
+   `ci-results/summary.md`. Don't change any files.*
+
+Other variables: `ORIGIN_REPO` (default: from the `origin` remote), `ORIGIN_SHA` (default `HEAD`), `CI_RUN_ID`,
+`CI_DETAILS_URL`, `ORIGIN_API_URL`.
 
 ### Performance and quality budgets
 
@@ -522,7 +548,7 @@ snippets, connectors) in a temporary home, builds the app and measures:
 - 10k board in headless Chrome: fps and main-thread time for pan (100% / 40% / fit) and zoom through the level of
   detail; input→frame latency for hover, select, drag, frame drag and marquee
 - Canvas API over MCP (HTTP): `create_blocks` ×10 / ×100 on an empty and a 10k board, `get_board`, `lint_layout`,
-  `render_snapshot`, and how responsive the core stays during a large PNG snapshot
+  `render_snapshot`, and how responsive the core stays during a large PNG snapshot and while the 10k board autosaves
 
 It writes `bench-results/latest.json` (`--out=…`) and exits 1 when a metric misses its budget in
 `scripts/bench/budgets.json`. Options: `--quick`, `--only=core,web,frames,mcp,desktop`, `--skip-desktop`,

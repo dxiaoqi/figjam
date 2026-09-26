@@ -31,6 +31,7 @@
     "test:aesthetics": "node scripts/aesthetics.mjs",
     "test:aesthetics:update": "node scripts/aesthetics.mjs --update",
     "test:e2e": "node scripts/engine-e2e.mjs",
+    "ci": "node scripts/ci.mjs",
     "test:data-safety": "node --import tsx --test tests/data-safety/*.test.ts && node scripts/data-safety.mjs",
     "test:onboarding": "node scripts/onboarding-e2e.mjs",
     "bench": "node scripts/bench/run.mjs",
