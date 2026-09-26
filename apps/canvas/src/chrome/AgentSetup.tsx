@@ -2,7 +2,7 @@ import { Check, CircleAlert, Loader2, PlugZap, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { detectAgents, installAgent, testAgent, type AgentId, type AgentStatus } from '../lib/agents'
+import { detectAgents, installAgent, testAgent, type AgentId, type AgentStatus, type AgentTransport } from '../lib/agents'
 import { useT } from '../i18n'
 
 const tilde = (p: string) => p.replace(/^(\/Users|\/home)\/[^/]+|^[A-Z]:\\Users\\[^\\]+/, '~')
@@ -22,13 +22,14 @@ function AgentRow({ agent, onChange }: { agent: AgentStatus; onChange: (a: Agent
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState<'write' | 'test' | null>(null)
   const [result, setResult] = useState<Result | null>(null)
+  const [transport, setTransport] = useState<AgentTransport>(agent.transport ?? 'stdio')
   const name = t(agent.id === 'claude' ? 'setup.claude.name' : 'setup.cursor.name')
   const file = tilde(agent.configFile)
 
   const write = async () => {
     setBusy('write')
     try {
-      const r = await installAgent(agent.id)
+      const r = await installAgent(agent.id, transport)
       onChange(r.status)
       setResult({ kind: r.changed ? 'ok' : 'info', text: t(r.changed ? 'setup.done' : 'setup.unchanged', { agent: name }), detail: r.backup ? t('setup.backupAt', { file: tilde(r.backup) }) : undefined })
       setConfirming(false)
@@ -52,7 +53,7 @@ function AgentRow({ agent, onChange }: { agent: AgentStatus; onChange: (a: Agent
 
   const pill =
     agent.state === 'configured'
-      ? { cls: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300', text: t('setup.configured') }
+      ? { cls: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300', text: t(agent.transport === 'http' ? 'setup.configuredHttp' : 'setup.configured') }
       : !agent.installed
         ? { cls: 'bg-muted text-muted-foreground', text: t('setup.notFound') }
         : agent.state === 'different'
@@ -75,10 +76,15 @@ function AgentRow({ agent, onChange }: { agent: AgentStatus; onChange: (a: Agent
         {agent.installed && !confirming && (
           <div className="flex shrink-0 gap-1.5">
             {agent.state === 'configured' ? (
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={test} disabled={!!busy} data-agent-test>
-                {busy === 'test' ? <Loader2 className="size-3.5 animate-spin" /> : <PlugZap className="size-3.5" />}
-                {t(busy === 'test' ? 'setup.testing' : 'setup.test')}
-              </Button>
+              <>
+                <Button size="sm" variant="ghost" onClick={() => setConfirming(true)} disabled={!!busy || !!agent.error} data-agent-change>
+                  {t('setup.change')}
+                </Button>
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={test} disabled={!!busy} data-agent-test>
+                  {busy === 'test' ? <Loader2 className="size-3.5 animate-spin" /> : <PlugZap className="size-3.5" />}
+                  {t(busy === 'test' ? 'setup.testing' : 'setup.test')}
+                </Button>
+              </>
             ) : (
               <Button size="sm" className="gap-1.5" onClick={() => setConfirming(true)} disabled={!!busy || !!agent.error} data-agent-install>
                 {t(agent.state === 'different' ? 'setup.update' : 'setup.setUp')}
@@ -101,6 +107,23 @@ function AgentRow({ agent, onChange }: { agent: AgentStatus; onChange: (a: Agent
           <div className="text-[13px] font-medium">{t('setup.confirmTitle', { agent: name })}</div>
           <p className="mt-1 text-muted-foreground">{t('setup.confirmBody', { file })}</p>
           <p className="text-muted-foreground">{t(agent.configExists ? 'setup.confirmBackup' : 'setup.confirmNew')}</p>
+          <div className="mt-2.5 grid gap-1.5 sm:grid-cols-2" role="radiogroup" aria-label={t('setup.via')}>
+            {(['stdio', 'http'] as const).map((tr) => (
+              <button
+                key={tr}
+                type="button"
+                role="radio"
+                aria-checked={transport === tr}
+                data-agent-transport={tr}
+                onClick={() => setTransport(tr)}
+                disabled={!!busy}
+                className={cn('rounded-lg border bg-background/70 px-2.5 py-2 text-left transition-colors hover:bg-accent/50', transport === tr && 'border-primary ring-1 ring-primary')}
+              >
+                <div className="text-[12px] font-medium">{t(tr === 'http' ? 'setup.http.label' : 'setup.stdio.label')}</div>
+                <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{t(tr === 'http' ? 'setup.http.hint' : 'setup.stdio.hint')}</div>
+              </button>
+            ))}
+          </div>
           <div className="mt-2.5 flex justify-end gap-1.5">
             <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={!!busy}>
               {t('common.cancel')}

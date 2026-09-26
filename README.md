@@ -135,12 +135,14 @@ the app, and requires the token on every request. Keep configs with the token ou
 
 **One-click setup.** The **Connect agent** dialog (and the last step of the welcome tour) detects Claude Code and
 Cursor on this machine and adds ai-figma to their MCP settings — `~/.claude.json` (user MCP servers) and
-`~/.cursor/mcp.json` — after you confirm. It writes a stdio entry for the right CLI (in the desktop app, the bundled
-one), backs the existing file up next to it (`*.aifig-backup-<time>`), keeps every other setting and the file's
-indentation, writes atomically, never touches a file it can't parse, and does nothing when the entry is already
-there. **Test connection** launches the configured command and does a real MCP handshake (`initialize` →
-`tools/list`). The endpoints (`/api/agents…`) only answer the app itself on this machine (loopback Host and
-Origin). `AIFIG_AGENT_CONFIG_HOME` / `AIFIG_AGENT_PATH` point detection at another home folder / PATH (tests).
+`~/.cursor/mcp.json` — after you confirm. Choose how the agent connects: a stdio entry for the right CLI (in the
+desktop app, the bundled one; works while the app is closed) or a local HTTP entry (`url` plus an
+`Authorization: Bearer <token>` header; the file is then kept at `0600`). It backs the existing file up next to it
+(`*.aifig-backup-<time>`), keeps every other setting and the file's indentation, writes atomically, never touches a
+file it can't parse, and does nothing when the entry is already there; **Change…** switches an existing entry.
+**Test connection** connects exactly as configured (launches the command, or calls the URL with its headers) and does
+a real MCP handshake (`initialize` → `tools/list`). The endpoints (`/api/agents…`) require the access token and only
+answer the app itself on this machine (loopback Host and Origin). `AIFIG_AGENT_CONFIG_HOME` / `AIFIG_AGENT_PATH` point detection at another home folder / PATH (tests).
 
 The same dialog keeps the copy-paste fallback: all of these configs with the correct paths and the token filled in (in the
 desktop app, for its bundled CLI). The agent's name
