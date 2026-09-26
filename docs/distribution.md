@@ -192,6 +192,9 @@ The trade-off is that install counts are a lower bound. The website's download c
 in the browser, skipped for Do Not Track / Global Privacy Control) gives the top of the funnel; *installs per download* on
 the dashboard shows the opt-in rate among new users.
 
+The website's Privacy page (`/<locale>/privacy/`) explains all of this to users; privacy questions and deletion
+requests (by install ID) go to [dwt199718@gmail.com](mailto:dwt199718@gmail.com), the `contactEmail` in `distribution.json`.
+
 **Off switches.** `AIFIG_TELEMETRY=off` (also `0`, `false`, `no`) or `DO_NOT_TRACK=1` turn it off regardless of the
 switch; with no `telemetryUrl` configured the code is a no-op and the UI hides the switch. Consent lives in
 `telemetry.json` in the Electron profile folder, not in `~/.aifig`.
