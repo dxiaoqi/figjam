@@ -40,7 +40,7 @@ export default async function DownloadPage({ params }: { params: Promise<{ local
       </section>
 
       <section id="first-launch" aria-labelledby="first-launch-title" className="scroll-mt-20 border-y border-border/70 bg-white py-20 sm:py-24">
-        <Container className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+        <Container className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16 [&>*]:min-w-0">
           <Reveal>
             <h2 id="first-launch-title" className="headline text-3xl font-semibold sm:text-4xl">
               {d.firstLaunch.title}

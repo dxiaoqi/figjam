@@ -159,7 +159,7 @@ export function DownloadPicker({ initial, t, common }: { initial: Release | null
           {PLATFORMS.map((p) => {
             const mine = files.filter((f) => f.platform === p)
             return (
-              <li key={p} className={cn('rounded-2xl border bg-white/85 p-5 backdrop-blur', p === platform ? 'border-foreground/25 ring-1 ring-foreground/10' : 'border-border')} data-platform={p}>
+              <li key={p} className={cn('min-w-0 rounded-2xl border bg-white/85 p-5 backdrop-blur', p === platform ? 'border-foreground/25 ring-1 ring-foreground/10' : 'border-border')} data-platform={p}>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2.5 text-foreground">
                     {platformIcons[p]}
