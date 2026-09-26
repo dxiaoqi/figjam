@@ -200,6 +200,15 @@
   pointer-events: none;
 }
 
+/* far zoom draws on the canvas; blocks stay mounted but unpainted so zooming back in is instant */
+.ae-canvas.is-lod .ae-layer {
+  visibility: hidden;
+}
+
+.ae-canvas.is-lod .ae-block.is-editing {
+  visibility: visible;
+}
+
 /* connector endpoints: hollow when floating, filled when bound to a block */
 .ae-endpoint {
   pointer-events: all;

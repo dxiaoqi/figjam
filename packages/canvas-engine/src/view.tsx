@@ -22,6 +22,8 @@ export function useCamera(editor: Editor) {
 const LOD_ENTER_Z = 0.3
 const LOD_EXIT_Z = 0.34
 const LOD_MAX_DOM = 700
+/** New blocks outside the viewport (but inside the pre-rendered region) mounted per frame. */
+const MOUNT_PER_FRAME = 60
 
 // ---- blocks -------------------------------------------------------------
 
@@ -86,25 +88,28 @@ function ConnectorLayer({ editor, connectors }: { editor: Editor; connectors: Co
         if (!route) return null
         const selected = editor.selection.has(c.id)
         const color = selected ? 'var(--ae-accent)' : c.pending ? (c.author?.color ?? 'var(--ae-connector)') : 'var(--ae-connector)'
-        return (
-          <path
-            key={c.id}
-            className="ae-connector"
-            data-connector={c.id}
-            d={route.d}
-            stroke={color}
-            strokeWidth={selected ? 2 : 1.6}
-            fill="none"
-            strokeDasharray={c.pending ? '5 4' : undefined}
-            markerEnd="url(#ae-arrow)"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        )
+        return <ConnectorPath key={c.id} id={c.id} d={route.d} color={color} selected={selected} pending={!!c.pending} />
       })}
     </svg>
   )
 }
+
+const ConnectorPath = memo(function ConnectorPath({ id, d, color, selected, pending }: { id: string; d: string; color: string; selected: boolean; pending: boolean }) {
+  return (
+    <path
+      className="ae-connector"
+      data-connector={id}
+      d={d}
+      stroke={color}
+      strokeWidth={selected ? 2 : 1.6}
+      fill="none"
+      strokeDasharray={pending ? '5 4' : undefined}
+      markerEnd="url(#ae-arrow)"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  )
+})
 
 function ConnectorLabels({ editor, connectors }: { editor: Editor; connectors: Connector[] }) {
   return (
@@ -156,20 +161,59 @@ function LabelInput({ editor, connector }: { editor: Editor; connector: Connecto
 
 type LodStyleFn = (b: Block) => { fill: string; stroke?: string; accent?: string }
 
-function drawLod(editor: Editor, canvas: HTMLCanvasElement, host: HTMLElement) {
+/** The far-zoom layer is drawn once into an offscreen bitmap around the viewport, then moved and scaled with the camera. */
+interface LodCache {
+  canvas: HTMLCanvasElement
+  region: Box
+  z: number
+  key: string
+}
+
+const LOD_MARGIN = 0.25
+const LOD_MAX_PX = 4800
+const LOD_RESCALE = 1.6
+
+function lodKey(editor: Editor, host: HTMLElement) {
+  return `${editor.getDocVersion()}|${editor.editingId}|${editor.previewIds().length ? editor.getVersion() : ''}|${host.ownerDocument.documentElement.className}`
+}
+
+function renderLodCache(editor: Editor, host: HTMLElement, dpr: number, key: string, prev: LodCache | null): LodCache {
+  const z = editor.camera.z
+  const vp = editor.viewportPageBounds()
+  const region = expand(vp, Math.max(vp.w, vp.h) * LOD_MARGIN)
+  const k = Math.min(dpr * z, LOD_MAX_PX / Math.max(region.w, region.h))
+  const canvas = prev?.canvas ?? document.createElement('canvas')
+  canvas.width = Math.ceil(region.w * k)
+  canvas.height = Math.ceil(region.h * k)
+  const ctx = canvas.getContext('2d')!
+  ctx.setTransform(k, 0, 0, k, -region.x * k, -region.y * k)
+  paintLod(editor, ctx, region, k / dpr, host)
+  return { canvas, region, z: k / dpr, key }
+}
+
+function drawLod(editor: Editor, canvas: HTMLCanvasElement, host: HTMLElement, cache: { current: LodCache | null }, sharpen: () => void) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const dpr = window.devicePixelRatio || 1
   const { x, y, z } = editor.camera
+  const key = lodKey(editor, host)
+  let c = cache.current
+  const scale = c ? z / c.z : 1
+  if (!c || c.key !== key || !containsBox(c.region, editor.viewportPageBounds()) || scale > LOD_RESCALE || scale < 1 / LOD_RESCALE) c = cache.current = renderLodCache(editor, host, dpr, key, c)
+  else if (c.z !== z) sharpen()
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * x, dpr * y)
-  const vp = expand(editor.viewportPageBounds(), 40 / z)
+  ctx.imageSmoothingEnabled = true
+  ctx.drawImage(c.canvas, (c.region.x * z + x) * dpr, (c.region.y * z + y) * dpr, c.region.w * z * dpr, c.region.h * z * dpr)
+}
+
+function paintLod(editor: Editor, ctx: CanvasRenderingContext2D, area: Box, z: number, host: HTMLElement) {
+  const vp = expand(area, 40 / z)
   const css = getComputedStyle(host)
   const connectorColor = css.getPropertyValue('--ae-connector').trim() || '#a8a29e'
   const style: LodStyleFn = editor.options.lodStyle ?? (() => ({ fill: '#e7e5e4' }))
   const editing = editor.editingId
-  for (const b of editor.blocks()) {
+  for (const b of editor.blocksIn(vp)) {
     if (b.id === editing) continue
     const r = editor.pageRect(b.id)
     const vr = editor.visualRect(b.id)
@@ -212,7 +256,7 @@ function drawLod(editor: Editor, canvas: HTMLCanvasElement, host: HTMLElement) {
   }
   ctx.lineWidth = 1.2 / z
   ctx.strokeStyle = connectorColor
-  for (const c of editor.connectors()) {
+  for (const c of editor.connectorsIn(vp)) {
     const route = editor.connectorRoute(c)
     if (!route) continue
     ctx.stroke(new Path2D(route.d))
@@ -305,7 +349,8 @@ function Overlay({ editor }: { editor: Editor }) {
 
   return (
     <div className="ae-overlay">
-      {editor.blocks()
+      {editor
+        .blocksIn(expand(vp, 40 / z))
         .filter((b) => b.kind === 'frame')
         .filter((b) => {
           const r = editor.pageRect(b.id)
@@ -515,7 +560,10 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
   const ref = useRef<HTMLDivElement>(null)
   const worldRef = useRef<HTMLDivElement>(null)
   const lodRef = useRef<HTMLCanvasElement>(null)
+  const lodCache = useRef<LodCache | null>(null)
+  const sharpen = useRef<() => void>(() => {})
   const region = useRef<Box | null>(null)
+  const mounted = useRef(new Set<string>())
   const lodOn = useRef(false)
   const [, setTick] = useState(0)
   useEditorVersion(editor)
@@ -523,6 +571,15 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
   useEffect(() => {
     const el = ref.current!
     const input = new InputController(editor, el)
+    let sharpenTimer: ReturnType<typeof setTimeout> | undefined
+    // after zooming on the cached far-zoom bitmap, redraw it crisp once the camera rests
+    sharpen.current = () => {
+      clearTimeout(sharpenTimer)
+      sharpenTimer = setTimeout(() => {
+        lodCache.current = null
+        if (lodOn.current && lodRef.current) drawLod(editor, lodRef.current, el, lodCache, sharpen.current)
+      }, 160)
+    }
     const resize = () => {
       editor.setViewportSize(el.clientWidth, el.clientHeight)
       const c = lodRef.current
@@ -530,7 +587,8 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
         const dpr = window.devicePixelRatio || 1
         c.width = Math.round(el.clientWidth * dpr)
         c.height = Math.round(el.clientHeight * dpr)
-        if (lodOn.current) drawLod(editor, c, el)
+        lodCache.current = null
+        if (lodOn.current) drawLod(editor, c, el, lodCache, sharpen.current)
       }
       setTick((t) => t + 1)
     }
@@ -552,7 +610,7 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
       if (wantLod !== lodOn.current || !region.current || !containsBox(region.current, vp)) setTick((t) => t + 1)
       else if (lodOn.current && lodRef.current) {
         cancelAnimationFrame(raf)
-        raf = requestAnimationFrame(() => lodRef.current && drawLod(editor, lodRef.current, el))
+        raf = requestAnimationFrame(() => lodRef.current && drawLod(editor, lodRef.current, el, lodCache, sharpen.current))
       }
     }
     const off = editor.onCamera(applyCamera)
@@ -561,34 +619,52 @@ export function CanvasView({ editor, className, children }: CanvasViewProps) {
       ro.disconnect()
       off()
       cancelAnimationFrame(raf)
+      clearTimeout(sharpenTimer)
     }
   }, [editor])
 
   const cam = editor.camera
-  const all = editor.blocks()
   const vp = editor.viewportPageBounds()
   const pad = Math.max(vp.w, vp.h) * 0.75
-  const reg = { x: vp.x - pad, y: vp.y - pad, w: vp.w + pad * 2, h: vp.h + pad * 2 }
+  const reg = expand(vp, pad)
   region.current = reg
-  let visible = all.filter((b) => {
-    if (editor.selection.has(b.id) || editor.editingId === b.id) return true
-    const r = editor.visualRect(b.id)
-    return r && intersects(reg, r)
-  })
-  const inView = visible.filter((b) => {
-    const r = editor.pageRect(b.id)
-    return r && intersects(vp, r)
-  }).length
+  const inView = editor.index.query(vp).length
   const lod = editor.viewport.w > 0 && (lodOn.current ? cam.z < LOD_EXIT_Z || inView > LOD_MAX_DOM : cam.z < LOD_ENTER_Z || inView > LOD_MAX_DOM)
   lodOn.current = lod
-  if (lod) visible = visible.filter((b) => b.id === editor.editingId)
+  // Blocks already mounted stay mounted until they are well outside the region (less churn while panning);
+  // new ones outside the viewport are mounted a batch per frame so crossing into a new region never stalls.
+  const keep = expand(reg, pad / 2)
+  const prev = mounted.current
+  let budget = MOUNT_PER_FRAME
+  let deferred = 0
+  const visible = editor.blocksIn(keep).filter((b) => {
+    if (editor.editingId === b.id || prev.has(b.id)) return true
+    if (lod) return false
+    const r = editor.visualRect(b.id)
+    if (!r || !intersects(reg, r)) return false
+    if (editor.selection.has(b.id) || intersects(vp, r) || budget-- > 0) return true
+    deferred++
+    return false
+  })
+  const ids = new Set(visible.map((b) => b.id))
+  const editingBlock = editor.editingId ? editor.block(editor.editingId) : undefined
+  if (editingBlock && !ids.has(editingBlock.id)) {
+    visible.push(editingBlock)
+    ids.add(editingBlock.id)
+  }
+  mounted.current = ids
   const frames = visible.filter((b) => b.kind === 'frame')
   const others = visible.filter((b) => b.kind !== 'frame')
-  const connectors = lod ? [] : editor.connectors()
+  const connectors = lod ? [] : editor.connectorsIn(reg)
 
   useLayoutEffect(() => {
     const c = lodRef.current
-    if (c && lod && ref.current) drawLod(editor, c, ref.current)
+    if (c && lod && ref.current) drawLod(editor, c, ref.current, lodCache, sharpen.current)
+  })
+  useEffect(() => {
+    if (!deferred) return
+    const raf = requestAnimationFrame(() => setTick((t) => t + 1))
+    return () => cancelAnimationFrame(raf)
   })
 
   const it = editor.interaction
@@ -655,6 +731,7 @@ export function Minimap({ editor, width = 200, height = 136, className }: { edit
   const version = useEditorVersion(editor)
   const cam = useCamera(editor)
   const mapRef = useRef<{ bounds: Box; scale: number; ox: number; oy: number } | null>(null)
+  const layerRef = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null)
 
   useLayoutEffect(() => {
     const c = ref.current
@@ -677,16 +754,30 @@ export function Minimap({ editor, width = 200, height = 136, className }: { edit
     const ox = pad + ((width - pad * 2) - (x2 - x1) * scale) / 2 - x1 * scale
     const oy = pad + ((height - pad * 2) - (y2 - y1) * scale) / 2 - y1 * scale
     mapRef.current = { bounds: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }, scale, ox, oy }
-    const style: LodStyleFn = editor.options.lodStyle ?? (() => ({ fill: '#d6d3d1' }))
-    for (const b of editor.blocks()) {
-      const r = editor.pageRect(b.id)
-      if (!r) continue
-      const s = style(b)
-      ctx.fillStyle = b.kind === 'frame' ? (s.stroke ?? s.fill) : (s.accent ?? s.fill)
-      ctx.globalAlpha = b.kind === 'frame' ? 0.35 : 1
-      ctx.fillRect(ox + r.x * scale, oy + r.y * scale, Math.max(1, r.w * scale), Math.max(1, r.h * scale))
+    // blocks are drawn once per document version into a bitmap of the content bounds, then scaled in
+    if (content) {
+      const key = `${editor.getDocVersion()}|${width}|${height}|${dpr}|${document.documentElement.className}`
+      let layer = layerRef.current
+      if (layer?.key !== key) {
+        const k = Math.min(4096 / Math.max(content.w, content.h, 1), (Math.min(width / Math.max(content.w, 1), height / Math.max(content.h, 1)) * dpr * 2))
+        const canvas = layer?.canvas ?? document.createElement('canvas')
+        canvas.width = Math.max(1, Math.ceil(content.w * k))
+        canvas.height = Math.max(1, Math.ceil(content.h * k))
+        const lc = canvas.getContext('2d')!
+        lc.clearRect(0, 0, canvas.width, canvas.height)
+        const style: LodStyleFn = editor.options.lodStyle ?? (() => ({ fill: '#d6d3d1' }))
+        for (const b of editor.blocks()) {
+          const r = editor.baseRect(b.id)
+          if (!r) continue
+          const s = style(b)
+          lc.fillStyle = b.kind === 'frame' ? (s.stroke ?? s.fill) : (s.accent ?? s.fill)
+          lc.globalAlpha = b.kind === 'frame' ? 0.35 : 1
+          lc.fillRect((r.x - content.x) * k, (r.y - content.y) * k, Math.max(dpr, r.w * k), Math.max(dpr, r.h * k))
+        }
+        layer = layerRef.current = { key, canvas }
+      }
+      ctx.drawImage(layer.canvas, ox + content.x * scale, oy + content.y * scale, content.w * scale, content.h * scale)
     }
-    ctx.globalAlpha = 1
     const accent = getComputedStyle(c).getPropertyValue('--ae-accent').trim() || '#5b5bd6'
     ctx.strokeStyle = accent
     ctx.lineWidth = 1.5

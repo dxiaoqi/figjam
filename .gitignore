@@ -7,3 +7,4 @@ dist
 apps/desktop/build
 apps/desktop/release
 tests/aesthetics/output
+bench-results

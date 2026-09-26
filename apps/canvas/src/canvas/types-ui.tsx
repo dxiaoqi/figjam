@@ -171,7 +171,8 @@ export function TypeFilterBar() {
   useEditorVersion(editor)
   const f = useTypeFilter()
   const { mode: commentMode } = useCommentPrefs()
-  const blocks = editor.blocks().filter(isTypeable)
+  const docVersion = editor.getDocVersion()
+  const blocks = useMemo(() => editor.blocks().filter(isTypeable), [editor, docVersion])
   const counts = useMemo(() => Object.fromEntries(BLOCK_TYPE_IDS.map((t) => [t, blocks.filter((b) => b.type === t).length])), [blocks])
   const present = BLOCK_TYPE_IDS.filter((t) => counts[t])
   if ((!present.length && !f.type) || commentMode) return null

@@ -7,6 +7,7 @@ import {
   center,
   containsBox,
   containsPoint,
+  expand,
   intersects,
   randomId,
   snapTo,
@@ -14,6 +15,7 @@ import {
   type Box,
   type Vec,
 } from './geometry'
+import { SpatialGrid } from './spatial'
 
 export interface Camera {
   /** screen = page * z + (x, y) */
@@ -118,10 +120,19 @@ const SNAP_PX = 6
 const FRAME_PAD = 32
 const SPACING_GAP = 24
 
+const zKeys = new WeakMap<Block, string>()
+
 /** Stacking key: explicit y…/z… indexes from bring-to-front / send-to-back, else creation time. */
 function zKey(b: Block) {
-  return b.index && /^[yz]/.test(b.index) ? b.index : `z${b.createdAt.toString(36).padStart(10, '0')}`
+  let k = zKeys.get(b)
+  if (k === undefined) {
+    k = b.index && /^[yz]/.test(b.index) ? b.index : `z${b.createdAt.toString(36).padStart(10, '0')}`
+    zKeys.set(b, k)
+  }
+  return k
 }
+
+const ROOT = ''
 
 /** Whiteboard editor over a board's Yjs document. The document is the source of truth. */
 export class Editor {
@@ -163,6 +174,18 @@ export class Editor {
   private cameraListeners = new Set<Listener>()
   private sortedCache: { version: number; list: Block[] } | null = null
   private docVersion = 0
+  /** Document-only visual bounds (rotation included) of every block. */
+  readonly index = new SpatialGrid(512)
+  /** parent id (ROOT for top level) → child ids, and the reverse. */
+  private kids = new Map<string, Set<string>>()
+  private parentKey = new Map<string, string>()
+  /** block id → connectors attached to it; connector id → its bound ends. */
+  private connsByBlock = new Map<string, Set<string>>()
+  private connEnds = new Map<string, [string | null, string | null]>()
+  private order: string[] = []
+  private orderIndex = new Map<string, number>()
+  private orderDirty = true
+  private boundsCache: { version: number; box: Box | null } | null = null
   private timers = new Set<ReturnType<typeof setTimeout>>()
   private disposers: (() => void)[] = []
   private clipboard: string | null = null
@@ -179,8 +202,21 @@ export class Editor {
       captureTimeout: 400,
     })
 
+    for (const id of this.blocksMap.keys()) this.indexBlock(id)
+    for (const id of this.connectorsMap.keys()) this.indexConnector(id)
+
     const onBlocks = (e: Y.YMapEvent<Block>, tr: Y.Transaction) => {
       this.docVersion++
+      const frames: string[] = []
+      e.changes.keys.forEach((change, key) => {
+        const b = this.blocksMap.get(key)
+        const old = change.oldValue as Block | undefined
+        if (change.action !== 'update' || !b || !old || b.kind !== old.kind || b.index !== old.index || b.createdAt !== old.createdAt) this.orderDirty = true
+        this.indexBlock(key)
+        if (this.kids.get(key)?.size) frames.push(key)
+      })
+      // children are stored relative to their frame, so their page bounds follow it
+      for (const f of frames) for (const k of this.kids.get(f) ?? []) this.indexBlock(k)
       if (tr.origin === this.origin) {
         this.lastLocalEdit = Date.now()
         e.changes.keys.forEach((_c, key) => this.held.delete(key))
@@ -209,8 +245,9 @@ export class Editor {
       }
       this.bump()
     }
-    const onConnectors = () => {
+    const onConnectors = (e: Y.YMapEvent<Connector>) => {
       this.docVersion++
+      e.changes.keys.forEach((_c, key) => this.indexConnector(key))
       for (const id of [...this.selection]) if (!this.blocksMap.has(id) && !this.connectorsMap.has(id)) this.selection.delete(id)
       this.bump()
     }
@@ -325,6 +362,89 @@ export class Editor {
     this.timers.add(t)
   }
 
+  // ---- indexes --------------------------------------------------------------
+
+  private indexBlock(id: string) {
+    const b = this.blocksMap.get(id)
+    const oldP = this.parentKey.get(id)
+    if (!b) {
+      this.index.delete(id)
+      if (oldP !== undefined) this.kids.get(oldP)?.delete(id)
+      this.parentKey.delete(id)
+      return
+    }
+    const p = b.parent ?? ROOT
+    if (oldP !== p) {
+      if (oldP !== undefined) this.kids.get(oldP)?.delete(id)
+      let set = this.kids.get(p)
+      if (!set) this.kids.set(p, (set = new Set()))
+      set.add(id)
+      this.parentKey.set(id, p)
+    }
+    this.index.set(id, this.baseVisual(id)!)
+  }
+
+  private indexConnector(id: string) {
+    const prev = this.connEnds.get(id)
+    if (prev) for (const end of prev) if (end) this.connsByBlock.get(end)?.delete(id)
+    const c = this.connectorsMap.get(id)
+    if (!c) return void this.connEnds.delete(id)
+    const ends: [string | null, string | null] = [c.from ?? null, c.to ?? null]
+    this.connEnds.set(id, ends)
+    for (const end of ends) {
+      if (!end) continue
+      let set = this.connsByBlock.get(end)
+      if (!set) this.connsByBlock.set(end, (set = new Set()))
+      set.add(id)
+    }
+  }
+
+  /** Changes on every document change (blocks or connectors). */
+  getDocVersion() {
+    return this.docVersion
+  }
+
+  /** Connectors bound to a block. */
+  connectorsOf(id: string): Connector[] {
+    const set = this.connsByBlock.get(id)
+    return set ? ([...set].map((c) => this.connectorsMap.get(c)).filter(Boolean) as Connector[]) : []
+  }
+
+  /** Blocks whose on-screen position differs from the document right now (drag / resize / rotate previews, held moves). */
+  previewIds(): string[] {
+    const it = this.interaction
+    let ids: string[] = []
+    if (it.type === 'move') ids = it.ids
+    else if (it.type === 'resize') ids = [it.id]
+    else if (it.type === 'rotate') ids = [it.id]
+    if (this.held.size) ids = [...ids, ...this.held.keys()]
+    if (!ids.length) return ids
+    const out = new Set(ids)
+    for (const id of ids) for (const k of this.kids.get(id) ?? []) out.add(k)
+    return [...out]
+  }
+
+  private sortByOrder(ids: string[]) {
+    this.blocks()
+    const oi = this.orderIndex
+    return ids.sort((a, b) => (oi.get(a) ?? 0) - (oi.get(b) ?? 0))
+  }
+
+  /**
+   * Blocks that may intersect a page-space box, in stacking order. Includes blocks being previewed elsewhere
+   * (dragged, resized, held), so callers that need exact hits should still test `pageRect` / `visualRect`.
+   */
+  blocksIn(b: Box, previews = true): Block[] {
+    let ids = this.index.query(b)
+    if (previews) {
+      const extra = this.previewIds()
+      if (extra.length) ids = [...new Set([...ids, ...extra])]
+    }
+    return this.sortByOrder(ids)
+      .map((id) => this.blocksMap.get(id))
+      .filter(Boolean) as Block[]
+  }
+
   // ---- document reads -----------------------------------------------------
 
   shape(kind: string) {
@@ -342,13 +462,19 @@ export class Editor {
   /** Frames first, then everything else in creation order. */
   blocks(): Block[] {
     if (this.sortedCache?.version === this.docVersion) return this.sortedCache.list
-    const list = [...this.blocksMap.values()].sort((a, b) => {
-      const fa = a.kind === 'frame' ? 0 : 1
-      const fb = b.kind === 'frame' ? 0 : 1
-      const ka = zKey(a)
-      const kb = zKey(b)
-      return fa - fb || (ka < kb ? -1 : ka > kb ? 1 : a.id < b.id ? -1 : 1)
-    })
+    let list: Block[]
+    if (this.orderDirty) {
+      list = [...this.blocksMap.values()].sort((a, b) => {
+        const fa = a.kind === 'frame' ? 0 : 1
+        const fb = b.kind === 'frame' ? 0 : 1
+        const ka = zKey(a)
+        const kb = zKey(b)
+        return fa - fb || (ka < kb ? -1 : ka > kb ? 1 : a.id < b.id ? -1 : 1)
+      })
+      this.order = list.map((b) => b.id)
+      this.orderIndex = new Map(this.order.map((id, i) => [id, i]))
+      this.orderDirty = false
+    } else list = this.order.map((id) => this.blocksMap.get(id)!)
     this.sortedCache = { version: this.docVersion, list }
     return list
   }
@@ -358,7 +484,11 @@ export class Editor {
   }
 
   childrenOf(id: string | null) {
-    return this.blocks().filter((b) => (b.parent ?? null) === id)
+    const set = this.kids.get(id ?? ROOT)
+    if (!set?.size) return []
+    return this.sortByOrder([...set])
+      .map((k) => this.blocksMap.get(k))
+      .filter(Boolean) as Block[]
   }
 
   /** Page-space rect including in-progress move/resize previews. */
@@ -377,11 +507,18 @@ export class Editor {
         y += p.y
       }
     }
-    if (it.type === 'move' && it.ids.includes(id)) {
+    if (it.type === 'move' && this.movingSet(it.ids).has(id)) {
       x += it.dx
       y += it.dy
     }
     return { x, y, w: b.w, h: b.h }
+  }
+
+  private moving: { ids: string[]; set: Set<string> } | null = null
+
+  private movingSet(ids: string[]) {
+    if (this.moving?.ids !== ids) this.moving = { ids, set: new Set(ids) }
+    return this.moving.set
   }
 
   /** Page rect from the document only, ignoring previews. */
@@ -427,12 +564,20 @@ export class Editor {
   }
 
   contentBounds(): Box | null {
-    return union(this.blocks().map((b) => this.baseVisual(b.id)!).filter(Boolean))
+    if (this.boundsCache?.version !== this.docVersion) {
+      const boxes: Box[] = []
+      for (const id of this.blocksMap.keys()) {
+        const r = this.index.get(id)
+        if (r) boxes.push(r)
+      }
+      this.boundsCache = { version: this.docVersion, box: union(boxes) }
+    }
+    return this.boundsCache.box
   }
 
   /** Topmost block under a page point. Non-frames win over frames. */
   hitTest(p: Vec, opts: { exclude?: Set<string>; frames?: boolean } = {}): Block | null {
-    const list = this.blocks()
+    const list = this.blocksIn({ x: p.x - 1, y: p.y - 1, w: 2, h: 2 })
     for (let i = list.length - 1; i >= 0; i--) {
       const b = list[i]
       if (opts.exclude?.has(b.id)) continue
@@ -443,7 +588,7 @@ export class Editor {
   }
 
   frameAt(p: Vec, exclude?: Set<string>): Block | null {
-    const frames = this.blocks().filter((b) => b.kind === 'frame' && !exclude?.has(b.id))
+    const frames = this.blocksIn({ x: p.x - 1, y: p.y - 1, w: 2, h: 2 }).filter((b) => b.kind === 'frame' && !exclude?.has(b.id))
     for (let i = frames.length - 1; i >= 0; i--) {
       const r = this.pageRect(frames[i].id)
       if (r && containsPoint(r, p)) return frames[i]
@@ -455,7 +600,10 @@ export class Editor {
     const tol = tolerancePx / this.camera.z
     let best: Connector | null = null
     let bestD = tol
+    const probe = { x: p.x - tol, y: p.y - tol, w: tol * 2, h: tol * 2 }
     for (const c of this.connectors()) {
+      const bb = this.connectorBounds(c)
+      if (!bb || !intersects(bb, probe)) continue
       const r = this.connectorRoute(c)
       if (!r) continue
       const d = distanceToRoute(p, r)
@@ -467,7 +615,8 @@ export class Editor {
     return best
   }
 
-  private routeCache = new Map<string, { key: string; route: Route | null }>()
+  private routeCache = new Map<string, { key: string; route: Route | null; bounds: Box | null }>()
+  private labelCache = new Map<string, { route: Route; text: string; version: string; pos: Vec }>()
 
   /** Effective endpoints, including an endpoint being dragged. */
   connectorEnds(c: Connector) {
@@ -496,29 +645,87 @@ export class Editor {
     const wps = this.waypointsOf(c)
     const fRot = e.from ? this.rotationOf(e.from) : 0
     const tRot = e.to ? this.rotationOf(e.to) : 0
-    const key = `${rk(fr)}|${rk(tr)}|${pk(e.fromPoint)}|${pk(e.toPoint)}|${c.route ?? ''}|${fRot}|${tRot}|${wps ? wps.map(pk).join(';') : ''}|${this.docVersion}`
-    const hit = this.routeCache.get(c.id)
-    if (hit && hit.key === key) return hit.route
     const a = fr ?? (e.fromPoint ? box(e.fromPoint.x, e.fromPoint.y, 0, 0) : null)
     const b = tr ?? (e.toPoint ? box(e.toPoint.x, e.toPoint.y, 0, 0) : null)
+    const pad = 360
+    const area = c.route !== 'straight' && a && b ? expand(union([a, b])!, pad) : null
+    // obstacles only matter near the route: key on the versions of the grid cells around it, not the whole document
+    const key = `${rk(fr)}|${rk(tr)}|${pk(e.fromPoint)}|${pk(e.toPoint)}|${c.route ?? ''}|${fRot}|${tRot}|${wps ? wps.map(pk).join(';') : ''}|${area ? this.index.version(area) : ''}`
+    const hit = this.routeCache.get(c.id)
+    if (hit && hit.key === key) return hit.route
     let obstacles: Box[] = []
-    if (c.route !== 'straight' && a && b) {
-      const area = union([a, b])!
-      const pad = 360
-      const x1 = area.x - pad
-      const y1 = area.y - pad
-      const x2 = area.x + area.w + pad
-      const y2 = area.y + area.h + pad
-      for (const blk of this.blocks()) {
-        if (blk.kind === 'frame' || blk.id === e.from || blk.id === e.to) continue
-        const r = this.baseVisual(blk.id)!
-        if (r.x < x2 && r.x + r.w > x1 && r.y < y2 && r.y + r.h > y1) obstacles.push(r)
+    if (area) {
+      for (const id of this.sortByOrder(this.index.query(area))) {
+        if (id === e.from || id === e.to || this.blocksMap.get(id)?.kind === 'frame') continue
+        obstacles.push(this.index.get(id)!)
+        if (obstacles.length === 60) break
       }
-      if (obstacles.length > 60) obstacles = obstacles.slice(0, 60)
     }
     const route = routeConnector({ from: fr, fromPoint: e.fromPoint, fromRotation: fRot, to: tr, toPoint: e.toPoint, toRotation: tRot, style: c.route, waypoints: wps, obstacles })
-    this.routeCache.set(c.id, { key, route })
+    this.routeCache.set(c.id, { key, route, bounds: route ? union(route.points.map((p) => box(p.x, p.y, 0, 0))) : null })
     return route
+  }
+
+  private connCull: { key: string; list: Connector[] } | null = null
+
+  /** Connectors that may cross a page-space box (plus any whose ends are being previewed). */
+  connectorsIn(b: Box): Connector[] {
+    const key = `${this.docVersion}|${b.x}|${b.y}|${b.w}|${b.h}`
+    if (this.connCull?.key !== key) {
+      const list: Connector[] = []
+      for (const c of this.connectorsMap.values()) {
+        const parts: Box[] = []
+        let missing = false
+        for (const [id, pt] of [[c.from, c.fromPoint], [c.to, c.toPoint]] as const) {
+          const r = id ? this.index.get(id) : null
+          if (id && !r) missing = true
+          if (r) parts.push(r)
+          else if (pt) parts.push(box(pt.x, pt.y, 0, 0))
+        }
+        if (missing) continue
+        for (const w of c.waypoints ?? []) parts.push(box(w.x, w.y, 0, 0))
+        const cached = this.routeCache.get(c.id)?.bounds
+        if (cached) parts.push(cached)
+        const u = union(parts)
+        if (u && intersects(expand(u, 48), b)) list.push(c)
+      }
+      this.connCull = { key, list }
+    }
+    const it = this.interaction
+    const extra = new Set<string>()
+    for (const id of this.previewIds()) for (const c of this.connsByBlock.get(id) ?? []) extra.add(c)
+    if (it.type === 'endpoint' || it.type === 'waypoint') extra.add(it.id)
+    if (!extra.size) return this.connCull.list
+    const out = [...this.connCull.list]
+    for (const c of out) extra.delete(c.id)
+    for (const id of extra) {
+      const c = this.connectorsMap.get(id)
+      if (c) out.push(c)
+    }
+    return out
+  }
+
+  /**
+   * Cheap page-space bounds of a connector for culling: its ends, waypoints and last routed path, without routing.
+   */
+  connectorBounds(c: Connector): Box | null {
+    const e = this.connectorEnds(c)
+    const parts: Box[] = []
+    if (e.from) {
+      const r = this.visualRect(e.from)
+      if (!r) return null
+      parts.push(r)
+    } else if (e.fromPoint) parts.push(box(e.fromPoint.x, e.fromPoint.y, 0, 0))
+    if (e.to) {
+      const r = this.visualRect(e.to)
+      if (!r) return null
+      parts.push(r)
+    } else if (e.toPoint) parts.push(box(e.toPoint.x, e.toPoint.y, 0, 0))
+    for (const w of this.waypointsOf(c) ?? []) parts.push(box(w.x, w.y, 0, 0))
+    const cached = this.routeCache.get(c.id)?.bounds
+    if (cached) parts.push(cached)
+    const u = union(parts)
+    return u ? expand(u, 48) : null
   }
 
   /** Waypoints including an in-progress waypoint drag. */
@@ -543,13 +750,20 @@ export class Editor {
     if (!text) return route.mid
     const { w, h } = estimateLabelSize(text)
     const area = union(route.points.map((p) => box(p.x, p.y, 0, 0)))!
+    const search = { x: area.x - w, y: area.y - h, w: area.w + w * 2, h: area.h + h * 2 }
+    const previews = this.previewIds().length > 0
+    const version = this.index.version(search)
+    const hit = this.labelCache.get(c.id)
+    if (!previews && hit && hit.route === route && hit.text === text && hit.version === version) return hit.pos
     const obstacles: Box[] = []
-    for (const b of this.blocks()) {
+    for (const b of this.blocksIn(search)) {
       if (b.kind === 'frame') continue
       const r = this.visualRect(b.id)!
       if (r.x < area.x + area.w + w && r.x + r.w > area.x - w && r.y < area.y + area.h + h && r.y + r.h > area.y - h) obstacles.push(r)
     }
-    return placeLabel(route, w, h, obstacles)
+    const pos = placeLabel(route, w, h, obstacles)
+    if (!previews) this.labelCache.set(c.id, { route, text, version, pos })
+    return pos
   }
 
   // ---- rotation ------------------------------------------------------------
@@ -1088,11 +1302,9 @@ export class Editor {
       const moved = { ...moving, x: moving.x + dx, y: moving.y + dy }
       const exclude = new Set(it.ids)
       for (const id of it.ids) for (const c of this.childrenOf(id)) exclude.add(c.id)
-      const vp = this.viewportPageBounds()
-      const others = this.blocks()
+      const others = this.blocksIn(this.viewportPageBounds(), false)
         .filter((b) => !exclude.has(b.id))
-        .map((b) => this.baseVisual(b.id)!)
-        .filter((r) => r.x < vp.x + vp.w && r.x + r.w > vp.x && r.y < vp.y + vp.h && r.y + r.h > vp.y)
+        .map((b) => this.index.get(b.id)!)
       const tol = SNAP_PX / this.camera.z
       const sx = this.bestSnap([moved.x, moved.x + moved.w / 2, moved.x + moved.w], others.flatMap((r) => [r.x, r.x + r.w / 2, r.x + r.w]), tol)
       const sy = this.bestSnap([moved.y, moved.y + moved.h / 2, moved.y + moved.h], others.flatMap((r) => [r.y, r.y + r.h / 2, r.y + r.h]), tol)
@@ -1360,7 +1572,7 @@ export class Editor {
     const it = this.interaction
     if (it.type !== 'marquee') return
     const rect = boxFromPoints(it.startPage, page)
-    const hits = this.blocks()
+    const hits = this.blocksIn(rect)
       .filter((b) => {
         const r = this.visualRect(b.id)!
         if (b.kind === 'frame') return containsBox(rect, r)
