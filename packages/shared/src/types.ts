@@ -268,7 +268,7 @@ export function templateRows(b: Pick<Block, 'type' | 'typeData'>, reg: TypeRegis
   return (def.template?.rows ?? [])
     .map((k) => def.fields.find((d) => d.key === k))
     .filter((d): d is FieldDef => !!d)
-    .map((d) => ({ key: d.key, label: d.label, value: fieldText(d, f[d.key]) }))
+    .map((d) => ({ key: d.key, label: d.label, value: d.kind === 'boolean' ? (f[d.key] === undefined ? '' : f[d.key] ? 'Yes' : 'No') : fieldText(d, f[d.key]) }))
 }
 
 for (const def of Object.values(BLOCK_TYPES)) {
