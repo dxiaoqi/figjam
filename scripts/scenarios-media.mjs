@@ -58,7 +58,8 @@ async function focus(page, picks) {
     const x = Math.min(...rects.map((r) => r.x))
     const y = Math.min(...rects.map((r) => r.y))
     const w = Math.max(...rects.map((r) => r.x + r.w)) - x
-    const h = Math.max(...rects.map((r) => r.y + r.h)) - y
+    // tall regions: keep the top, at the viewport's aspect ratio, so the shot stays readable
+    const h = Math.min(Math.max(...rects.map((r) => r.y + r.h)) - y, (w + 80) / (innerWidth / innerHeight) - 160)
     ed.zoomToBounds({ x: x - 40, y: y - 90, w: w + 80, h: h + 160 }, { animate: false })
   }, picks)
   await sleep(900)
@@ -113,19 +114,30 @@ for (const [locale, sfx] of Object.entries(LANGS)) {
   await page.evaluate(() => window.editor?.zoomToFit())
   await sleep(1800)
   const web = await page.evaluate(() => {
-    const b = window.editor.blocks().filter((x) => x.kind === 'web').sort((p, q) => p.x - q.x)[1]
+    const ed = window.editor
+    const b = ed.blocks().filter((x) => x.kind === 'web').sort((p, q) => ed.pageRect(p.id).x - ed.pageRect(q.id).x)[1]
     if (!b) return null
-    window.editor.zoomToBounds({ x: b.x - 700, y: b.y - 260, w: b.w + 1400, h: b.h + 520 })
+    const r = ed.pageRect(b.id)
+    ed.zoomToBounds({ x: r.x - 700, y: r.y - 260, w: r.w + 1400, h: r.h + 520 }, { animate: false })
     return b.id
   })
   await sleep(1400)
   if (web) {
-    const r = await page.locator(`[data-block-id="${web}"]`).boundingBox()
-    await page.mouse.dblclick(r.x + r.width / 2, r.y + r.height / 2)
+    // off-center: a connector may cross the middle of the snippet
+    const p = await page.evaluate((id) => {
+      const r = window.editor.pageRect(id)
+      return window.editor.pageToScreen({ x: r.x + r.w * 0.25, y: r.y + r.h * 0.8 })
+    }, web)
+    await page.mouse.dblclick(p.x, p.y)
     await sleep(2500)
-    const frame = page.frames().find((f) => f !== page.mainFrame() && f.url().includes('localhost'))
-    await frame?.locator('button').first().click().catch(() => {})
-    await sleep(1800)
+    // a locator click would scroll the canvas and land outside (which stops the snippet), and the canvas is
+    // CSS-scaled, so point the cursor at the button and press it from inside the frame
+    const btn = page.frameLocator('[data-web-frame]').locator('button').first()
+    const box = await btn.boundingBox().catch(() => null)
+    if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 })
+    await sleep(500)
+    await btn.evaluate((b) => b.click()).catch((e) => console.log('snippet click:', e.message.split('\n')[0]))
+    await sleep(2400)
   }
   const video = await page.video().path()
   await context.close()
