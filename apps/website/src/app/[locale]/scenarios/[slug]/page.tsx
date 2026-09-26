@@ -5,7 +5,8 @@ import { notFound } from 'next/navigation'
 import { CodeBlock } from '@/components/copy-command'
 import { Reveal } from '@/components/reveal'
 import { ScenarioCard } from '@/components/scenarios/scenario-cards'
-import { ScenarioShot, hasScenarioShot } from '@/components/scenarios/scenario-shot'
+import { ScenarioImage, ScenarioShot } from '@/components/scenarios/scenario-shot'
+import { WindowFrame } from '@/components/product-shot'
 import { Container, Eyebrow, SectionHeading, StickyList, sectionY } from '@/components/section'
 import { Button } from '@/components/ui/button'
 import { site } from '@/config/site'
@@ -49,7 +50,6 @@ export default async function ScenarioPage({ params }: { params: Params }) {
   const meta = scenarios[slug]
   const Icon = meta.icon
   const base = `/${locale}`
-  const illustrated = !hasScenarioShot(slug, locale)
   const labels = { copy: d.common.copy, copied: d.common.copied }
 
   return (
@@ -99,10 +99,7 @@ export default async function ScenarioPage({ params }: { params: Params }) {
           </div>
         </Container>
         <Container className="pb-16 sm:pb-24">
-          <figure>
-            <ScenarioShot slug={slug} locale={locale} t={t} priority className="mx-auto max-w-5xl" />
-            {illustrated && <figcaption className="mx-auto mt-4 max-w-5xl text-center text-[13px] text-muted-foreground">{p.illustrationNote}</figcaption>}
-          </figure>
+          <ScenarioShot slug={slug} locale={locale} t={t} priority className="mx-auto max-w-5xl" />
         </Container>
       </section>
 
@@ -186,6 +183,12 @@ export default async function ScenarioPage({ params }: { params: Params }) {
               )
             })}
           </ul>
+          <Reveal className="mt-12 sm:mt-16">
+            <figure>
+              <ScenarioShot slug={slug} locale={locale} t={t} overview className="mx-auto max-w-5xl" />
+              <figcaption className="mt-4 text-center text-[13px] text-muted-foreground">{p.overview}</figcaption>
+            </figure>
+          </Reveal>
         </Container>
       </section>
 
@@ -206,9 +209,9 @@ export default async function ScenarioPage({ params }: { params: Params }) {
                 </Button>
               </Reveal>
               <Reveal delay={60} className="rounded-2xl border border-border bg-card p-6">
-                <TryStep n={2} title={p.enable.title} />
-                <p className="mt-2 text-[14.5px] leading-relaxed text-muted-foreground">{p.enable.body.replace('{skill}', meta.skill)}</p>
-                <CodeBlock code={`${site.cli} skill enable ${meta.skill}`} labels={labels} className="mt-4" />
+                <TryStep n={2} title={p.start.title} />
+                <p className="mt-2 text-[14.5px] leading-relaxed text-muted-foreground">{p.start.body.replace('{name}', it.dialogName)}</p>
+                <CodeBlock code={`${site.cli} new-board --template ${meta.template}`} labels={labels} className="mt-4" />
               </Reveal>
             </li>
             <li>
@@ -219,6 +222,14 @@ export default async function ScenarioPage({ params }: { params: Params }) {
               </Reveal>
             </li>
           </ol>
+          <Reveal className="mt-10 sm:mt-14">
+            <figure className="mx-auto max-w-3xl">
+              <WindowFrame>
+                <ScenarioImage name={`scenarios-dialog-${locale}`} alt={p.dialogAlt} sizes="(min-width: 768px) 768px, 100vw" />
+              </WindowFrame>
+              <figcaption className="mt-4 text-center text-[13px] text-muted-foreground">{p.dialogCaption}</figcaption>
+            </figure>
+          </Reveal>
         </Container>
       </section>
 

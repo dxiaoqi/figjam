@@ -1,52 +1,63 @@
 import { WindowFrame } from '@/components/product-shot'
-import { ScenarioBoard } from '@/components/scenarios/scenario-board'
+import { site } from '@/config/site'
 import { type ScenarioSlug, scenarios } from '@/content/scenarios'
 import type { Locale } from '@/i18n/config'
 import type { Dict } from '@/i18n'
-import { scenarioShots } from '@/lib/scenario-shots'
+import { type ScenarioShotName, scenarioShots } from '@/lib/scenario-shots'
 
-export function hasScenarioShot(slug: ScenarioSlug, locale: Locale) {
-  return `${scenarios[slug].skill}-${locale}` in scenarioShots
+export function ScenarioImage({
+  name,
+  alt,
+  priority,
+  sizes = '(min-width: 1152px) 1088px, 100vw',
+}: {
+  name: ScenarioShotName
+  alt: string
+  priority?: boolean
+  sizes?: string
+}) {
+  const [w, h] = scenarioShots[name]
+  const base = `/media/scenarios/${name}`
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- static export, pre-optimized WebP
+    <img
+      src={`${base}.webp`}
+      srcSet={`${base}-800.webp 800w, ${base}.webp ${w}w, ${base}-2400.webp 2400w`}
+      sizes={sizes}
+      alt={alt}
+      width={w}
+      height={h}
+      loading={priority ? 'eager' : 'lazy'}
+      fetchPriority={priority ? 'high' : undefined}
+      decoding="async"
+      className="block h-auto w-full"
+    />
+  )
 }
 
-/** The real screenshot when one has been imported, otherwise the token-drawn illustration. */
+/** A scenario's board as the product shows it: a key frame, or the whole board with `overview`. */
 export function ScenarioShot({
   slug,
   locale,
   t,
-  compact,
+  overview,
   priority,
-  sizes = '(min-width: 1152px) 1088px, 100vw',
+  sizes,
   className,
 }: {
   slug: ScenarioSlug
   locale: Locale
   t: Dict['scenarios']
-  compact?: boolean
+  overview?: boolean
   priority?: boolean
   sizes?: string
   className?: string
 }) {
   const item = t.items[slug]
-  const name = `${scenarios[slug].skill}-${locale}`
-  const size = scenarioShots[name]
-  if (!size) return <ScenarioBoard slug={slug} item={item} badge={t.page.illustration} compact={compact} className={className} />
-  const [w, h] = size
+  const name = `${scenarios[slug].skill}-${locale}${overview ? '-overview' : ''}` as ScenarioShotName
   return (
-    <WindowFrame title={item.board.title} className={className}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- static export, pre-optimized WebP */}
-      <img
-        src={`/media/scenarios/${name}.webp`}
-        srcSet={`/media/scenarios/${name}-800.webp 800w, /media/scenarios/${name}.webp ${w}w`}
-        sizes={sizes}
-        alt={item.shotAlt}
-        width={w}
-        height={h}
-        loading={priority ? 'eager' : 'lazy'}
-        fetchPriority={priority ? 'high' : undefined}
-        decoding="async"
-        className="block h-auto w-full"
-      />
+    <WindowFrame title={`${item.boardTitle} — ${site.name}`} className={className}>
+      <ScenarioImage name={name} alt={overview ? item.overviewAlt : item.shotAlt} priority={priority} sizes={sizes} />
     </WindowFrame>
   )
 }

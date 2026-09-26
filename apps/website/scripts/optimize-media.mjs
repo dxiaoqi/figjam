@@ -1,4 +1,4 @@
-// Writes an 800px-wide `<name>-800.webp` next to every screenshot in public/media (and media/scenarios), so
+// Writes an 800px-wide `<name>-800.webp` next to every screenshot in public/media, so
 // phones download a quarter of the pixels. Idempotent: skips variants that are newer than their source.
 // usage: node scripts/optimize-media.mjs [--force]
 import { readdirSync, statSync } from 'node:fs'
@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 const force = process.argv.includes('--force')
-const dirs = ['../public/media/', '../public/media/scenarios/'].map((d) => fileURLToPath(new URL(d, import.meta.url)))
+const dirs = ['../public/media/'].map((d) => fileURLToPath(new URL(d, import.meta.url)))
 
 for (const dir of dirs) {
   let files
@@ -17,7 +17,7 @@ for (const dir of dirs) {
     continue
   }
   for (const f of files) {
-    if (!f.endsWith('.webp') || f.endsWith('-800.webp')) continue
+    if (!f.endsWith('.webp') || /-\d+\.webp$/.test(f)) continue
     const src = join(dir, f)
     const out = join(dir, f.replace(/\.webp$/, '-800.webp'))
     try {

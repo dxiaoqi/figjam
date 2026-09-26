@@ -13,6 +13,7 @@ export const shots = {
   'item-review': [1600, 1000],
   'skills-library': [1600, 1000],
   'skills-matrix': [1600, 1000],
+  'scenarios-flow-poster': [1600, 1000],
   'skills-permission': [1200, 742],
   'snippet-running': [1200, 814],
   'step-connect-en': [1200, 750],

@@ -133,6 +133,16 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
           <div className="mt-10 sm:mt-14">
             <ScenarioGrid locale={locale} t={t.scenarios} />
           </div>
+          <Reveal className="mt-14 sm:mt-20">
+            <figure>
+              <WindowFrame title={`${t.scenarios.eyebrow} — ${site.name}`} className="mx-auto max-w-5xl">
+                <ProductVideo src="/media/scenarios-flow" poster="scenarios-flow-poster" label={t.scenarios.flow.label} playLabel={t.common.play} pauseLabel={t.common.pause} />
+              </WindowFrame>
+              <figcaption className="mx-auto mt-4 max-w-2xl text-center text-[13px] leading-relaxed text-muted-foreground">
+                <span className="font-medium text-foreground/80">{t.common.realRecording}</span> · {t.scenarios.flow.caption}
+              </figcaption>
+            </figure>
+          </Reveal>
         </Container>
       </section>
 

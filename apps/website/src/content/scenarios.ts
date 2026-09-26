@@ -1,15 +1,16 @@
 import {
-  Blocks,
   BookOpen,
   Boxes,
+  CalendarClock,
   CircleHelp,
+  ClipboardList,
   Compass,
   Database,
-  FileCode2,
   FileText,
   FlaskConical,
   Gauge,
   Gavel,
+  Grid3x3,
   Lightbulb,
   ListChecks,
   type LucideIcon,
@@ -17,9 +18,12 @@ import {
   MessageSquareText,
   Microscope,
   Network,
+  Package,
   PanelsTopLeft,
   Plug,
+  Rocket,
   Scale,
+  SearchX,
   ServerCog,
   ShieldAlert,
   Sparkles,
@@ -41,31 +45,34 @@ export function isScenario(v: string): v is ScenarioSlug {
 type BlockStyle = { color: TokenColor; icon: LucideIcon }
 
 /**
- * The Skill behind each scenario and the look of its block types. Labels and copy live in the dictionaries
- * (`scenarios.items.<slug>.blocks`, same order as `blocks` here).
+ * Each scenario is a built-in Skill plus a board template (skills/builtin/<skill>, New board ▸ Scenarios).
+ * Block labels and copy live in the dictionaries (`scenarios.items.<slug>.blocks`, same order as `blocks` here).
  */
-export const scenarios: Record<ScenarioSlug, { skill: string; color: TokenColor; icon: LucideIcon; blocks: readonly BlockStyle[] }> = {
+export const scenarios: Record<ScenarioSlug, { skill: string; template: string; color: TokenColor; icon: LucideIcon; blocks: readonly BlockStyle[] }> = {
   architecture: {
     skill: 'arch-kit',
+    template: 'architecture-map',
     color: 'blue',
     icon: Network,
     blocks: [
       { color: 'blue', icon: Boxes },
-      { color: 'teal', icon: ServerCog },
-      { color: 'purple', icon: Plug },
-      { color: 'gray', icon: Database },
-      { color: 'orange', icon: Blocks },
+      { color: 'purple', icon: ServerCog },
+      { color: 'teal', icon: Plug },
+      { color: 'orange', icon: Database },
+      { color: 'gray', icon: Package },
       { color: 'green', icon: Gavel },
       { color: 'red', icon: ShieldAlert },
+      { color: 'yellow', icon: CalendarClock },
     ],
   },
   'user-research': {
     skill: 'research-kit',
+    template: 'interview-synthesis',
     color: 'yellow',
     icon: Users,
     blocks: [
-      { color: 'gray', icon: Users },
-      { color: 'yellow', icon: MessageSquareQuote },
+      { color: 'blue', icon: Users },
+      { color: 'teal', icon: MessageSquareQuote },
       { color: 'purple', icon: Lightbulb },
       { color: 'green', icon: Target },
       { color: 'orange', icon: FlaskConical },
@@ -73,37 +80,44 @@ export const scenarios: Record<ScenarioSlug, { skill: string; color: TokenColor;
   },
   'product-discovery': {
     skill: 'product-kit',
+    template: 'product-discovery',
     color: 'green',
     icon: Compass,
     blocks: [
       { color: 'blue', icon: Swords },
+      { color: 'yellow', icon: Grid3x3 },
+      { color: 'pink', icon: Rocket },
       { color: 'green', icon: Target },
-      { color: 'teal', icon: Sparkles },
+      { color: 'purple', icon: Sparkles },
       { color: 'orange', icon: FlaskConical },
-      { color: 'purple', icon: Gauge },
+      { color: 'teal', icon: Gauge },
       { color: 'gray', icon: ListChecks },
     ],
   },
   'prototype-wall': {
     skill: 'prototype-kit',
+    template: 'prototype-wall',
     color: 'pink',
     icon: PanelsTopLeft,
     blocks: [
-      { color: 'blue', icon: FileCode2 },
+      { color: 'blue', icon: ClipboardList },
+      { color: 'purple', icon: PanelsTopLeft },
       { color: 'yellow', icon: MessageSquareText },
       { color: 'green', icon: Gavel },
     ],
   },
   'literature-review': {
     skill: 'lit-kit',
+    template: 'literature-review',
     color: 'purple',
     icon: BookOpen,
     blocks: [
-      { color: 'gray', icon: FileText },
+      { color: 'orange', icon: CircleHelp },
+      { color: 'blue', icon: FileText },
       { color: 'purple', icon: Scale },
       { color: 'teal', icon: Microscope },
       { color: 'red', icon: TriangleAlert },
-      { color: 'yellow', icon: CircleHelp },
+      { color: 'yellow', icon: SearchX },
     ],
   },
 }

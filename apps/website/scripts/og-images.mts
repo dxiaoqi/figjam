@@ -20,9 +20,9 @@ const zh = unwrap(zhModule)
 const out = fileURLToPath(new URL('../public/og/', import.meta.url))
 const inter = readFileSync(createRequire(import.meta.url).resolve('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2')).toString('base64')
 
-type Card = { eyebrow: string; title: string; body: string; stickies: { color: TokenColor; text: string }[] }
+type Card = { eyebrow: string; title: string; body: string; stickies: { color: TokenColor; text: string }[]; image?: string }
 
-function cards(t: ReturnType<typeof en>): Record<string, Card> {
+function cards(t: ReturnType<typeof en>, locale: 'zh' | 'en'): Record<string, Card> {
   const s = t.scenarios
   const hero = t.home.hero
   const base: Record<string, Card> = {
@@ -52,7 +52,8 @@ function cards(t: ReturnType<typeof en>): Record<string, Card> {
       eyebrow: `${s.eyebrow} · ${scenarios[k].skill}`,
       title: it.title,
       body: it.tagline,
-      stickies: it.board.frames[0].items.slice(0, 2).map((x) => ({ color: scenarios[k].blocks[x.block].color, text: x.title })),
+      stickies: [],
+      image: fileURLToPath(new URL(`../public/media/scenarios/${scenarios[k].skill}-${locale}-800.webp`, import.meta.url)),
     }
   }
   return base
@@ -60,7 +61,8 @@ function cards(t: ReturnType<typeof en>): Record<string, Card> {
 
 const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
-function html(c: Card, lang: string) {
+async function html(c: Card, lang: string) {
+  const shot = c.image ? `<img class="shot" src="data:image/png;base64,${(await sharp(c.image).resize({ width: 1100 }).png().toBuffer()).toString('base64')}">` : ''
   const long = c.title.length > (lang === 'en' ? 44 : 20)
   const stickies = c.stickies
     .map((st, i) => {
@@ -76,15 +78,16 @@ background:#FAFAF9 radial-gradient(circle at 1px 1px,rgb(28 25 23/.13) 1px,trans
 .brand{position:absolute;left:72px;top:64px;display:flex;align-items:center;gap:14px;font-weight:600;font-size:26px;letter-spacing:-.01em}
 .eyebrow{position:absolute;left:72px;top:190px;font-size:22px;color:#6b635d;display:flex;align-items:center;gap:10px}
 .eyebrow i{width:12px;height:12px;border-radius:3px;background:#5596E6;display:block}
-h1{position:absolute;left:72px;top:236px;width:${c.stickies.length ? 720 : 1000}px;font-size:${long ? 56 : 68}px;line-height:1.1;font-weight:650;letter-spacing:${lang === 'en' ? '-.028em' : '0'};white-space:pre-line;text-wrap:balance;word-break:${lang === 'en' ? 'normal' : 'keep-all'}}
+h1{position:absolute;left:72px;top:236px;width:${c.image ? 500 : c.stickies.length ? 720 : 1000}px;font-size:${c.image ? 50 : long ? 56 : 68}px;line-height:1.1;font-weight:650;letter-spacing:${lang === 'en' ? '-.028em' : '0'};white-space:pre-line;text-wrap:balance;word-break:${lang === 'en' ? 'normal' : 'keep-all'}}
 p{position:absolute;left:72px;bottom:64px;font-size:22px;color:#57534e}
+.shot{position:absolute;left:620px;top:110px;width:720px;border-radius:14px;border:1px solid rgb(0 0 0/.08);box-shadow:0 1px 1px rgb(0 0 0/.04),0 12px 40px rgb(0 0 0/.12)}
 .sticky{position:absolute;width:250px;min-height:170px;padding:22px;border-radius:6px;font-size:24px;line-height:1.3;font-weight:500;box-shadow:0 1px 1px rgb(0 0 0/.04),0 10px 30px rgb(0 0 0/.08)}
 </style></head><body>
 <div class="brand"><svg width="44" height="44" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#1C1917"/><rect x="7" y="7" width="11" height="11" rx="2" fill="${COLORS.yellow.light.bg}"/><rect x="14" y="14" width="11" height="11" rx="3" fill="${COLORS.purple.light.bg}"/></svg>${esc(site.name)}</div>
 <div class="eyebrow"><i></i>${esc(c.eyebrow)}</div>
 <h1>${esc(c.title)}</h1>
 <p>${esc(c.body)}</p>
-${stickies}
+${stickies}${shot}
 </body></html>`
 }
 
@@ -95,8 +98,8 @@ for (const [locale, dict, lang] of [
   ['zh', zh(site), 'zh-CN'],
   ['en', en(site), 'en'],
 ] as const) {
-  for (const [name, card] of Object.entries(cards(dict))) {
-    await page.setContent(html(card, lang), { waitUntil: 'load' })
+  for (const [name, card] of Object.entries(cards(dict, locale))) {
+    await page.setContent(await html(card, lang), { waitUntil: 'load' })
     await page.evaluate(() => document.fonts.ready)
     const png = await page.screenshot({ type: 'png' })
     const file = `${out}${name}-${locale}.png`

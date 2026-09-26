@@ -42,7 +42,7 @@ export function ScenarioGrid({ locale, t, headingLevel = 3 }: { locale: Locale; 
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </span>
           </div>
-          <ScenarioShot slug={lead} locale={locale} t={t} compact sizes="(min-width: 1024px) 600px, 100vw" />
+          <ScenarioShot slug={lead} locale={locale} t={t} sizes="(min-width: 1024px) 600px, 100vw" />
         </Link>
       </Reveal>
       <ul className="grid gap-5 sm:grid-cols-2">

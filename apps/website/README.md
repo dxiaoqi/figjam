@@ -18,8 +18,8 @@ images, `sitemap.xml` and `robots.txt` are absolute and read it. It defaults to 
 |---|---|
 | `/` | Sends visitors to their saved language, Simplified Chinese by default (`noindex`) |
 | `/zh/`, `/en/` | Home: hero clip, how it works, scenarios, agent review (interactive demo), canvas, typed blocks, Skills, web snippets, local-first & security, templates |
-| `/<locale>/scenarios/` | All scenarios, architecture & code understanding first |
-| `/<locale>/scenarios/<slug>/` | One per scenario (`architecture`, `user-research`, `product-discovery`, `prototype-wall`, `literature-review`): the problem, the Skill's workflow, its block types, a board, and "try it" with a prompt for Claude Code |
+| `/<locale>/scenarios/` | All scenarios, architecture & code understanding first, and a recording of New board ▸ Scenarios |
+| `/<locale>/scenarios/<slug>/` | One per scenario (`architecture`, `user-research`, `product-discovery`, `prototype-wall`, `literature-review`): the problem, the Skill's workflow (from its SKILL.md), its block types, a key frame and the whole board, and "try it": install, New board ▸ Scenarios, and the prompt for Claude Code |
 | `/<locale>/download/` | Installers from `latest.json`, first-launch help, beta signup placeholder, build from source |
 | `/<locale>/docs/` | Quick start: install, connect Claude Code / Cursor, MCP tools, Skill authoring (sourced from the root README) |
 | `/<locale>/changelog/` | What shipped, newest first |
@@ -34,7 +34,8 @@ images, `sitemap.xml` and `robots.txt` are absolute and read it. It defaults to 
   Chinese copy follows the app's rules: full-width punctuation, a space between Chinese and Latin words.
   Shell and JSON snippets are built from the config in `src/content/commands.ts`.
 - **Scenarios.** `src/content/scenarios.ts` maps each scenario to its Skill (`arch-kit`, `research-kit`,
-  `product-kit`, `prototype-kit`, `lit-kit`) and gives every block type a token color and icon.
+  `product-kit`, `prototype-kit`, `lit-kit`) and board template, and gives every block type a token color and icon.
+  Steps, block types and prompts follow each `skills/builtin/<skill>/SKILL.md` and the New board dialog.
 - **Design tokens.** Sticky, surface and agent colors come straight from `@aifig/shared` (`TokenStyle` emits them as
   CSS variables); the shadcn theme values match `apps/canvas/src/index.css`.
 - **Media.** `public/media` holds WebP screenshots (each with an 800px `-800` variant for phones) and MP4/WebM clips
@@ -55,9 +56,10 @@ node apps/website/scripts/screenshots.mjs <out-dir> [--full] [--pages=/,/docs/] 
 node apps/website/scripts/lighthouse.mjs <out-dir> [--pages=/,/privacy/] [--base=http://127.0.0.1:47901]
 ```
 
-- **Scenario screenshots.** Until a scenario has a screenshot, its page shows an illustration of the board drawn with
-  the product's tokens (labeled as such). Drop `arch-kit-en.png`, `arch-kit-zh.png`, … into a folder and run
-  `import-scenario-shots.mjs` on it; `src/lib/scenario-shots.ts` is rewritten and the pages switch over.
+- **Scenario screenshots** come from the product (`scripts/scenarios-media.mjs` on the scenario-skills branch):
+  `<skill>-<lang>.png` key frames, `<skill>-<lang>-overview.png` whole boards and `scenarios-dialog-<lang>.png`.
+  `import-scenario-shots.mjs <dir>` writes WebP at 800 / 1600 / 2400px to `public/media/scenarios` and rewrites
+  `src/lib/scenario-shots.ts`. The New board ▸ Scenarios clip is `public/media/scenarios-flow.{mp4,webm}`.
 - **Screenshots** captures pages in both languages at desktop (1440×900) and mobile (390×844) sizes with headless
   Chrome (`CHROME_PATH` overrides the browser).
 - **Lighthouse** runs mobile and desktop audits against `npm start` and writes JSON reports plus `summary.md`.
