@@ -308,6 +308,32 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   await ctx.close()
 }
 
+// security, data safety and skills surfaces in Chinese
+{
+  const gateCtx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'zh-CN' })
+  const gate = await gateCtx.newPage()
+  await gate.goto(base)
+  await gate.waitForSelector('[data-token-gate]', { timeout: 15000 }).catch(() => {})
+  check('[zh] the sign-in screen is translated', ((await gate.locator('[data-token-gate]').textContent()) ?? '').includes('将此浏览器连接到 ai-figma'))
+  await gateCtx.close()
+  const zhBoard = (await call('create_board', { title: '版本' })).result.board.id
+  await call('create_version', { board: zhBoard, name: '第一版' })
+  const { ctx, page } = await open('zh-CN', { url: `/?board=${zhBoard}` })
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('aifig:versions', { detail: {} })))
+  await page.waitForSelector('[data-version-history] [data-version]')
+  const versionsText = (await page.locator('[data-version-history]').textContent()) ?? ''
+  await page.keyboard.press('Escape')
+  await page.evaluate(() => window.dispatchEvent(new Event('aifig:skills')))
+  await page.waitForSelector('[data-skills-panel]')
+  const skillsText = (await page.locator('[data-skills-panel]').textContent()) ?? ''
+  await page.keyboard.press('Escape')
+  await page.evaluate(() => window.dispatchEvent(new Event('aifig:activity')))
+  await page.waitForSelector('[data-activity-dialog]')
+  const activityText = (await page.locator('[data-activity-dialog]').textContent()) ?? ''
+  check('[zh] version history, skills and activity are translated', versionsText.includes('版本历史') && versionsText.includes('恢复此版本') && skillsText.includes('此画板') && activityText.includes('已记住的权限'), [versionsText, skillsText, activityText].map((s) => s.slice(0, 40)).join(' | '))
+  await ctx.close()
+}
+
 // switching Cursor to local HTTP from Connect agent: url + Authorization header, private file, HTTP handshake
 {
   const httpBoard = (await call('create_board', { title: 'HTTP setup' })).result.board.id
