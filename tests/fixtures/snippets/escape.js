@@ -6,6 +6,9 @@ try { r.parentStorage = parent.localStorage ? 'allowed' : 'blocked' } catch { r.
 try { r.parentEditor = parent.editor ? 'allowed' : 'blocked' } catch { r.parentEditor = 'blocked' }
 try { localStorage.setItem('x', '1'); r.ownStorage = 'allowed' } catch { r.ownStorage = 'blocked' }
 try { document.cookie = 'a=1'; r.cookie = document.cookie.includes('a=1') ? 'allowed' : 'blocked' } catch { r.cookie = 'blocked' }
+try { r.node = typeof require !== 'undefined' || typeof process !== 'undefined' || typeof module !== 'undefined' ? 'allowed' : 'blocked' } catch { r.node = 'blocked' }
+try { r.desktopBridge = window.aifigDesktop || (parent !== window && parent.aifigDesktop) ? 'allowed' : 'blocked' } catch { r.desktopBridge = 'blocked' }
+try { r.token = (window.aifigDesktop && window.aifigDesktop.token) || localStorage.getItem('aifig:token') || (parent !== window && parent.localStorage.getItem('aifig:token')) ? 'allowed' : 'blocked' } catch { r.token = 'blocked' }
 try { const w = window.open('https://example.com/'); r.popup = w ? 'allowed' : 'blocked' } catch { r.popup = 'blocked' }
 try { top.location.href = 'https://example.com/pwned'; r.topNavigation = 'attempted' } catch { r.topNavigation = 'blocked' }
 const img = new Promise((ok, no) => { const i = new Image(); i.onload = ok; i.onerror = no; i.src = 'http://127.0.0.1:47821/api/health?img' })
@@ -19,6 +22,7 @@ Promise.allSettled([
   settle('image', img),
   settle('externalScript', script),
   settle('nestedFrame', frame),
+  settle('fetchLan', fetch('http://192.168.1.1/')),
 ]).then(async () => {
   const big = 'x'.repeat(20000)
   r.oversizeState = await aifig.setState({ big }).then(() => 'allowed', () => 'blocked')

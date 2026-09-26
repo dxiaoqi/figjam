@@ -5,13 +5,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
+import { authHeaders, signIn } from './lib/core-auth.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'feedback1')
 fs.mkdirSync(out, { recursive: true })
 const base = 'http://127.0.0.1:47820'
 const cli = (...args) => execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), ...args], { encoding: 'utf8' })
-const callAs = (caller, tool, args) => fetch(`${base}/api/call`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tool, args, caller }) }).then((r) => r.json())
+const callAs = (caller, tool, args) => fetch(`${base}/api/call`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ tool, args, caller }) }).then((r) => r.json())
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const board = JSON.parse(cli('--json', 'new-board', 'Auth service — design review')).board.id
@@ -47,6 +48,7 @@ cli('--board', board, '--human', 'accept')
 
 const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--no-sandbox'] })
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 2 })
+await signIn(page)
 page.on('pageerror', (e) => console.log('[pageerror]', e.message))
 const ed = (fn, arg) => page.evaluate(fn, arg)
 const shot = async (name, opts = {}) => {
@@ -97,7 +99,7 @@ await page.mouse.move(10, 450)
 await shot('after-long-content-dark.png')
 await page.getByRole('button', { name: 'Toggle theme' }).click()
 await sleep(400)
-const svg = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.png?ids=${longId}`).then((r) => r.arrayBuffer())
+const svg = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.png?ids=${longId}`, { headers: authHeaders() }).then((r) => r.arrayBuffer())
 fs.writeFileSync(path.join(out, 'after-long-card-export.png'), Buffer.from(svg))
 console.log('· after-long-card-export.png')
 console.log(JSON.stringify(JSON.parse(cli('--json', '--board', board, 'lint')).summary))

@@ -6,6 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Resvg } from '@resvg/resvg-js'
 import { chromium } from 'playwright-core'
+import { signIn } from './lib/core-auth.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'media')
@@ -29,6 +30,7 @@ cli(['--human', '--board', mood, 'image', '/tmp/aifig-wire.png', '--width', '280
 const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--no-sandbox'] })
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, hasTouch: true, recordVideo: { dir: out, size: { width: 1440, height: 900 } } })
 const page = await context.newPage()
+await signIn(page)
 page.on('pageerror', (e) => console.log('[pageerror]', e.message))
 const shot = async (name) => {
   await page.screenshot({ path: path.join(out, name) })
@@ -128,7 +130,7 @@ await page.keyboard.press('Escape')
 await sleep(300)
 
 // 5. export of the moodboard rendered by the core (rotation, images, rich text)
-const png = await ed(async (board) => [...new Uint8Array(await (await fetch(`/api/boards/${board}/snapshot.png`)).arrayBuffer())], mood)
+const png = await ed(async (board) => [...new Uint8Array(await (await fetch(`/api/boards/${board}/snapshot.png`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })).arrayBuffer())], mood)
 fs.writeFileSync(path.join(out, '07-export-png.png'), Buffer.from(png))
 console.log('✓ 07-export-png.png')
 

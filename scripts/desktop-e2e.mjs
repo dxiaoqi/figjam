@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { _electron as electron } from 'playwright-core'
+import { authHeaders } from './lib/core-auth.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const shotDir = process.argv[2]
@@ -21,7 +22,7 @@ const check = (name, ok, detail = '') => {
   if (!ok) failures++
 }
 const call = async (tool, args) => {
-  const r = await fetch(`http://127.0.0.1:${port}/api/call`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tool, args, caller: { id: 't', name: 'Test', client: 'test', kind: 'human' } }) })
+  const r = await fetch(`http://127.0.0.1:${port}/api/call`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ tool, args, caller: { id: 't', name: 'Test', client: 'test', kind: 'human' } }) })
   return (await r.json()).result
 }
 
@@ -78,7 +79,7 @@ await new Promise((r) => setTimeout(r, 600))
 check('Save As writes the board and keeps the file in sync', fs.existsSync(saved) && fs.statSync(saved).size > 100)
 
 // the Connect dialog's MCP config launches the bundled CLI with Electron's Node
-const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()
+const health = await (await fetch(`http://127.0.0.1:${port}/api/health`, { headers: authHeaders() })).json()
 check('Connect dialog points at the bundled CLI / MCP', health.mcp.command.includes('electron') && health.mcp.env?.ELECTRON_RUN_AS_NODE === '1', `${health.mcp.command} ${health.mcp.args.join(' ')}`)
 const mcp = new Client({ name: 'desktop-check', version: '1' })
 await mcp.connect(new StdioClientTransport({ command: health.mcp.command, args: health.mcp.args, env: { ...process.env, ...health.mcp.env, AIFIG_CORE_PORT: port, AIFIG_HOME: env.AIFIG_HOME } }))
@@ -86,7 +87,7 @@ const tools = (await mcp.listTools()).tools.length
 await mcp.close()
 check('an agent can connect with that exact config', tools > 15, `${tools} tools`)
 // web snippets run in the desktop app too, from this core's own snippet host
-const coreHealth = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()
+const coreHealth = await (await fetch(`http://127.0.0.1:${port}/api/health`, { headers: authHeaders() })).json()
 const snipRes = await call('create_snippet', { title: 'Desktop snippet', html: '<button id="b" style="font-size:20px;padding:20px">go</button>', js: "document.getElementById('b').onclick = () => aifig.setState({ clicked: true })" })
 const snipId = snipRes?.id
 await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('menu', 'zoom-fit'))
@@ -100,12 +101,12 @@ const snipState = (await call('get_board', { format: 'json' }))?.blocks?.find((b
 check('web snippets run sandboxed in the desktop app (own snippet host)', coreHealth.snippetOrigin === `http://localhost:${Number(port) + 1}` && snipState?.clicked === true, JSON.stringify({ origin: coreHealth.snippetOrigin, snipState }))
 await win.keyboard.press('Escape')
 // assistant settings go through the keychain bridge; the core only keeps them in memory
-const before2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`)).json()
+const before2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders() })).json()
 const info = await win.evaluate(async () => {
   await window.aifigDesktop.assistant.save({ provider: 'mock' })
   return window.aifigDesktop.assistant.get()
 })
-const after2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`)).json()
+const after2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders() })).json()
 check('assistant settings save via the keychain bridge and enable the assistant', !before2.available && after2.available && info.provider === 'mock', `keychain: ${info.encryption}`)
 const keyResult = await win.evaluate(async () => {
   try {
