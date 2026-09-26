@@ -29,8 +29,8 @@ person reviews it item by item, and then you implement exactly what the board sa
 Connectors get a suggested relation: module *depends on* module, module *exposes* interface, service *runs*
 module, module *stores in* data store, decision *shapes* module, risk *threatens* module, event *leads to* event.
 
-Layouts (`apply_skill_layout`): `arch-kit.layers` (columns by layer), `arch-kit.contracts` (interfaces by
-kind × stability), `arch-kit.risk-matrix` (severity × likelihood), `arch-kit.adr-log` and
+Layouts (`apply_skill_layout`): `arch-kit.layers` (columns by layer), `arch-kit.contracts` (interfaces in rows
+by kind, columns by stability), `arch-kit.risk-matrix` (severity × likelihood), `arch-kit.adr-log` and
 `arch-kit.incident-timeline` (in date order).
 
 ## Workflow: map a repository
@@ -49,7 +49,8 @@ Work in one change set per step so the person can review each layer separately.
    fill `path` and `layer`. Apply `arch-kit.layers` with `frame: "Modules"`.
 4. **Dependencies.** `connect` module → module for every internal import (`relation` is filled in), and
    module → `arch-kit.external` for the few external dependencies that shape the design (frameworks, storage,
-   protocols) — not every npm package.
+   protocols) — not every npm package, and one connector per dependency (from its main user) so the map stays
+   readable.
 5. **Contracts.** `create_blocks { frame: "Contracts", right_of: "Modules" }` with one `arch-kit.interface` per
    boundary people call across (HTTP routes, MCP tools, CLI commands, WebSocket, file formats). `signature` is the
    shortest faithful form (`POST /api/call {tool,args,caller}`). Connect module *exposes* interface. Apply
@@ -75,7 +76,7 @@ Work in one change set per step so the person can review each layer separately.
 4. Connect events to the modules / interfaces involved (*involves*), add `arch-kit.risk` stickies for contributing
    factors and `arch-kit.decision` cards (status `proposed`) for follow-ups, each connected from the event that
    prompted it.
-5. `export_board { format: "md" }` gives the write-up, organized by type.
+5. `export_board { format: "markdown" }` gives the write-up, organized by type.
 
 ## Rules
 

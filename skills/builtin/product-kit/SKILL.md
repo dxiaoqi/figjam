@@ -58,7 +58,7 @@ high impact on top), `product-kit.requirements` (MoSCoW columns).
    "PRD"; connect solution *needs* each (or just the frame, if that's too many lines). Apply
    `product-kit.requirements`.
 7. **Check and export.** `lint_layout`, `render_snapshot`, commit. Then write the PRD outline as the `prd` prompt
-   describes (start from `export_board { format: "md" }`).
+   describes (start from `export_board { format: "markdown" }`).
 
 ## Rules
 

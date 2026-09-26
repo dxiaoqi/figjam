@@ -521,6 +521,14 @@ export class CanvasCore {
           }),
         }
       }
+      case 'add_comment': {
+        const board = this.board(a.board)
+        const target = board.blocks.get(a.target)
+        if (!target) throw new ToolError(`No block with id "${a.target}"`)
+        const t: Thread = { id: newId(), target: target.id, author: this.author(caller), text: a.text, createdAt: Date.now(), resolved: false, replies: [] }
+        board.doc.transact(() => board.threads.set(t.id, t), 'api')
+        return { thread: t.id, on: target.id }
+      }
       case 'reply_thread':
       case 'resolve_thread': {
         const board = this.board(a.board)
@@ -1123,22 +1131,31 @@ export class CanvasCore {
     }
     const locale = board.meta.get('language') as string | undefined
     const typeName = (id: string) => typeText(typeDef(id, reg), locale).plural
-    const field = (key?: string) => (b: Block) => {
-      if (!key) return undefined
-      if (key === 'type') return b.type ? typeName(b.type) : 'Untyped'
-      const v = typeFields(b, reg)[key]
-      return v === undefined || v === '' ? undefined : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v)
+    // enum values show as the type's translation for the board's language
+    const enumOf = (key?: string) => {
+      for (const t of typeSet) {
+        const def = typeDef(t, reg)
+        const f = def.fields.find((x) => x.key === key)
+        if (f?.kind === 'enum') return { options: f.options, label: typeText(def, locale).option }
+      }
+      return undefined
+    }
+    const field = (key?: string) => {
+      const en = enumOf(key)
+      return (b: Block) => {
+        if (!key) return undefined
+        if (key === 'type') return b.type ? typeName(b.type) : 'Untyped'
+        const v = typeFields(b, reg)[key]
+        return v === undefined || v === '' ? undefined : typeof v === 'boolean' ? (v ? 'yes' : 'no') : en ? en.label(String(v)) : String(v)
+      }
     }
     const intent: LayoutIntent = l.intent === 'type' ? 'matrix' : l.intent === 'cluster' ? 'matrix' : l.intent
     // enum fields keep their declared option order along an axis unless the layout says otherwise; a "type"
     // axis is ordered by the type ids the layout lists
-    const order = (key: string | undefined, given: string[] | undefined) => (key === 'type' && given ? given.map((t) => typeName(t.includes('.') ? t : `${name}.${t}`)) : given ?? options(key))
-    const options = (key?: string) => {
-      for (const t of typeSet) {
-        const f = typeDef(t, reg).fields.find((x) => x.key === key)
-        if (f?.kind === 'enum') return f.options
-      }
-      return undefined
+    const order = (key: string | undefined, given: string[] | undefined) => {
+      if (key === 'type') return given?.map((t) => typeName(t.includes('.') ? t : `${name}.${t}`))
+      const en = enumOf(key)
+      return en ? (given ?? en.options).map((o) => en.label(o)) : given
     }
     const opts =
       l.intent === 'type'

@@ -199,7 +199,9 @@ function matrix(items: LayoutItem[], labelSize: (g: string) => { w: number; h: n
   const cols = ranked([...new Set(items.map((i) => i.col?.trim() || '—'))], order?.cols)
   const rowOf = (i: LayoutItem) => i.row?.trim() || '—'
   const colOf = (i: LayoutItem) => i.col?.trim() || '—'
-  const labelW = snap(Math.max(80, ...rows.map((r) => labelSize(r).w)) + GAP)
+  // a single unlabeled row (a cluster: columns only) needs no row labels
+  const rowLabels = !(rows.length === 1 && rows[0] === '—')
+  const labelW = rowLabels ? snap(Math.max(80, ...rows.map((r) => labelSize(r).w)) + GAP) : 0
   const headH = snap(Math.max(...cols.map((c) => labelSize(c).h)) + 12)
   const colW = cols.map((c) => Math.max(labelSize(c).w, ...items.filter((i) => colOf(i) === c).map((i) => i.w)))
   const colX: number[] = []
@@ -212,7 +214,7 @@ function matrix(items: LayoutItem[], labelSize: (g: string) => { w: number; h: n
   const headings: LayoutResult['headings'] = cols.map((c, i) => ({ group: c, x: colX[i], y: 0, small: true }))
   let y = headH
   for (const r of rows) {
-    headings.push({ group: r, x: 0, y, small: true })
+    if (rowLabels) headings.push({ group: r, x: 0, y, small: true })
     let rowH = 0
     cols.forEach((c, ci) => {
       let cy = y

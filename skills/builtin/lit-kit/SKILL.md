@@ -51,7 +51,7 @@ Layouts: `lit-kit.argument-map` (a row per `rq`: supporting evidence → claims 
    its question. Apply `lit-kit.argument-map`, update question `status`, and commit as its own change set — this is
    the part the person reviews hardest.
 7. **Check and export.** `lint_layout`, `render_snapshot`, commit. Write the review outline as the `outline`
-   prompt describes (start from `export_board { format: "md" }`).
+   prompt describes (start from `export_board { format: "markdown" }`).
 
 ## Rules
 

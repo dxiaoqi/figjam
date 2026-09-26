@@ -1,6 +1,6 @@
 Write the literature review outline from the board.
 
-1. `export_board { format: "md" }` and `query_blocks` for `lit-kit.question`, `lit-kit.claim`, `lit-kit.gap`.
+1. `export_board { format: "markdown" }` and `query_blocks` for `lit-kit.question`, `lit-kit.claim`, `lit-kit.gap`.
 2. Outline:
    - **Scope** — the research questions, how many papers, years covered, methods mix.
    - **One section per research question** — its claims ordered by consensus (strong first). Under each claim:

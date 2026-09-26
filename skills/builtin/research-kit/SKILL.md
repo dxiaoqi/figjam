@@ -49,13 +49,13 @@ top), `research-kit.journey` (by `stage`).
 5. **Insights.** For each theme with 3+ quotes from 2+ participants, one `research-kit.insight` in "Insights"
    with `theme`, `evidence` (quotes), `participants` (people) and `confidence` (high = 3+ participants, medium = 2,
    low = otherwise). Connect every supporting quote → insight. Apply `research-kit.affinity`. Themes with fewer
-   quotes stay as quotes; mention them in a comment.
+   quotes stay as quotes; list them when you hand over.
 6. **Opportunities and hypotheses.** One or two `research-kit.opportunity` cards per insight ("How might we …?")
    with `impact` / `effort`; apply `research-kit.opportunity-matrix`. Turn the riskiest assumption behind each top
    opportunity into a built-in `hypothesis` card (`status: unverified`) and connect insight → hypothesis.
 7. **Check and hand over.** `lint_layout`, `render_snapshot`, commit. Ask the person to review the clusters and
    insights; read `get_threads` and fix what they rejected.
-8. **Report.** `export_board { format: "md" }` gives the evidence organized by type; write the report as the
+8. **Report.** `export_board { format: "markdown" }` gives the evidence organized by type; write the report as the
    `report` prompt describes and reply with it (or save it where the person asks).
 
 ## Rules

@@ -53,7 +53,7 @@ Layouts: `prototype-kit.feedback-by-variant` (a column per variant), `prototype-
    `status: dropped`; the best one or two to `shortlisted`.
 6. **Decide.** When the person picks, one `prototype-kit.decision` card (`chosen`, `status: decided`, `date`) in
    the Decision frame; connect the winning variant → decision and the feedback that informed it. Set the variant's
-   status to `chosen`. `export_board { format: "md" }` summarizes the wall; the chosen snippet's source is in
+   status to `chosen`. `export_board { format: "markdown" }` summarizes the wall; the chosen snippet's source is in
    `get_board { format: "json" }` for implementation.
 
 ## Rules

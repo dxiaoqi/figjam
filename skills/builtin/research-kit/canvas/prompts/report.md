@@ -1,6 +1,6 @@
 Write the research report from the board.
 
-1. `export_board { format: "md" }` and `query_blocks` for `research-kit.insight`, `research-kit.opportunity` and
+1. `export_board { format: "markdown" }` and `query_blocks` for `research-kit.insight`, `research-kit.opportunity` and
    `hypothesis`.
 2. Structure:
    - **Summary** — three sentences: who we talked to (count and segments from the interview cards), the two most

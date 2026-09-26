@@ -20,6 +20,7 @@
       "template": { "rows": ["path", "layer"], "summary": ["language", "status"] },
       "prefixes": ["mod:"],
       "i18n": {
+        "en": { "options": { "ui": "UI", "api": "API", "domain": "Domain", "data": "Data", "infra": "Infra", "tooling": "Tooling" } },
         "zh-CN": {
           "label": "模块",
           "plural": "模块",
@@ -55,6 +56,7 @@
       ],
       "template": { "rows": ["runtime", "port"], "summary": ["entry"] },
       "i18n": {
+        "en": { "options": { "ui": "UI", "api": "API", "domain": "Domain", "data": "Data", "infra": "Infra", "tooling": "Tooling" } },
         "zh-CN": {
           "label": "服务",
           "plural": "服务",
@@ -80,6 +82,7 @@
       "template": { "rows": ["kind", "signature"], "summary": ["stability", "auth"] },
       "prefixes": ["api:"],
       "i18n": {
+        "en": { "options": { "http": "HTTP", "websocket": "WebSocket", "mcp": "MCP", "cli": "CLI" } },
         "zh-CN": {
           "label": "接口",
           "plural": "接口",
@@ -220,7 +223,7 @@
   ],
   "layouts": [
     { "id": "layers", "label": "Layers", "intent": "cluster", "types": ["module", "service"], "field": "layer", "description": "Modules and services in columns by layer, UI on the left, infrastructure on the right." },
-    { "id": "contracts", "label": "Contracts by kind", "intent": "matrix", "types": ["interface"], "rows": "stability", "cols": "kind", "description": "Interfaces by kind × stability." },
+    { "id": "contracts", "label": "Contracts by kind", "intent": "matrix", "types": ["interface"], "rows": "kind", "cols": "stability", "description": "Interfaces in rows by kind, columns by stability." },
     { "id": "risk-matrix", "label": "Risk matrix", "intent": "matrix", "types": ["risk"], "rows": "severity", "cols": "likelihood", "description": "Severity (high on top) × likelihood." },
     { "id": "adr-log", "label": "Decision log", "intent": "timeline", "types": ["decision"], "field": "date", "description": "ADRs in date order." },
     { "id": "incident-timeline", "label": "Incident timeline", "intent": "timeline", "types": ["event"], "field": "time", "description": "Incident events in time order, joined by arrows." }

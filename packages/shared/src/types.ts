@@ -55,15 +55,16 @@ export interface TypeLocale {
   units?: Readonly<Record<string, string>>
 }
 
-/** Display strings of a type in a locale (falls back to the declared English). */
-export function typeText(def: BlockTypeDef, locale?: string) {
-  const l = locale ? def.locales?.[locale] : undefined
+/** Display strings of a type in a locale (default English; falls back to the declared strings). */
+export function typeText(def: BlockTypeDef, locale = 'en') {
+  const l = def.locales?.[locale]
+  const en = def.locales?.en
   return {
     label: l?.label ?? def.label,
     plural: l?.plural ?? def.plural,
     description: l?.description ?? def.description,
     field: (key: string, fallback: string) => l?.fields?.[key] ?? fallback,
-    option: (value: string) => l?.options?.[value] ?? value,
+    option: (value: string) => l?.options?.[value] ?? en?.options?.[value] ?? value,
     unit: (key: string, fallback?: string) => l?.units?.[key] ?? fallback,
   }
 }
