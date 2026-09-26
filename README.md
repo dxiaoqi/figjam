@@ -56,7 +56,10 @@ board last active in the canvas, which is the default for tools called without `
 
 - **Autosave** is atomic (temp file, fsync, rename) and coalesced: a burst of edits is written once, at most 2 s after
   the first unsaved edit. Ctrl-C, SIGTERM (quitting the desktop app), SIGHUP and crashes flush unsaved edits first;
-  `kill -9` or a power cut can lose at most that last 2 s window, never corrupt the file.
+  `kill -9` or a power cut can lose at most that last 2 s window, never corrupt the file. The readable `<id>.json`
+  copy is only a convenience: it is rebuilt in a worker thread from the saved state, at most 10 s behind (and on
+  exit), so saving a 10k-block board doesn't stall the core. `AIFIG_JSON_COPY=off` turns it off (`sync` builds it
+  on the main thread).
 - **Version history** (board menu › *Version history…*, or the history button): a version is kept from just before
   any large edit (5+ items removed, or 25+ changed at once), every 10 minutes while a board changes, when a board is
   opened with unversioned edits, and before every restore or agent undo. Name a checkpoint any time. Versions are

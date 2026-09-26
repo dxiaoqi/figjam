@@ -20,6 +20,7 @@ import {
 } from './fileformat'
 import { migrate, type MigrationResult } from './migrations'
 import { NoticeStore } from './notices'
+import { readableCopies } from './readable-copy'
 import { DataSafety } from './safety'
 import { listVersions, readVersion } from './versions'
 
@@ -46,7 +47,8 @@ export interface ChangeCounts {
 
 /**
  * One board = one Yjs document, persisted as `<id>.aifig` (checksummed container, see fileformat.ts)
- * plus a readable `<id>.json` export. Saves are coalesced and atomic.
+ * plus a readable `<id>.json` copy (debounced, built off the event loop; see readable-copy.ts). Saves are
+ * coalesced and atomic.
  */
 export class Board {
   readonly doc = new Y.Doc()
@@ -170,8 +172,8 @@ export class Board {
     this.saveTimer.unref?.()
   }
 
-  encode() {
-    return encodeContainer(Y.encodeStateAsUpdate(this.doc), { savedAt: Date.now(), board: this.id, title: this.title, schema: this.schemaLabel })
+  encode(payload = Y.encodeStateAsUpdate(this.doc)) {
+    return encodeContainer(payload, { savedAt: Date.now(), board: this.id, title: this.title, schema: this.schemaLabel })
   }
 
   /** Write now if there are unsaved edits (or always with `force`). Returns false if the write failed. */
@@ -187,7 +189,8 @@ export class Board {
       console.error(`[core] pre-save snapshot of ${this.id} failed:`, e)
     }
     try {
-      const bytes = this.encode()
+      const payload = Y.encodeStateAsUpdate(this.doc)
+      const bytes = this.encode(payload)
       writeFileAtomic(this.file, bytes)
       this.dirty = false
       this.pending = { added: 0, removed: 0, updated: 0 }
@@ -200,7 +203,7 @@ export class Board {
           console.error(`[core] could not write ${this.externalPath}:`, e)
         }
       }
-      writeFileAtomic(this.jsonFile, JSON.stringify(this.toJSON(), null, 2))
+      readableCopies.schedule(this, payload)
     } catch (e) {
       console.error(`[core] could not save board ${this.id}:`, e)
       this.onSaveError?.(this, e as Error)
@@ -219,7 +222,8 @@ export class Board {
   remove() {
     this.deleted = true
     if (this.saveTimer) clearTimeout(this.saveTimer)
-    for (const f of [this.file, this.jsonFile]) fs.rmSync(f, { force: true })
+    fs.rmSync(this.file, { force: true })
+    readableCopies.remove(this.jsonFile)
   }
 
   touch() {
@@ -403,7 +407,7 @@ export class BoardRegistry {
     candidates.sort((a, b) => b.at - a.at)
 
     const kept = quarantine(file, id)
-    fs.rmSync(path.join(boardsDir(), `${id}.json`), { force: true })
+    readableCopies.remove(path.join(boardsDir(), `${id}.json`))
     for (const c of candidates) {
       try {
         const bytes = c.read()
@@ -479,6 +483,7 @@ export class BoardRegistry {
   flush() {
     let ok = true
     for (const b of this.boards.values()) ok = b.saveNow() && ok
+    readableCopies.flushSync()
     return ok
   }
 }
