@@ -9,6 +9,7 @@ import { ConnectDialog } from './ConnectDialog'
 import { HistoryMenu } from './HistoryMenu'
 import { openSettings } from './SettingsDialog'
 import { useT } from '../i18n'
+import { SkillsButton } from './SkillsPanel'
 
 export function useNow(interval = 1000) {
   const [now, setNow] = useState(Date.now())
@@ -77,6 +78,7 @@ export function TopRight() {
     <div className="pointer-events-auto m-3 flex items-center gap-2">
       <AgentsList />
       <div className="chrome flex h-10 items-center gap-0.5 rounded-xl px-1">
+        <SkillsButton />
         <HistoryMenu />
         <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-lg px-2.5 text-[13px]" onClick={() => setConnectOpen(true)}>
           <Plug className="size-4" strokeWidth={1.75} />

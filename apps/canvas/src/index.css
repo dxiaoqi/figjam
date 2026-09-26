@@ -509,6 +509,47 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+.aifig-type-rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  padding-top: 4px;
+}
+.aifig-type-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 20px;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.aifig-type-row-label {
+  width: 84px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-c);
+}
+.aifig-sticky .aifig-type-row-label {
+  color: inherit;
+  opacity: 0.62;
+}
+.aifig-type-row-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 550;
+}
+.aifig-type-row:hover .aifig-type-row-value {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .aifig-sticky.is-done .aifig-rich,
 .aifig-card.is-done .title {
   text-decoration: line-through;

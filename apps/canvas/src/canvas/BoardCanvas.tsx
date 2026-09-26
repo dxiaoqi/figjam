@@ -23,13 +23,16 @@ import { CommentLayer } from './CommentLayer'
 import { HeldNotice } from './HeldNotice'
 import { ReviewGhosts } from './ReviewGhosts'
 import { SnippetDialog } from '../chrome/SnippetDialog'
+import { SkillsPanel } from '../chrome/SkillsPanel'
+import { SaveTypeDialog } from '../chrome/SkillPrompts'
+import { bindBoardSkills } from './type-registry'
 import { FieldsPopover, TypeFilterBar, TypePalette, useRelationSuggestions } from './types-ui'
 import { EditorContext } from './editor-context'
 import { desktop } from '../lib/desktop'
 import { downloadDocument, downloadSnapshot } from '../lib/export'
 import { draftForPastedText, draftForTool, importImages, nextColor, shapeDefs } from './shapes'
 import { toast } from 'sonner'
-import { t, useT, type MessageKey } from '../i18n'
+import { relationLabel, t, useT } from '../i18n'
 
 const ME: Author = { kind: 'human', id: 'human:ui', name: 'You' }
 
@@ -60,7 +63,7 @@ function createEditor(doc: Editor['doc']) {
     gridSize: 8,
     toolKeys: { s: 'sticky', c: 'card', t: 'text' },
     lodStyle,
-    relationLabel: (r) => t(`relation.${r}` as MessageKey),
+    relationLabel,
     createForTool: (tool) => draftForTool(tool),
     createForConnectorDrop: (from) => {
       const d = draftForTool('sticky')!
@@ -85,6 +88,7 @@ export function BoardCanvas() {
   const [editor, setEditor] = useState<Editor | null>(null)
   useT()
   useRelationSuggestions(editor)
+  useEffect(() => bindBoardSkills(provider.doc), [provider])
 
   useEffect(() => {
     if (!synced) return
@@ -194,6 +198,8 @@ export function BoardCanvas() {
           <ActivityDialog />
           <PermissionPrompt />
           <SnippetDialog />
+          <SkillsPanel />
+          <SaveTypeDialog />
           <StatusBanner />
           <DataNotices />
           <VersionHistory />

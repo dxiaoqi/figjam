@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "types": {
+    "probe": {
+      "label": "Probe",
+      "base": "card",
+      "color": "pink",
+      "icon": "Search",
+      "fields": [{ "key": "level", "label": "Level", "kind": "number" }],
+      "template": { "rows": ["level"] }
+    }
+  },
+  "actions": [
+    { "id": "peek", "label": "Peek at the board", "tool": "aifig.get_board", "args": { "format": "markdown" }, "appliesTo": ["probe"] },
+    { "id": "search", "label": "Search the web", "tool": "web.search", "args": { "query": "{{title}}" }, "appliesTo": ["probe"], "output": { "mode": "blocks", "type": "idea" } }
+  ]
+}

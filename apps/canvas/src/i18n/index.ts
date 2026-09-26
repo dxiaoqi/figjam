@@ -82,6 +82,9 @@ export function t(key: MessageKey, vars?: Vars): string {
   return vars ? s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m)) : s
 }
 
+/** Label of a connector relation: built-in relations are translated, skill relations show as declared. */
+export const relationLabel = (r: string) => (`relation.${r}` in en ? t(`relation.${r}` as MessageKey) : r)
+
 /** Like `t`, but placeholders may be React nodes (e.g. `<code>`), for sentences with inline markup. */
 export function tn(key: MessageKey, vars: Record<string, ReactNode>): ReactNode {
   const s = lookup(key, vars as Vars)

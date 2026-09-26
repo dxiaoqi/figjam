@@ -3,7 +3,7 @@ import { SPACING, snap } from '@aifig/shared'
 import { cardContentHeight, maxBlockHeight, richTextHeight, stickyContentHeight, measureCard, measureText, typeChrome } from '@aifig/shared'
 import { FONT_SIZES } from '@aifig/shared'
 
-export type LayoutIntent = 'grid' | 'row' | 'stack' | 'cluster' | 'tree'
+export type LayoutIntent = 'grid' | 'row' | 'stack' | 'cluster' | 'tree' | 'matrix' | 'timeline' | 'flow'
 
 export interface LayoutItem {
   key: string
@@ -12,6 +12,11 @@ export interface LayoutItem {
   h: number
   group?: string
   parentKey?: string
+  /** matrix */
+  row?: string
+  col?: string
+  /** timeline */
+  date?: string
 }
 
 export interface Placed {
@@ -23,7 +28,7 @@ export interface Placed {
 
 export interface LayoutResult {
   placed: Map<string, Placed>
-  headings: { group: string; x: number; y: number }[]
+  headings: { group: string; x: number; y: number; small?: boolean }[]
   edges: [string, string][]
 }
 
@@ -157,10 +162,94 @@ function tree(items: LayoutItem[], direction: 'right' | 'down'): LayoutResult {
   return { placed, headings: [], edges }
 }
 
+/** Compare timeline labels: real dates, then quarters / versions / numbers, then text. */
+export function compareDates(a?: string, b?: string) {
+  if (a === b) return 0
+  if (!a) return 1
+  if (!b) return -1
+  const t = (s: string) => {
+    const q = s.match(/^Q([1-4])\s*(\d{4})$|^(\d{4})\s*Q([1-4])$/i)
+    if (q) return new Date(Number(q[2] ?? q[3]), (Number(q[1] ?? q[4]) - 1) * 3, 1).getTime()
+    const d = Date.parse(/^\d{4}-\d{2}$/.test(s) ? `${s}-01` : s)
+    return Number.isNaN(d) ? null : d
+  }
+  const ta = t(a)
+  const tb = t(b)
+  if (ta !== null && tb !== null) return ta - tb
+  return a.localeCompare(b, undefined, { numeric: true })
+}
+
+/** Rows × columns with small axis labels; several blocks in a cell stack. */
+function matrix(items: LayoutItem[], labelSize: (g: string) => { w: number; h: number }): LayoutResult {
+  const rows = [...new Set(items.map((i) => i.row?.trim() || '—'))]
+  const cols = [...new Set(items.map((i) => i.col?.trim() || '—'))]
+  const rowOf = (i: LayoutItem) => i.row?.trim() || '—'
+  const colOf = (i: LayoutItem) => i.col?.trim() || '—'
+  const labelW = snap(Math.max(80, ...rows.map((r) => labelSize(r).w)) + GAP)
+  const headH = snap(Math.max(...cols.map((c) => labelSize(c).h)) + 12)
+  const colW = cols.map((c) => Math.max(labelSize(c).w, ...items.filter((i) => colOf(i) === c).map((i) => i.w)))
+  const colX: number[] = []
+  let x = labelW
+  for (const w of colW) {
+    colX.push(x)
+    x += w + GAP
+  }
+  const placed = new Map<string, Placed>()
+  const headings: LayoutResult['headings'] = cols.map((c, i) => ({ group: c, x: colX[i], y: 0, small: true }))
+  let y = headH
+  for (const r of rows) {
+    headings.push({ group: r, x: 0, y, small: true })
+    let rowH = 0
+    cols.forEach((c, ci) => {
+      let cy = y
+      for (const it of items.filter((i) => rowOf(i) === r && colOf(i) === c)) {
+        placed.set(it.key, { x: colX[ci], y: snap(cy), w: it.w, h: it.h })
+        cy += it.h + GAP
+      }
+      rowH = Math.max(rowH, cy - y - GAP)
+    })
+    y = snap(y + Math.max(rowH, 40) + CLUSTER_GAP / 2)
+  }
+  return { placed, headings, edges: [] }
+}
+
+/** Left to right in date order, a label above each block, joined by arrows. */
+function timeline(items: LayoutItem[], labelSize: (g: string) => { w: number; h: number }): LayoutResult {
+  const sorted = items.map((it, i) => ({ it, i })).sort((a, b) => compareDates(a.it.date, b.it.date) || a.i - b.i).map((x) => x.it)
+  const headH = snap(Math.max(24, ...sorted.map((i) => labelSize(i.date ?? '').h)) + 8)
+  const placed = new Map<string, Placed>()
+  const headings: LayoutResult['headings'] = []
+  let x = 0
+  for (const it of sorted) {
+    if (it.date) headings.push({ group: it.date, x, y: 0, small: true })
+    placed.set(it.key, { x, y: headH, w: it.w, h: it.h })
+    x = snap(x + Math.max(it.w, labelSize(it.date ?? '').w) + CLUSTER_GAP)
+  }
+  const edges: [string, string][] = sorted.slice(1).map((it, i) => [sorted[i].key, it.key])
+  return { placed, headings, edges }
+}
+
+/** Steps in order, left to right, wrapping into rows; each step points to the next. */
+function flow(items: LayoutItem[], columns = 5): LayoutResult {
+  const placed = new Map<string, Placed>()
+  const cols = Math.max(1, Math.min(columns, items.length))
+  const rowH: number[] = []
+  items.forEach((it, i) => (rowH[Math.floor(i / cols)] = Math.max(rowH[Math.floor(i / cols)] ?? 0, it.h)))
+  const colW = Math.max(...items.map((i) => i.w))
+  items.forEach((it, i) => {
+    const r = Math.floor(i / cols)
+    const c = i % cols
+    const y = rowH.slice(0, r).reduce((a, h) => a + h + CLUSTER_GAP, 0)
+    placed.set(it.key, { x: snap(c * (colW + CLUSTER_GAP)), y: snap(y), w: it.w, h: it.h })
+  })
+  const edges: [string, string][] = items.slice(1).map((it, i) => [items[i].key, it.key])
+  return { placed, headings: [], edges }
+}
+
 export function layout(
   items: LayoutItem[],
   intent: LayoutIntent,
-  opts: { columns?: number; direction?: 'right' | 'down'; headingSize: (g: string) => { w: number; h: number } },
+  opts: { columns?: number; direction?: 'right' | 'down'; headingSize: (g: string) => { w: number; h: number }; labelSize?: (g: string) => { w: number; h: number } },
 ): LayoutResult {
   switch (intent) {
     case 'row':
@@ -171,6 +260,12 @@ export function layout(
       return cluster(items, opts.headingSize)
     case 'tree':
       return tree(items, opts.direction ?? 'right')
+    case 'matrix':
+      return matrix(items, opts.labelSize ?? opts.headingSize)
+    case 'timeline':
+      return timeline(items, opts.labelSize ?? opts.headingSize)
+    case 'flow':
+      return flow(items, opts.columns)
     default:
       return { placed: grid(items, opts.columns), headings: [], edges: [] }
   }

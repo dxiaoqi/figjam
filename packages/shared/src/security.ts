@@ -12,11 +12,13 @@ export const WS_PROTOCOL = 'aifig'
 export const WS_TOKEN_PREFIX = 'aifig-token.'
 
 /** What an action needs the person's OK for. Extend here (and in the prompt copy) rather than inventing ad-hoc checks. */
-export type Capability = 'network' | 'secrets'
+export type Capability = 'network' | 'secrets' | 'tool'
 
 export const CAPABILITIES: Record<Capability, { label: string; verb: string }> = {
   network: { label: 'Network access', verb: 'connect to' },
   secrets: { label: 'Secret access', verb: 'use the secret' },
+  /** a skill (L1) calling a tool by name; target = the tool, e.g. web.search */
+  tool: { label: 'Tool use', verb: 'use the tool' },
 }
 
 export type PermissionDecision = 'allow-once' | 'allow-always' | 'deny'
@@ -51,7 +53,7 @@ export interface PermissionGrant {
   at: number
 }
 
-export type ActivityCategory = 'network' | 'secret' | 'permission' | 'auth'
+export type ActivityCategory = 'network' | 'secret' | 'permission' | 'auth' | 'skill'
 export type ActivityOutcome = 'allowed' | 'denied' | 'ok' | 'error'
 
 export interface ActivityEntry {

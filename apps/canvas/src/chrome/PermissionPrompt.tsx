@@ -1,4 +1,4 @@
-import { Globe, KeyRound, ShieldQuestion } from 'lucide-react'
+import { Globe, KeyRound, ShieldQuestion, Wrench } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -49,7 +49,7 @@ export function PermissionPrompt() {
 
   if (!req) return null
   const cap = CAPABILITIES[req.capability]
-  const Icon = req.capability === 'network' ? Globe : KeyRound
+  const Icon = req.capability === 'network' ? Globe : req.capability === 'tool' ? Wrench : KeyRound
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && answer('deny')}>
       <DialogContent className="sm:max-w-md" data-permission-prompt={req.id}>

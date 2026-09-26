@@ -1,4 +1,4 @@
-import { Globe, KeyRound, ShieldCheck, ShieldX, X } from 'lucide-react'
+import { Globe, KeyRound, Puzzle, ShieldCheck, ShieldX, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -9,12 +9,13 @@ import { cn } from '@/lib/utils'
 import { apiFetch } from '../lib/auth'
 import { SECURITY_EVENT } from '../sync/provider'
 
-const ICON: Record<ActivityCategory, typeof Globe> = { network: Globe, secret: KeyRound, permission: ShieldCheck, auth: ShieldX }
+const ICON: Record<ActivityCategory, typeof Globe> = { network: Globe, secret: KeyRound, permission: ShieldCheck, auth: ShieldX, skill: Puzzle }
 const FILTERS: { id: ActivityCategory | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'network', label: 'Network' },
   { id: 'secret', label: 'Secrets' },
   { id: 'permission', label: 'Permissions' },
+  { id: 'skill', label: 'Skills' },
   { id: 'auth', label: 'Blocked' },
 ]
 

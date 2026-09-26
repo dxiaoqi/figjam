@@ -269,6 +269,44 @@ back when you re-promote. The filter bar (top) highlights one type and field val
 connectors between typed blocks get a suggested relation (a quote *supports* an insight). Markdown exports are
 organized by type. Types stay small on purpose: anything deeper belongs to Skills.
 
+### Skills
+
+A skill is a standard [Agent Skill](https://agentskills.io) folder — any agent can read its `SKILL.md` — with an
+optional canvas extension that ai-figma reads:
+
+```
+competitor-kit/
+  SKILL.md              # frontmatter: name, description, metadata.aifig { version, canvas, capability, permissions }
+  canvas/blocks.json    # block types (fields + card template), relations, layouts, actions, prompts
+  canvas/prompts/*.md   # prompt templates
+```
+
+- **Block types** build on typed blocks: namespaced ids (`competitor-kit.competitor`), a sticky or card base, token
+  color and icon, up to 8 fields (text, number, choice, yes/no) and a card template (`rows` shown on the block,
+  `summary` as a one-liner). Relations between types are suggested on connectors.
+- **Layouts** use the `matrix`, `timeline`, `flow`, `cluster` and `type` intents (also available to agents directly:
+  `create_blocks` `layout: "matrix" | "timeline" | "flow"` with `row` / `col` / `date`, and `arrange`).
+- **Capabilities**: **L0** is declarative (types, templates, layouts, instructions). **L1** can also call tools by
+  name — built-in ones (`aifig.get_board`, `aifig.create_blocks`, …) or tools of MCP servers you configure in
+  `~/.aifig/mcp.json` (`{ "mcpServers": { "web": { "command": "…", "args": [] } } }` → `web.search`). The first
+  use of a tool on a board asks you (allow once / always on this board / deny); results arrive as a change set,
+  and every call and decision is in the board's activity log (Skills › Activity), where grants can be revoked.
+  L2 (sandboxed scripts) is not supported yet.
+- Skills come from `skills/builtin` (`research-kit`, `competitor-kit`), `~/.aifig/skills` (installed) and folders
+  under `aifig skill dev`. Enable them per board in the **Skills** panel (puzzle icon, top right); disabling keeps
+  blocks' types and fields. Agents see them through MCP: `list_skills`, `get_skill` (instructions, types, layouts),
+  `apply_skill_layout`, `run_skill_action`, and `aifig://skills/<name>/SKILL.md` resources.
+- **Save as block type** (right-click a card › Set as… › Save as block type…) turns a card into a type — `Key: value`
+  lines become fields — and writes a standard skill folder to `~/.aifig/skills`, downloadable as a zip.
+
+```bash
+aifig skill new persona-kit            # scaffold SKILL.md + canvas/blocks.json
+aifig skill dev ./persona-kit --enable # validate on every save, hot-reload into boards that use it
+aifig skill validate ./persona-kit     # errors point at file › path
+aifig skill install ./persona-kit      # copy into ~/.aifig/skills
+aifig skill list | show <name> | enable <name> | disable <name> | activity
+```
+
 ### Web snippets
 
 The globe in the toolbar (or pasting a YouTube / Figma / CodePen / Loom link) adds a web snippet: an embedded URL or

@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { customAlphabet } from 'nanoid'
 import * as Y from 'yjs'
-import type { Asset, Block, BoardSummary, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
+import { skillTypeRegistry } from '@aifig/shared'
+import type { Asset, Block, BoardSkill, BoardSummary, ChangeSet, Connector, Rect, Thread, TypeRegistry } from '@aifig/shared'
 import { cleanStaleTemps, writeFileAtomic } from './atomic'
 import { backupFile, listBackups, quarantine } from './backups'
 import { aifigHome } from './config'
@@ -55,6 +56,13 @@ export class Board {
   readonly changeSets = this.doc.getMap<ChangeSet>('changeSets')
   readonly assets = this.doc.getMap<Asset>('assets')
   readonly threads = this.doc.getMap<Thread>('threads')
+  /** Skills enabled on this board (snapshots, so types render without the skill folder). */
+  readonly skills = this.doc.getMap<BoardSkill>('skills')
+
+  /** Built-in types plus the types of the skills enabled on this board. */
+  types(): TypeRegistry {
+    return skillTypeRegistry(this.skills.values())
+  }
   private saveTimer: NodeJS.Timeout | null = null
   private firstDirtyAt = 0
   deleted = false
