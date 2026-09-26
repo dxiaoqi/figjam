@@ -384,6 +384,52 @@ for (const action of ['accept', 'reject'] as const) {
     })
 }
 
+const KIND_LABEL: Record<string, string> = { auto: 'auto', checkpoint: 'checkpoint', 'before-restore': 'pre-restore', recovered: 'recovered', opened: 'opened' }
+
+program
+  .command('versions')
+  .description('version history of the board (newest first)')
+  .option('-n, --limit <n>', 'how many', (v) => Number(v))
+  .action((o) =>
+    run('list_versions', { limit: o.limit }, (r) => {
+      if (!r.versions.length) return console.log('No versions yet — they are taken automatically as the board changes, or with `aifig checkpoint "name"`.')
+      for (const v of r.versions) {
+        const at = new Date(v.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
+        console.log(`${v.id}  ${at.padEnd(20)}  ${(KIND_LABEL[v.kind] ?? v.kind).padEnd(11)}  ${String(v.blockCount).padStart(4)} blocks  ${v.name}`)
+      }
+    }),
+  )
+
+program
+  .command('checkpoint <name...>')
+  .description('save a named checkpoint of the board')
+  .action((name: string[]) => run('create_version', { name: name.join(' ') }, (r) => console.log(`✓ checkpoint ${r.version.id} “${r.version.name}” (${r.version.blockCount} blocks)`)))
+
+program
+  .command('restore <version>')
+  .description('restore a version (the current state is checkpointed first; as an agent it goes through review)')
+  .action((version: string) =>
+    run('restore_version', { version }, (r) => {
+      if (r.unchanged) return console.log('The board already matches that version.')
+      const s = r.summary
+      console.log(`✓ restored ${r.restored}: ${s.added} back, ${s.removed} removed, ${s.changed} changed`)
+      console.log(r.changeSet ? csLine(r) : `  undo with: aifig --human restore ${r.checkpoint}`)
+    }),
+  )
+
+program
+  .command('backups')
+  .description('print (or --open) the backup folder')
+  .option('--open', 'open it in the file manager')
+  .action(async (o) => {
+    const r = await callCore('open_backup_folder', { board: program.opts().board, reveal: !!o.open }, { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' })
+    if (!r.ok) {
+      console.error(`✗ ${r.error}`)
+      process.exit(1)
+    }
+    console.log((r.result as { path: string }).path)
+  })
+
 program
   .command('token')
   .description('print the local access token (for MCP-over-HTTP configs); --rotate replaces it')
