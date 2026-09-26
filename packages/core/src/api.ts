@@ -42,7 +42,12 @@ import {
   type CallResponse,
   type CallerInfo,
 } from '@aifig/shared'
+import { spawn } from 'node:child_process'
+import { diffBlocks, isEmptyPlan, planRestore } from '@aifig/shared'
+import { backupRoot, boardBackupDir } from './backups'
 import { aifigHome, Board, BoardRegistry, newId } from './board'
+import { CorruptFileError, FutureVersionError } from './fileformat'
+import { deleteVersion, listVersions, readVersion } from './versions'
 import {
   bboxOf,
   findFreeSpot,
@@ -160,6 +165,22 @@ class Recorder {
     if (!before) return
     this.board.connectors.delete(id)
     if (this.changeSet) this.entries.push({ op: 'delete', target: 'connector', id, before })
+  }
+
+  /** Put back a block exactly as it was in a version (keeping its original author). */
+  restoreBlock(b: Block) {
+    const before = this.board.blocks.get(b.id)
+    if (!before) this.entries.push({ op: 'create', target: 'block', id: b.id })
+    else if (this.changeSet && !this.alreadyTracked(b.id)) this.entries.push({ op: 'update', target: 'block', id: b.id, before })
+    this.board.blocks.set(b.id, { ...b, editedBy: this.author, updatedAt: Date.now(), ...this.pendingFields })
+    this.touched.add(b.id)
+  }
+
+  restoreConnector(c: Connector) {
+    const before = this.board.connectors.get(c.id)
+    if (!before) this.entries.push({ op: 'create', target: 'connector', id: c.id })
+    else if (this.changeSet && !this.alreadyTracked(c.id)) this.entries.push({ op: 'update', target: 'connector', id: c.id, before })
+    this.board.connectors.set(c.id, { ...c, updatedAt: Date.now(), ...this.pendingFields })
   }
 }
 
@@ -317,7 +338,14 @@ export class CanvasCore {
         return { board: b.summary() }
       }
       case 'open_file': {
-        const b = this.registry.openFile(a.path)
+        let b: Board
+        try {
+          b = this.registry.openFile(a.path)
+        } catch (e) {
+          if (e instanceof FutureVersionError) throw new ToolError(e.message)
+          if (e instanceof CorruptFileError) throw new ToolError(`“${path.basename(a.path)}” is damaged and can’t be opened (${e.reason}). If it was an ai-figma board, look for a copy in ${backupRoot()}.`)
+          throw e
+        }
         return { board: b.summary() }
       }
       case 'save_file': {
@@ -422,7 +450,135 @@ export class CanvasCore {
         return this.exportBoard(a)
       case 'get_design_tokens':
         return tokenManifest()
+      case 'list_versions':
+        return this.listVersions(a)
+      case 'create_version': {
+        const b = this.board(a.board)
+        return { board: b.id, version: this.registry.safety.snapshot(b, 'checkpoint', a.name.trim(), caller.name) }
+      }
+      case 'restore_version':
+        return this.restoreVersion(a, caller)
+      case 'prepare_restore':
+        return this.restoreVersion({ ...a, prepare: true }, caller)
+      case 'get_version':
+        return this.getVersion(a, caller)
+      case 'delete_version': {
+        const b = this.board(a.board)
+        deleteVersion(b.id, a.version)
+        return { board: b.id, deleted: a.version }
+      }
+      case 'get_notices':
+        return { notices: this.registry.notices.list(a.board), backupFolder: backupRoot() }
+      case 'dismiss_notice':
+        return { dismissed: this.registry.notices.dismiss(a.id) }
+      case 'open_backup_folder':
+        return this.openBackupFolder(a)
     }
+  }
+
+  // ---- versions & backups -------------------------------------------------
+
+  private listVersions(a: Args) {
+    const board = this.board(a.board)
+    const versions = listVersions(board.id).slice(0, a.limit ?? 50)
+    return { board: board.id, count: versions.length, versions: versions.map((v) => ({ ...v, createdAtIso: new Date(v.createdAt).toISOString() })) }
+  }
+
+  /** A version as a detached, read-only board. */
+  private versionBoard(board: Board, id: string) {
+    try {
+      const v = readVersion(board.id, id)
+      return { info: v.info, board: Board.fromBytes(board.id, v.payload, v.file, { persist: false }).board }
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT' || e instanceof CorruptFileError) {
+        const known = listVersions(board.id).slice(0, 5).map((v) => v.id)
+        throw new ToolError(e instanceof CorruptFileError && (e as CorruptFileError).reason.includes('checksum') ? `Version "${id}" is damaged and can't be restored.` : `No version "${id}" on "${board.title}".${known.length ? ` Recent: ${known.join(', ')}` : ''}`)
+      }
+      if (e instanceof FutureVersionError) throw new ToolError(e.message)
+      throw e
+    }
+  }
+
+  async versionPreview(boardRef: string, id: string, theme: 'light' | 'dark') {
+    const board = this.registry.get(boardRef)
+    if (!board) return null
+    try {
+      const { board: vb } = this.versionBoard(board, id)
+      return (await renderSnapshot(vb, { theme, format: 'svg' })).svg
+    } catch {
+      return null
+    }
+  }
+
+  private getVersion(a: Args, _caller: CallerInfo) {
+    const board = this.board(a.board)
+    const { info, board: vb } = this.versionBoard(board, a.version)
+    return {
+      board: board.id,
+      version: info,
+      /** What restoring would do to the current board. */
+      diff: diffBlocks(board.blocks.values(), vb.blocks.values()),
+      blocks: [...vb.blocks.values()],
+      connectors: [...vb.connectors.values()],
+    }
+  }
+
+  private copyMissingAssets(board: Board, from: Board) {
+    for (const [id, asset] of from.assets) if (!board.assets.has(id)) board.assets.set(id, asset)
+  }
+
+  /**
+   * Restore a version: checkpoint the current state, then write the difference as ordinary edits — direct
+   * for people, a reviewable change set for agents — so it can be undone like any other change. `prepare`
+   * (the canvas) only checkpoints and returns the plan; the canvas applies it itself so ⌘Z undoes it.
+   */
+  private restoreVersion(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    const { info, board: vb } = this.versionBoard(board, a.version)
+    const label = info.name || new Date(info.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
+    const plan = planRestore({ blocks: board.blocks.values(), connectors: board.connectors.values() }, { blocks: vb.blocks.values(), connectors: vb.connectors.values() })
+    const summary = diffBlocks(board.blocks.values(), vb.blocks.values())
+    if (isEmptyPlan(plan)) return { board: board.id, restored: info.id, unchanged: true, summary, changeSet: null, checkpoint: null }
+    board.saveNow()
+    const checkpoint = this.registry.safety.snapshot(board, 'before-restore', `Before restoring “${label}”`, caller.name)
+    board.doc.transact(() => this.copyMissingAssets(board, vb), 'api')
+    if (a.prepare && caller.kind === 'human') return { board: board.id, restored: info.id, checkpoint: checkpoint.id, summary, plan }
+    const { changeSet } = this.edit(board, caller, a.intent, `Restore version “${label}”`, (rec) => {
+      for (const b of plan.upsertBlocks) rec.restoreBlock(b)
+      for (const id of plan.deleteBlocks) rec.deleteBlock(id)
+      for (const c of plan.upsertConnectors) rec.restoreConnector(c)
+      for (const id of plan.deleteConnectors) rec.deleteConnector(id)
+    })
+    return {
+      board: board.id,
+      restored: info.id,
+      checkpoint: checkpoint.id,
+      summary,
+      changeSet,
+      note: changeSet ? 'The restore is waiting for review in the canvas.' : `Restored. To go back, restore version ${checkpoint.id}.`,
+    }
+  }
+
+  private async openBackupFolder(a: Args) {
+    const board = a.board ? this.board(a.board) : null
+    const dir = board ? boardBackupDir(board.id, board.title) : backupRoot()
+    const target = fs.existsSync(dir) ? dir : backupRoot()
+    fs.mkdirSync(target, { recursive: true })
+    if (a.reveal === false) return { path: target, opened: false }
+    const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
+    const opened = await new Promise<boolean>((resolve) => {
+      try {
+        const p = spawn(cmd, [target], { detached: true, stdio: 'ignore' })
+        p.once('error', () => resolve(false))
+        p.once('spawn', () => {
+          p.unref()
+          resolve(true)
+        })
+      } catch {
+        resolve(false)
+      }
+    })
+    return { path: target, opened }
   }
 
   // ---- helpers ------------------------------------------------------------
@@ -1533,6 +1689,8 @@ export class CanvasCore {
       return who && (c.author.id.toLowerCase() === who || c.author.name.toLowerCase() === who)
     })
     if (!sets.length) throw new ToolError(a.change_set ? `No change set "${a.change_set}" to undo` : `No changes by "${a.author ?? 'that agent'}" to undo`)
+    board.saveNow()
+    this.registry.safety.snapshot(board, 'auto', sets.length === 1 ? `Before undoing “${sets[0].intent}”` : `Before undoing ${sets.length} change sets`, caller.name)
     const kept: { id: string; reason: string }[] = []
     let reverted = 0
     board.doc.transact(() => {

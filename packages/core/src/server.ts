@@ -16,6 +16,7 @@ import { CanvasCore } from './api'
 import { buildMcpServer } from './mcp'
 import { Assistant } from './assistant'
 import { aifigHome, type Board } from './board'
+import { installFlushOnExit } from './safety'
 
 const MSG_SYNC = 0
 
@@ -177,6 +178,13 @@ export async function startCore(port = CORE_PORT) {
         res.writeHead(200, { 'content-type': exp[2] === 'md' ? 'text/markdown; charset=utf-8' : 'application/json; charset=utf-8', 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(out.filename)}` })
         return res.end(out.content)
       }
+      const vprev = url.pathname.match(/^\/api\/boards\/([^/]+)\/versions\/([^/]+)\/preview\.svg$/)
+      if (vprev) {
+        const svg = await core.versionPreview(decodeURIComponent(vprev[1]), decodeURIComponent(vprev[2]), url.searchParams.get('theme') === 'dark' ? 'dark' : 'light')
+        if (!svg) return json(res, 404, { ok: false, error: 'No such version' })
+        res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'private, max-age=31536000, immutable' })
+        return res.end(svg)
+      }
       const snap = url.pathname.match(/^\/api\/boards\/([^/]+)\/snapshot\.(png|svg)$/)
       if (snap) {
         const r = await core.call({
@@ -269,11 +277,6 @@ export async function startCore(port = CORE_PORT) {
   fs.mkdirSync(aifigHome(), { recursive: true })
   fs.writeFileSync(path.join(aifigHome(), 'core.json'), JSON.stringify({ port, pid: process.pid, startedAt: Date.now() }))
 
-  const shutdown = () => {
-    core.registry.flush()
-    process.exit(0)
-  }
-  process.on('SIGINT', shutdown)
-  process.on('SIGTERM', shutdown)
+  installFlushOnExit(() => core.registry.flush())
   return { core, server, port }
 }

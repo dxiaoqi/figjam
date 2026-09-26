@@ -348,6 +348,26 @@ export const toolDefs = {
     description: 'The allowed colors, sizes and spacing. Blocks can only use these values.',
     input: {},
   },
+  list_versions: {
+    title: 'List versions',
+    description: 'Version history of a board, newest first: automatic snapshots, named checkpoints and the state before each restore.',
+    input: { board, limit: z.number().int().min(1).max(200).optional().describe('Default 50.') },
+  },
+  create_version: {
+    title: 'Create checkpoint',
+    description: 'Save a named checkpoint of the board (kept until someone deletes it). Good before a large reorganization.',
+    input: { board, name: z.string().min(1).max(120).describe('Short name, e.g. "Before clustering".') },
+  },
+  restore_version: {
+    title: 'Restore version',
+    description:
+      'Bring the board back to a version from list_versions. The current state is checkpointed first. From an agent the restore is a change set the human reviews; it can be undone like any other change.',
+    input: {
+      board,
+      version: z.string().describe('Version id from list_versions.'),
+      intent,
+    },
+  },
 } as const
 
 export type ToolName = keyof typeof toolDefs
@@ -386,6 +406,13 @@ export const humanToolDefs = {
   open_file: { input: { path: z.string() } },
   save_file: { input: { board: z.string(), path: z.string() } },
   delete_board: { input: { board: z.string() } },
+  get_version: { input: { board, version: z.string() } },
+  /** Checkpoint the current state and return the restore edits; the canvas applies them so ⌘Z undoes the restore. */
+  prepare_restore: { input: { board, version: z.string() } },
+  delete_version: { input: { board, version: z.string() } },
+  get_notices: { input: { board: z.string().optional() } },
+  dismiss_notice: { input: { id: z.string() } },
+  open_backup_folder: { input: { board: z.string().optional(), reveal: z.boolean().optional().describe('Open it in the file manager (default true).') } },
 } as const
 
 export type HumanToolName = keyof typeof humanToolDefs
