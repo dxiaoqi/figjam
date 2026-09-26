@@ -164,7 +164,7 @@ function parseCanvas(raw: unknown, skill: string, skillDir: string, canvasDir: s
       }
       const fieldsT = strings(raw.fields, 'fields')
       for (const k of Object.keys(fieldsT ?? {})) if (!keys.has(k)) warnings.push(at(`${lw}.fields`, `"${k}" is not one of this type's fields`))
-      locales[loc] = { label: raw.label ? String(raw.label) : undefined, plural: raw.plural ? String(raw.plural) : undefined, description: raw.description ? String(raw.description) : undefined, fields: fieldsT, options: strings(raw.options, 'options'), units: strings(raw.units, 'units') }
+      locales[loc] = { label: raw.label ? String(raw.label) : undefined, plural: raw.plural ? String(raw.plural) : undefined, description: raw.description ? String(raw.description) : undefined, fields: fieldsT, options: strings(raw.options, 'options'), units: strings(raw.units, 'units'), relations: strings(raw.relations, 'relations') }
     }
     const def: BlockTypeDef = {
       id: own(localId),

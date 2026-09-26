@@ -23,7 +23,8 @@
           "plural": "竞品",
           "fields": { "segment": "人群", "positioning": "定位", "price": "价格", "url": "网站" },
           "options": { "budget": "低价", "mainstream": "主流", "premium": "高端" },
-          "units": { "price": "美元/席位/月" }
+          "units": { "price": "美元/席位/月" },
+          "relations": { "competes with": "竞争" }
         }
       }
     },
@@ -46,7 +47,8 @@
           "label": "功能",
           "plural": "功能",
           "fields": { "status": "状态", "competitor": "竞品", "capability": "能力" },
-          "options": { "has": "有", "partial": "部分", "missing": "没有" }
+          "options": { "has": "有", "partial": "部分", "missing": "没有" },
+          "relations": { "belongs to": "属于", "reveals": "揭示" }
         }
       }
     },
@@ -59,7 +61,7 @@
       "glyph": "▲",
       "description": "A dated release or event.",
       "fields": [{ "key": "date", "label": "Date", "kind": "text", "placeholder": "2026-03" }, { "key": "competitor", "label": "Competitor", "kind": "text" }],
-      "i18n": { "zh-CN": { "label": "发布", "plural": "发布", "fields": { "date": "日期", "competitor": "竞品" } } }
+      "i18n": { "zh-CN": { "label": "发布", "plural": "发布", "fields": { "date": "日期", "competitor": "竞品" }, "relations": { "belongs to": "属于" } } }
     },
     "opportunity": {
       "label": "Opportunity",
@@ -80,7 +82,8 @@
           "label": "机会",
           "plural": "机会",
           "fields": { "segment": "面向", "evidence": "证据", "size": "规模" },
-          "options": { "small": "小", "medium": "中", "large": "大" }
+          "options": { "small": "小", "medium": "中", "large": "大" },
+          "relations": { "contains": "包含", "solved by": "解决方案" }
         }
       }
     },
@@ -104,7 +107,8 @@
           "label": "方案",
           "plural": "方案",
           "fields": { "impact": "影响", "effort": "投入", "confidence": "把握", "status": "状态" },
-          "options": { "low": "低", "medium": "中", "high": "高", "idea": "想法", "exploring": "探索中", "committed": "已承诺", "shipped": "已上线", "dropped": "已放弃" }
+          "options": { "low": "低", "medium": "中", "high": "高", "idea": "想法", "exploring": "探索中", "committed": "已承诺", "shipped": "已上线", "dropped": "已放弃" },
+          "relations": { "tested by": "验证方式", "moves": "推动", "needs": "需要" }
         }
       }
     },
@@ -127,7 +131,8 @@
           "label": "实验",
           "plural": "实验",
           "fields": { "assumption": "验证", "method": "方法", "status": "状态" },
-          "options": { "planned": "计划中", "running": "进行中", "passed": "通过", "failed": "未通过" }
+          "options": { "planned": "计划中", "running": "进行中", "passed": "通过", "failed": "未通过" },
+          "relations": { "measures": "衡量" }
         }
       }
     },

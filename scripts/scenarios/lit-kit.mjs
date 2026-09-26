@@ -171,7 +171,8 @@ export async function run({ core, agent, lang, check, out }) {
   check('every piece of evidence cites a paper on the board, with a location', ev.length === findings.length && ev.every((e) => cites.has(d(e).cite) && d(e).loc), `${ev.length} findings from ${cites.size} papers`)
   check('every claim is backed by connected evidence; the contested one keeps its counter-evidence', claims.every((c) => into(c.id, 'lit-kit.evidence').length >= 1) && claims.filter((c) => d(c).consensus === 'contested').every((c) => into(c.id, 'lit-kit.counter').length >= 1), claims.map((c) => `${d(c).rq}:${d(c).consensus}`).join(' '))
   const axis = blocks.filter((b) => b.layoutRole === 'axis').map((b) => b.text.replace(/\*/g, ''))
-  check('argument map: a row per research question, evidence → claims ← counter-evidence', ['RQ1', 'RQ2', 'RQ3'].every((r) => axis.includes(r)) && (() => {
+  const rowY = (r) => blocks.find((b) => b.layoutRole === 'axis' && b.text.replace(/\*/g, '') === r)?.y ?? -1
+  check('argument map: a row per research question in order, evidence → claims ← counter-evidence', ['RQ1', 'RQ2', 'RQ3'].every((r) => axis.includes(r)) && rowY('RQ1') < rowY('RQ2') && rowY('RQ2') < rowY('RQ3') && (() => {
     const c = claims.find((x) => d(x).rq === 'RQ1')
     return into(c.id, 'lit-kit.evidence').every((e) => e.x < c.x) && into(c.id, 'lit-kit.counter').every((e) => e.x > c.x)
   })())

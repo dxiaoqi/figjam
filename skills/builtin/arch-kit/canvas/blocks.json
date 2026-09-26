@@ -36,7 +36,8 @@
             "changing": "变更中",
             "new": "新增",
             "deprecated": "已废弃"
-          }
+          },
+          "relations": { "depends on": "依赖", "exposes": "暴露", "stores in": "存储于", "uses": "使用" }
         }
       }
     },
@@ -61,7 +62,8 @@
           "label": "服务",
           "plural": "服务",
           "fields": { "runtime": "运行时", "port": "端口", "entry": "入口", "layer": "层" },
-          "options": { "ui": "界面", "api": "接口层", "domain": "领域", "data": "数据", "infra": "基础设施", "tooling": "工具" }
+          "options": { "ui": "界面", "api": "接口层", "domain": "领域", "data": "数据", "infra": "基础设施", "tooling": "工具" },
+          "relations": { "runs": "运行", "serves": "提供", "stores in": "存储于" }
         }
       }
     },
@@ -87,7 +89,8 @@
           "label": "接口",
           "plural": "接口",
           "fields": { "kind": "类型", "signature": "签名", "stability": "稳定性", "auth": "鉴权" },
-          "options": { "event": "事件", "function": "函数", "file": "文件", "stable": "稳定", "experimental": "实验性", "internal": "内部" }
+          "options": { "event": "事件", "function": "函数", "file": "文件", "stable": "稳定", "experimental": "实验性", "internal": "内部" },
+          "relations": { "calls": "调用" }
         }
       }
     },
@@ -150,7 +153,8 @@
           "label": "决策",
           "plural": "决策",
           "fields": { "status": "状态", "date": "日期", "deciders": "决策人" },
-          "options": { "proposed": "提议", "accepted": "已采纳", "superseded": "已取代", "rejected": "已否决" }
+          "options": { "proposed": "提议", "accepted": "已采纳", "superseded": "已取代", "rejected": "已否决" },
+          "relations": { "shapes": "影响" }
         }
       }
     },
@@ -174,7 +178,8 @@
           "label": "风险",
           "plural": "风险",
           "fields": { "severity": "严重度", "likelihood": "可能性", "mitigation": "缓解措施" },
-          "options": { "high": "高", "medium": "中", "low": "低" }
+          "options": { "high": "高", "medium": "中", "low": "低" },
+          "relations": { "threatens": "威胁", "questions": "质疑" }
         }
       }
     },
@@ -197,7 +202,8 @@
           "label": "事件",
           "plural": "事件",
           "fields": { "time": "时间", "phase": "阶段", "actor": "执行人" },
-          "options": { "trigger": "触发", "detect": "发现", "impact": "影响", "respond": "响应", "recover": "恢复", "learn": "复盘" }
+          "options": { "trigger": "触发", "detect": "发现", "impact": "影响", "respond": "响应", "recover": "恢复", "learn": "复盘" },
+          "relations": { "leads to": "导致", "involves": "涉及", "prompts": "促成" }
         }
       }
     }

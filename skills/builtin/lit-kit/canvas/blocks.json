@@ -55,7 +55,8 @@
             "meta-analysis": "元分析",
             "theory": "理论",
             "benchmark": "基准测试"
-          }
+          },
+          "relations": { "reports": "报告", "builds on": "基于" }
         }
       }
     },
@@ -79,7 +80,8 @@
           "plural": "论点",
           "fields": { "rq": "回答", "consensus": "共识", "sources": "来源" },
           "options": { "strong": "强", "moderate": "中等", "weak": "弱", "contested": "有争议" },
-          "units": { "sources": "篇" }
+          "units": { "sources": "篇" },
+          "relations": { "qualifies": "限定" }
         }
       }
     },
@@ -145,7 +147,13 @@
       ],
       "template": { "summary": ["rq", "priority"] },
       "i18n": {
-        "zh-CN": { "label": "空白", "plural": "空白", "fields": { "rq": "问题", "priority": "优先级" }, "options": { "high": "高", "medium": "中", "low": "低" } }
+        "zh-CN": {
+          "label": "空白",
+          "plural": "空白",
+          "fields": { "rq": "问题", "priority": "优先级" },
+          "options": { "high": "高", "medium": "中", "low": "低" },
+          "relations": { "leaves open": "留下" }
+        }
       }
     }
   },
@@ -160,7 +168,7 @@
     { "from": "claim", "to": "claim", "relation": "qualifies" }
   ],
   "layouts": [
-    { "id": "argument-map", "label": "Argument map", "intent": "matrix", "types": ["evidence", "claim", "counter", "gap"], "rows": "rq", "cols": "type", "colOrder": ["evidence", "claim", "counter", "gap"], "description": "A row per research question: supporting evidence → claims ← counter-evidence, then gaps." },
+    { "id": "argument-map", "label": "Argument map", "intent": "matrix", "types": ["evidence", "claim", "counter", "gap"], "rows": "rq", "cols": "type", "rowOrder": ["RQ1", "RQ2", "RQ3", "RQ4", "RQ5", "RQ6"], "colOrder": ["evidence", "claim", "counter", "gap"], "description": "A row per research question: supporting evidence → claims ← counter-evidence, then gaps." },
     { "id": "papers-timeline", "label": "Papers by year", "intent": "timeline", "types": ["paper"], "field": "year", "description": "How the field developed." },
     { "id": "papers-by-method", "label": "Papers by method", "intent": "cluster", "types": ["paper"], "field": "method" },
     { "id": "consensus", "label": "Claims by consensus", "intent": "matrix", "types": ["claim"], "rows": "consensus", "cols": "rq", "description": "Where the literature agrees, per research question." }

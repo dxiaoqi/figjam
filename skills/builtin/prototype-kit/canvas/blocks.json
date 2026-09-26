@@ -16,7 +16,14 @@
         { "key": "constraints", "label": "Constraints", "kind": "text", "placeholder": "Mobile first, no new API" }
       ],
       "template": { "rows": ["audience", "success"], "summary": ["constraints"] },
-      "i18n": { "zh-CN": { "label": "需求简报", "plural": "需求简报", "fields": { "audience": "面向", "success": "成功标准", "constraints": "约束" } } }
+      "i18n": {
+        "zh-CN": {
+          "label": "需求简报",
+          "plural": "需求简报",
+          "fields": { "audience": "面向", "success": "成功标准", "constraints": "约束" },
+          "relations": { "explored by": "探索方案" }
+        }
+      }
     },
     "variant": {
       "label": "Variant",
@@ -38,7 +45,8 @@
           "label": "方案",
           "plural": "方案",
           "fields": { "label": "编号", "approach": "思路", "round": "轮次", "status": "状态" },
-          "options": { "exploring": "探索中", "shortlisted": "入围", "chosen": "选定", "dropped": "放弃" }
+          "options": { "exploring": "探索中", "shortlisted": "入围", "chosen": "选定", "dropped": "放弃" },
+          "relations": { "leads to": "导致" }
         }
       }
     },
@@ -61,7 +69,8 @@
           "label": "评审意见",
           "plural": "评审意见",
           "fields": { "variant": "方案", "verdict": "结论", "author": "来自" },
-          "options": { "keep": "保留", "change": "修改", "drop": "放弃" }
+          "options": { "keep": "保留", "change": "修改", "drop": "放弃" },
+          "relations": { "reviews": "评审", "informs": "支撑" }
         }
       }
     },

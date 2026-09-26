@@ -706,7 +706,8 @@ export class CanvasCore {
     const file = s?.path ? [language, 'en'].map((l) => path.join(s.path!, 'examples', `sample.${l}.aifig`)).find((f) => fs.existsSync(f)) : undefined
     if (!s || !file) throw new ToolError(`No sample board for “${a.skill}”. Skills with samples: ${this.skills.list().filter((x) => x.path && fs.existsSync(path.join(x.path, 'examples'))).map((x) => x.name).join(', ') || 'none'}`)
     const b = this.registry.importCopy(file)
-    if (!b.skills.has(s.name) && !s.errors.length) b.doc.transact(() => b.skills.set(s.name, this.snapshotSkill(s, 'Sample')), 'api')
+    // the sample carries the skill as it was when the sample was made; bring it up to the installed version
+    if (!s.errors.length) b.doc.transact(() => b.skills.set(s.name, this.snapshotSkill(s, 'Sample')), 'api')
     return { board: b.summary(), skill: s.name, language: file.includes(`.${language}.`) ? language : 'en' }
   }
 
@@ -1163,7 +1164,10 @@ export class CanvasCore {
         : l.intent === 'cluster'
           ? { row: () => '', col: field(l.field), order: { cols: order(l.field, l.colOrder) } }
           : { row: field(l.rows), col: field(l.cols), date: field(l.field), order: { rows: order(l.rows, l.rowOrder), cols: order(l.cols, l.colOrder) } }
-    const { changeSet } = this.edit(board, caller, a.intent, `${l.label} (${name})`, (rec) => this.arrangeBlocks(board, rec, blocks, intent, opts))
+    // within a cell or column, the layout's types keep the order it lists them in (e.g. an insight above its quotes)
+    const rank = (b: Block) => (l.types ? l.types.indexOf(b.type!) : 0)
+    const ordered = [...blocks].sort((p, q) => rank(p) - rank(q) || p.y - q.y || p.x - q.x)
+    const { changeSet } = this.edit(board, caller, a.intent, `${l.label} (${name})`, (rec) => this.arrangeBlocks(board, rec, ordered, intent, { ...opts, keepOrder: true }))
     return { board: board.id, changeSet, layout: `${name}.${l.id}`, arranged: blocks.length }
   }
 
@@ -1844,9 +1848,9 @@ export class CanvasCore {
   }
 
   /** Lay out existing siblings with an intent, anchored at their current top-left; axis labels are replaced, flow/timeline get arrows. */
-  private arrangeBlocks(board: Board, rec: Recorder, blocks: Block[], intent: LayoutIntent, o: { columns?: number; row?: (b: Block) => string | undefined; col?: (b: Block) => string | undefined; date?: (b: Block) => string | undefined; order?: MatrixOrder }) {
+  private arrangeBlocks(board: Board, rec: Recorder, blocks: Block[], intent: LayoutIntent, o: { columns?: number; row?: (b: Block) => string | undefined; col?: (b: Block) => string | undefined; date?: (b: Block) => string | undefined; order?: MatrixOrder; keepOrder?: boolean }) {
     const parent = blocks[0].parent ?? null
-    const ordered = [...blocks].sort((p, q) => p.y - q.y || p.x - q.x)
+    const ordered = o.keepOrder ? blocks : [...blocks].sort((p, q) => p.y - q.y || p.x - q.x)
     const bb = bboxOf(ordered)
     const res = layout(
       ordered.map((b) => ({ key: b.id, kind: b.kind, w: b.w, h: b.h, row: o.row?.(b), col: o.col?.(b), date: o.date?.(b) })),

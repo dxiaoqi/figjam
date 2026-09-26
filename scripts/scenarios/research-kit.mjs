@@ -10,7 +10,7 @@ export const template = 'interview-synthesis'
 const T = {
   en: {
     title: 'Agent workflow interviews',
-    frames: { interviews: 'Interviews', quotes: 'Quotes', insights: 'Insights', next: 'Opportunities' },
+    frames: { interviews: 'Interviews', quotes: 'Affinity map', next: 'Opportunities' },
     source: 'Interview',
     themes: {
       'Lost context': /same architecture notes|services are called|brief the AI|forgets|architecture again|Context doesn't carry/,
@@ -36,7 +36,7 @@ const T = {
   },
   'zh-CN': {
     title: 'Agent 工作流访谈',
-    frames: { interviews: '访谈', quotes: '原话', insights: '洞察', next: '机会点' },
+    frames: { interviews: '访谈', quotes: '亲和图', next: '机会点' },
     source: '访谈',
     themes: {
       上下文丢失: /架构说明|服务都叫什么|交代背景|记不住|重新讲一遍|上下文/,
@@ -135,21 +135,19 @@ export async function run({ core, agent, lang, check, out }) {
   await tool('begin_change_set', { board, intent: lang === 'zh-CN' ? '提炼洞察与机会点' : 'Insights and opportunities' })
   await tool('create_blocks', {
     board,
-    frame: t.frames.insights,
-    right_of: t.frames.quotes,
-    layout: 'stack',
+    inside: t.frames.quotes,
     blocks: strong.map(([theme, bs]) => {
       const people = new Set(bs.map((b) => b.fields.participant)).size
       return { type: 'research-kit.insight', title: t.insights[theme][0], text: t.insights[theme][1], fields: { theme, evidence: bs.length, participants: people, confidence: people >= 3 ? 'high' : people === 2 ? 'medium' : 'low' } }
     }),
   })
   await tool('connect', { board, connectors: strong.flatMap(([theme, bs]) => bs.map((b) => ({ from: b.id, to: t.insights[theme][0] }))) })
-  await tool('apply_skill_layout', { board, layout: 'research-kit.affinity', frame: t.frames.insights })
+  await tool('apply_skill_layout', { board, layout: 'research-kit.affinity', frame: t.frames.quotes })
   // 6. opportunities and a hypothesis
   await tool('create_blocks', {
     board,
     frame: t.frames.next,
-    right_of: t.frames.insights,
+    right_of: t.frames.quotes,
     layout: 'stack',
     blocks: [
       ...strong.map(([theme]) => ({ type: 'research-kit.opportunity', title: t.opportunities[theme][0], fields: { impact: t.opportunities[theme][1], effort: t.opportunities[theme][2] } })),

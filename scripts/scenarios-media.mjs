@@ -39,12 +39,28 @@ async function openPage(locale, video) {
   return { context, page }
 }
 
-/** Fit the board (minus UI chrome) and wait for snippet previews and fonts. */
+/** The frames each hero shot focuses on (by position in the sample: first frames first). */
+const FOCUS = { 'arch-kit': [0, 1], 'research-kit': [1, 2], 'product-kit': [1, 2, 3], 'prototype-kit': [0, 1, 2, 3], 'lit-kit': [2] }
+
+/** Open a board and wait for snippet previews and fonts; then fit the whole board, or just some frames. */
 async function showBoard(page, board, wait = 2500) {
   await page.goto(`${base}/?board=${board}`)
-  await page.waitForSelector('[data-block-id]', { timeout: 15000 })
+  await page.waitForSelector('[data-block-id]', { state: 'attached', timeout: 15000 })
   await sleep(wait)
   await page.evaluate(() => window.editor?.zoomToFit({ animate: false }))
+  await sleep(900)
+}
+async function focus(page, picks) {
+  await page.evaluate((picks) => {
+    const ed = window.editor
+    const frames = ed.blocks().filter((b) => b.kind === 'frame' && !b.parent).sort((a, b) => a.y - b.y || a.x - b.x)
+    const rects = picks.map((i) => frames[i]).filter(Boolean).map((f) => ed.pageRect(f.id))
+    const x = Math.min(...rects.map((r) => r.x))
+    const y = Math.min(...rects.map((r) => r.y))
+    const w = Math.max(...rects.map((r) => r.x + r.w)) - x
+    const h = Math.max(...rects.map((r) => r.y + r.h)) - y
+    ed.zoomToBounds({ x: x - 40, y: y - 90, w: w + 80, h: h + 160 }, { animate: false })
+  }, picks)
   await sleep(900)
 }
 
@@ -53,6 +69,8 @@ for (const [locale, sfx] of Object.entries(LANGS)) {
   for (const skill of SKILLS) {
     const { board } = await call('open_sample', { skill, language: locale })
     await showBoard(page, board.id, skill === 'prototype-kit' ? 5000 : 2500)
+    await page.screenshot({ path: path.join(out, `${skill}-${sfx}-overview.png`) })
+    await focus(page, FOCUS[skill])
     const file = path.join(out, `${skill}-${sfx}.png`)
     await page.screenshot({ path: file })
     console.log(`wrote ${file}`)
@@ -80,7 +98,7 @@ for (const [locale, sfx] of Object.entries(LANGS)) {
     await sleep(900)
   }
   await page.click('[data-new-board-create]')
-  await page.waitForSelector('[data-block-id]', { timeout: 15000 })
+  await page.waitForSelector('[data-block-id]', { state: 'attached', timeout: 15000 })
   await sleep(1500)
   await page.evaluate(() => window.editor?.zoomToFit())
   await sleep(2200)
@@ -90,7 +108,7 @@ for (const [locale, sfx] of Object.entries(LANGS)) {
   await page.click('[data-scenario="prototype"]')
   await sleep(900)
   await page.click('[data-open-sample]')
-  await page.waitForSelector('[data-block-id]', { timeout: 15000 })
+  await page.waitForSelector('[data-block-id]', { state: 'attached', timeout: 15000 })
   await sleep(4000)
   await page.evaluate(() => window.editor?.zoomToFit())
   await sleep(1800)

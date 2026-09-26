@@ -53,6 +53,8 @@ export interface TypeLocale {
   options?: Readonly<Record<string, string>>
   /** Number field key → unit. */
   units?: Readonly<Record<string, string>>
+  /** Relation verb (as declared by the skill) → label on connectors. */
+  relations?: Readonly<Record<string, string>>
 }
 
 /** Display strings of a type in a locale (default English; falls back to the declared strings). */

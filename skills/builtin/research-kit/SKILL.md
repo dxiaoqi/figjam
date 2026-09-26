@@ -29,13 +29,13 @@ Relations: interview *yields* quote, quote *supports* insight, insight *inspires
 hypothesis.
 
 Layouts: `research-kit.by-participant` (coverage check), `research-kit.quote-affinity` (quotes by theme),
-`research-kit.affinity` (insights by theme), `research-kit.opportunity-matrix` (impact × effort, high impact on
+`research-kit.affinity` (a column per theme: its insight on top, its quotes underneath), `research-kit.opportunity-matrix` (impact × effort, high impact on
 top), `research-kit.journey` (by `stage`).
 
 ## Workflow: interviews → report
 
 1. **Start the board.** `create_board { template: "interview-synthesis", language }` enables this skill with
-   frames for Interviews, Quotes, Insights and Opportunities. `get_board`, then delete the example blocks.
+   frames for Interviews, the affinity map and Opportunities. `get_board`, then delete the example blocks.
 2. **Interviews.** `begin_change_set { intent: "Log interviews" }`; one `research-kit.interview` card per
    transcript in the "Interviews" frame (`layout: "row"`), fields from the transcript header. Commit.
 3. **Pull quotes.** For each transcript, 4–8 quotes that carry a need, a pain or a workaround. Keep the
@@ -46,9 +46,10 @@ top), `research-kit.journey` (by `stage`).
 4. **Cluster.** Give each quote a short `theme` (`set_type` with `fields: { theme }`, 3–6 themes in total, names
    the team would use). Apply `research-kit.quote-affinity`. Commit this as its own change set — this is the step
    the person corrects most; wait for their review (`list_change_sets`) before building on it.
-5. **Insights.** For each theme with 3+ quotes from 2+ participants, one `research-kit.insight` in "Insights"
-   with `theme`, `evidence` (quotes), `participants` (people) and `confidence` (high = 3+ participants, medium = 2,
-   low = otherwise). Connect every supporting quote → insight. Apply `research-kit.affinity`. Themes with fewer
+5. **Insights.** For each theme with 3+ quotes from 2+ participants, one `research-kit.insight` in the same frame
+   as the quotes (`inside`), with `theme`, `evidence` (quotes), `participants` (people) and `confidence` (high = 3+ participants, medium = 2,
+   low = otherwise). Connect every supporting quote → insight. Apply `research-kit.affinity`: each theme becomes a
+   column with its insight on top of its quotes, so the connectors stay short. Themes with fewer
    quotes stay as quotes; list them when you hand over.
 6. **Opportunities and hypotheses.** One or two `research-kit.opportunity` cards per insight ("How might we …?")
    with `impact` / `effort`; apply `research-kit.opportunity-matrix`. Turn the riskiest assumption behind each top

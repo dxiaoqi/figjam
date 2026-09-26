@@ -23,7 +23,8 @@
           "label": "访谈",
           "plural": "访谈",
           "fields": { "participant": "受访者", "role": "角色", "date": "日期", "segment": "人群", "method": "方式" },
-          "options": { "interview": "访谈", "usability test": "可用性测试", "survey": "问卷", "support ticket": "工单", "diary": "日记" }
+          "options": { "interview": "访谈", "usability test": "可用性测试", "survey": "问卷", "support ticket": "工单", "diary": "日记" },
+          "relations": { "yields": "产出" }
         }
       }
     },
@@ -108,7 +109,7 @@
     { "from": "quote", "to": "question", "relation": "raises" }
   ],
   "layouts": [
-    { "id": "affinity", "label": "Affinity map", "intent": "cluster", "types": ["insight"], "field": "theme", "description": "Insights grouped by theme." },
+    { "id": "affinity", "label": "Affinity map", "intent": "cluster", "types": ["insight", "quote"], "field": "theme", "description": "A column per theme: its insight on top, the quotes behind it underneath." },
     { "id": "quote-affinity", "label": "Quotes by theme", "intent": "cluster", "types": ["quote"], "field": "theme", "description": "Quotes in columns by theme — the first pass of affinity clustering." },
     { "id": "by-participant", "label": "Quotes by participant", "intent": "cluster", "types": ["quote"], "field": "participant", "description": "One column per participant, to check coverage." },
     { "id": "opportunity-matrix", "label": "Opportunity matrix", "intent": "matrix", "types": ["opportunity"], "rows": "impact", "cols": "effort", "rowOrder": ["high", "medium", "low"] },

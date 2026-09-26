@@ -207,13 +207,15 @@ export const SCENARIO_BUILDERS: Record<'architecture-map' | 'incident-review' | 
     {
       tool: 'create_blocks',
       args: {
-        frame: l('Quotes by theme', '按主题的原话'),
+        frame: l('Affinity map', '亲和图'),
         below: l('Interviews', '访谈'),
         layout: 'cluster',
         blocks: [
+          { type: 'research-kit.insight', title: l('Context doesn’t survive between sessions', '上下文在会话之间留不住'), text: l('People rebuild the same briefing by hand every day.', '大家每天都在手动重建同一份背景说明。'), group: l('Lost context', '上下文丢失'), fields: { theme: l('Lost context', '上下文丢失'), confidence: 'high', evidence: 3, participants: 3 } },
           { type: 'research-kit.quote', text: l('“Every new chat, I paste the same architecture notes.”', '“每开一个新对话，我都要贴一遍同样的架构说明。”'), group: l('Lost context', '上下文丢失'), fields: { participant: 'P1', source: l('Interview', '访谈'), ref: 'p1.md:14', theme: l('Lost context', '上下文丢失') } },
           { type: 'research-kit.quote', text: l('“The agent forgets what we decided yesterday.”', '“Agent 记不住我们昨天定下的事。”'), group: l('Lost context', '上下文丢失'), fields: { participant: 'P3', source: l('Interview', '访谈'), ref: 'p3.md:22', theme: l('Lost context', '上下文丢失') } },
           { type: 'research-kit.quote', text: l('“I keep a doc just to brief the AI.”', '“我专门留了一份文档给 AI 交代背景。”'), group: l('Lost context', '上下文丢失'), fields: { participant: 'P2', source: l('Interview', '访谈'), ref: 'p2.md:31', theme: l('Lost context', '上下文丢失') } },
+          { type: 'research-kit.insight', title: l('Review is the bottleneck, not generation', '瓶颈在审阅，不在生成'), text: l('All-or-nothing changes make people skim.', '要么全收要么全拒，逼得人只能草草扫过。'), group: l('Review burden', '审阅负担'), fields: { theme: l('Review burden', '审阅负担'), confidence: 'high', evidence: 3, participants: 3 } },
           { type: 'research-kit.quote', text: l('“I read every line before it goes to the team.”', '“发给团队前我每一行都要看。”'), group: l('Review burden', '审阅负担'), fields: { participant: 'P2', source: l('Interview', '访谈'), ref: 'p2.md:9', theme: l('Review burden', '审阅负担'), sentiment: 'negative' } },
           { type: 'research-kit.quote', text: l('“Big diffs from an agent — I just skim and hope.”', '“Agent 一改就是一大片，我只能扫一眼碰运气。”'), group: l('Review burden', '审阅负担'), fields: { participant: 'P1', source: l('Interview', '访谈'), ref: 'p1.md:40', theme: l('Review burden', '审阅负担'), sentiment: 'negative' } },
           { type: 'research-kit.quote', text: l('“If I could accept parts of it, I would use it more.”', '“要是能只接受一部分，我会用得更多。”'), group: l('Review burden', '审阅负担'), fields: { participant: 'P3', source: l('Interview', '访谈'), ref: 'p3.md:47', theme: l('Review burden', '审阅负担') } },
@@ -223,20 +225,8 @@ export const SCENARIO_BUILDERS: Record<'architecture-map' | 'incident-review' | 
     {
       tool: 'create_blocks',
       args: {
-        frame: l('Insights', '洞察'),
-        right_of: l('Quotes by theme', '按主题的原话'),
-        layout: 'stack',
-        blocks: [
-          { type: 'research-kit.insight', title: l('Context doesn’t survive between sessions', '上下文在会话之间留不住'), text: l('People rebuild the same briefing by hand every day.', '大家每天都在手动重建同一份背景说明。'), fields: { theme: l('Lost context', '上下文丢失'), confidence: 'high', evidence: 3, participants: 3 } },
-          { type: 'research-kit.insight', title: l('Review is the bottleneck, not generation', '瓶颈在审阅，不在生成'), text: l('All-or-nothing changes make people skim.', '要么全收要么全拒，逼得人只能草草扫过。'), fields: { theme: l('Review burden', '审阅负担'), confidence: 'high', evidence: 3, participants: 3 } },
-        ],
-      },
-    },
-    {
-      tool: 'create_blocks',
-      args: {
         frame: l('Opportunities', '机会点'),
-        right_of: l('Insights', '洞察'),
+        right_of: l('Affinity map', '亲和图'),
         layout: 'stack',
         blocks: [
           { type: 'research-kit.opportunity', title: l('HMW keep shared context on the board?', '怎样把共享上下文留在画板上？'), fields: { impact: 'high', effort: 'medium' } },
@@ -250,7 +240,7 @@ export const SCENARIO_BUILDERS: Record<'architecture-map' | 'incident-review' | 
       args: {
         connectors: [
           { from: l('“Every new chat, I paste the same architecture notes.”', '“每开一个新对话，我都要贴一遍同样的架构说明。”'), to: l('Context doesn’t survive between sessions', '上下文在会话之间留不住') },
-          { from: l('“If I could accept parts of it, I would use it more.”', '“要是能只接受一部分，我会用得更多。”'), to: l('Review is the bottleneck, not generation', '瓶颈在审阅，不在生成') },
+          { from: l('“I read every line before it goes to the team.”', '“发给团队前我每一行都要看。”'), to: l('Review is the bottleneck, not generation', '瓶颈在审阅，不在生成') },
           { from: l('Context doesn’t survive between sessions', '上下文在会话之间留不住'), to: l('HMW keep shared context on the board?', '怎样把共享上下文留在画板上？') },
           { from: l('Review is the bottleneck, not generation', '瓶颈在审阅，不在生成'), to: l('HMW review agent work item by item?', '怎样逐条审阅 Agent 的工作？') },
         ],
