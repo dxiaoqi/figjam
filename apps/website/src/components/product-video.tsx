@@ -40,17 +40,27 @@ export function ProductVideo({
     const io = new IntersectionObserver(
       ([e]) => {
         if (e.isIntersecting && !userPaused.current) v.play().catch(() => {})
-        else if (!e.isIntersecting) v.pause()
+        // pause() on a clip that never loaded would start loading it (media resource selection)
+        else if (!e.isIntersecting && !v.paused) v.pause()
       },
       { threshold: 0.25 },
     )
-    // Starting media before the first paint puts the page back into a loading state and holds that paint.
+    // Loading media before the first paint is on screen puts the page back into a loading state and holds that
+    // paint, so clips wait for the browser's first-contentful-paint entry (or a second where it isn't reported).
+    const start = () => io.observe(v)
+    let po: PerformanceObserver | undefined
     let timer = 0
-    const frame = requestAnimationFrame(() => {
-      timer = window.setTimeout(() => io.observe(v), 0)
-    })
+    if (performance.getEntriesByName('first-contentful-paint').length) start()
+    else if (PerformanceObserver.supportedEntryTypes?.includes('paint')) {
+      po = new PerformanceObserver((list) => {
+        if (!list.getEntriesByName('first-contentful-paint').length) return
+        po?.disconnect()
+        start()
+      })
+      po.observe({ type: 'paint', buffered: true })
+    } else timer = window.setTimeout(start, 1000)
     return () => {
-      cancelAnimationFrame(frame)
+      po?.disconnect()
       clearTimeout(timer)
       io.disconnect()
     }
