@@ -19,7 +19,7 @@ import { useBoard, useBoardTitle, useProviderState } from '../board-context'
 import { callCore } from '../lib/core'
 import { openBackupFolder, openVersionHistory } from '../lib/versions'
 import { useT } from '../i18n'
-import { openNewBoard } from './NewBoardDialog'
+import { openNewBoard } from './new-board'
 
 export function Logo({ className }: { className?: string }) {
   return (

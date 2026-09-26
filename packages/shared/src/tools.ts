@@ -465,6 +465,7 @@ export const humanToolDefs = {
     },
   },
   rename_board: { input: { board, title: z.string() } },
+  open_sample: { input: { skill: z.string().describe('Built-in skill with a sample board, e.g. arch-kit'), language: z.enum(CONTENT_LANGUAGES).optional() } },
   open_file: { input: { path: z.string() } },
   save_file: { input: { board: z.string(), path: z.string() } },
   delete_board: { input: { board: z.string() } },

@@ -397,6 +397,8 @@ export class CanvasCore {
           templates: TEMPLATE_IDS.map((id) => ({ id, title: TEMPLATES[id].title.en, titles: TEMPLATES[id].title, description: TEMPLATES[id].description, ...(TEMPLATES[id].skill ? { skill: TEMPLATES[id].skill } : {}) })),
           scenarios: SCENARIO_IDS.map((id) => ({ id, ...SCENARIOS[id] })),
         }
+      case 'open_sample':
+        return this.openSample(a)
       case 'rename_board': {
         const b = this.board(a.board)
         b.doc.transact(() => {
@@ -687,6 +689,17 @@ export class CanvasCore {
         ? `The board is ready and the ${skill} skill is enabled. Read get_skill { name: "${skill}" } and follow its workflow; read the board with get_board before adding to it.`
         : 'The board is ready. Read it with get_board before adding to it.',
     }
+  }
+
+  /** A copy of a built-in skill's sample board (examples/sample.<language>.aifig), as a new board of this person's. */
+  private openSample(a: Args) {
+    const s = this.skills.get(a.skill)
+    const language: ContentLanguage = a.language ?? 'en'
+    const file = s?.path ? [language, 'en'].map((l) => path.join(s.path!, 'examples', `sample.${l}.aifig`)).find((f) => fs.existsSync(f)) : undefined
+    if (!s || !file) throw new ToolError(`No sample board for “${a.skill}”. Skills with samples: ${this.skills.list().filter((x) => x.path && fs.existsSync(path.join(x.path, 'examples'))).map((x) => x.name).join(', ') || 'none'}`)
+    const b = this.registry.importCopy(file)
+    if (!b.skills.has(s.name) && !s.errors.length) b.doc.transact(() => b.skills.set(s.name, this.snapshotSkill(s, 'Sample')), 'api')
+    return { board: b.summary(), skill: s.name, language: file.includes(`.${language}.`) ? language : 'en' }
   }
 
   private async applyTemplate(b: Board, template: TemplateId, language: ContentLanguage, rename = false) {

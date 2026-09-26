@@ -14,7 +14,8 @@ import { callCore, fetchBoards, fetchHealth, Unauthorized, type Health } from '.
 import { desktop } from './lib/desktop'
 import { CoreProvider } from './sync/provider'
 import { getLocale, subscribeLocale, t, tn, useLocale, useT, type LocalePref } from './i18n'
-import { NewBoardDialog, openNewBoard } from './chrome/NewBoardDialog'
+import { NewBoardDialog } from './chrome/NewBoardDialog'
+import { openNewBoard } from './chrome/new-board'
 import { openSettings, SettingsDialog } from './chrome/SettingsDialog'
 import { shouldShowWelcome, Welcome } from './chrome/Welcome'
 
@@ -195,6 +196,19 @@ export default function App() {
     [refreshBoards],
   )
 
+  const openSample = useCallback(
+    async (skill: string) => {
+      try {
+        const r = await callCore<{ board: BoardSummary }>('open_sample', { skill, language: getLocale() })
+        await refreshBoards()
+        setBoardId(r.board.id)
+      } catch (e) {
+        toast.error((e as Error).message)
+      }
+    },
+    [refreshBoards],
+  )
+
   let body
   if (locked) body = <TokenGate onDone={load} />
   else if (offline && !provider) body = <CoreOffline retrying={retrying} onRetry={load} />
@@ -214,7 +228,7 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={400}>
       {body}
-      <NewBoardDialog theme={theme} onCreate={createBoard} />
+      <NewBoardDialog theme={theme} onCreate={createBoard} onOpenSample={openSample} />
       <SettingsDialog themePref={pref} setTheme={setTheme} onShowWelcome={() => setWelcome(true)} />
       {welcome && !offline && <Welcome theme={theme} onClose={() => setWelcome(false)} />}
       <Toaster theme={theme} position="bottom-center" offset={96} />

@@ -7,7 +7,8 @@ import { useBlockCount, useBoard, useBoardTitle, useProviderState } from '../boa
 import { useEditorState } from '../canvas/editor-context'
 import { callCore } from '../lib/core'
 import { getLocale, useT, type MessageKey } from '../i18n'
-import { openNewBoard, TemplateTile } from './NewBoardDialog'
+import { ScenarioChips, TemplateTile } from './NewBoardDialog'
+import { openNewBoard } from './new-board'
 
 const KEYS: [string, MessageKey, string][] = [
   ['S', 'tool.stickyShort', 'sticky'],
@@ -84,6 +85,8 @@ export function EmptyState() {
               </div>
             )}
           </div>
+          <div className="mt-4 mb-2 text-xs font-medium text-muted-foreground">{t('empty.scenarios')}</div>
+          <ScenarioChips />
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t pt-5">
