@@ -1,9 +1,10 @@
 // Tries to get out of the sandbox; reports what happened through the only allowed channel (its own state).
 const r = {}
 const settle = (k, p) => p.then(() => (r[k] = 'allowed'), () => (r[k] = 'blocked'))
-try { r.parentDocument = parent.document && parent.document.body ? 'allowed' : 'blocked' } catch { r.parentDocument = 'blocked' }
-try { r.parentStorage = parent.localStorage ? 'allowed' : 'blocked' } catch { r.parentStorage = 'blocked' }
-try { r.parentEditor = parent.editor ? 'allowed' : 'blocked' } catch { r.parentEditor = 'blocked' }
+// in a desktop <webview> the snippet is its own top-level page, so parent === window: nothing to reach
+try { r.parentDocument = parent !== window && parent.document && parent.document.body ? 'allowed' : 'blocked' } catch { r.parentDocument = 'blocked' }
+try { r.parentStorage = parent !== window && parent.localStorage ? 'allowed' : 'blocked' } catch { r.parentStorage = 'blocked' }
+try { r.parentEditor = parent !== window && parent.editor ? 'allowed' : 'blocked' } catch { r.parentEditor = 'blocked' }
 try { localStorage.setItem('x', '1'); r.ownStorage = 'allowed' } catch { r.ownStorage = 'blocked' }
 try { document.cookie = 'a=1'; r.cookie = document.cookie.includes('a=1') ? 'allowed' : 'blocked' } catch { r.cookie = 'blocked' }
 try { r.node = typeof require !== 'undefined' || typeof process !== 'undefined' || typeof module !== 'undefined' ? 'allowed' : 'blocked' } catch { r.node = 'blocked' }
