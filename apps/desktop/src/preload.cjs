@@ -22,4 +22,8 @@ contextBridge.exposeInMainWorld('aifigDesktop', {
     get: () => ipcRenderer.invoke('assistant:get'),
     save: (settings) => ipcRenderer.invoke('assistant:save', settings),
   },
+  telemetry: {
+    status: () => ipcRenderer.invoke('telemetry:status'),
+    set: (granted) => ipcRenderer.invoke('telemetry:set', granted === true),
+  },
 })

@@ -6,13 +6,17 @@ import { fileURLToPath } from 'node:url'
 import os from 'node:os'
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, safeStorage, session, shell } from 'electron'
 import { LOCALES, systemLocale, translator } from './i18n.mjs'
+import { createTelemetry } from './telemetry.mjs'
+import { startUpdater } from './updater.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '../../..')
 const packaged = app.isPackaged
-const cliPath = packaged ? path.join(process.resourcesPath, 'aifig.mjs') : path.join(repoRoot, 'bin', 'aifig.mjs')
-const uiDist = packaged ? path.join(process.resourcesPath, 'ui') : path.join(repoRoot, 'apps', 'canvas', 'dist')
-const builtinSkills = packaged ? path.join(process.resourcesPath, 'skills') : path.join(repoRoot, 'skills', 'builtin')
+let cliPath = packaged ? path.join(process.resourcesPath, 'aifig.mjs') : path.join(repoRoot, 'bin', 'aifig.mjs')
+let uiDist = packaged ? path.join(process.resourcesPath, 'ui') : path.join(repoRoot, 'apps', 'canvas', 'dist')
+let builtinSkills = packaged ? path.join(process.resourcesPath, 'skills') : path.join(repoRoot, 'skills', 'builtin')
+// the command agents run for the bundled CLI/MCP server: this executable in Node mode
+let agentCommand = process.execPath
 const port = Number(process.env.AIFIG_CORE_PORT ?? 47821)
 const coreUrl = `http://127.0.0.1:${port}`
 const devUrl = process.env.AIFIG_DESKTOP_URL // e.g. the Vite dev server for hot reload
@@ -40,6 +44,59 @@ const coreHeaders = () => {
 
 app.setName('ai-figma')
 if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox')
+
+// ---- distribution settings (telemetry endpoint, update feed) ---------------------------------------
+// baked into the package by scripts/build.mjs; ~/.aifig/config.json and env vars override. Empty = off.
+
+const readJson = (file) => {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch {
+    return null
+  }
+}
+function distribution() {
+  const baked = readJson(packaged ? path.join(here, 'distribution.json') : path.join(repoRoot, 'distribution.json')) ?? {}
+  const user = readJson(path.join(aifigHome(), 'config.json')) ?? {}
+  const pick = (envKey, userVal, bakedVal) => String(process.env[envKey] ?? userVal ?? bakedVal ?? '').trim()
+  return {
+    telemetryUrl: pick('AIFIG_TELEMETRY_URL', user.telemetry?.endpoint, baked.telemetryUrl),
+    updateFeedUrl: pick('AIFIG_UPDATE_URL', user.updates?.feedUrl, baked.updateFeedUrl),
+  }
+}
+
+/**
+ * An AppImage runs from a fresh /tmp/.mount_* folder on every launch, so agent MCP configs can't point inside it.
+ * Copy the CLI bundle, UI and skills to ~/.aifig/runtime/<version> once, and have agents run the AppImage file
+ * itself (stable path, updated in place by the updater) in Node mode with that copy.
+ */
+function useStableRuntime() {
+  if (!packaged || !process.env.APPIMAGE) return
+  const base = path.join(aifigHome(), 'runtime')
+  const dir = path.join(base, app.getVersion())
+  if (!fs.existsSync(path.join(dir, '.complete'))) {
+    const tmp = `${dir}.tmp-${process.pid}`
+    fs.rmSync(tmp, { recursive: true, force: true })
+    fs.mkdirSync(tmp, { recursive: true })
+    for (const f of ['aifig.mjs', 'ui', 'skills', 'node_modules']) {
+      const from = path.join(process.resourcesPath, f)
+      if (fs.existsSync(from)) fs.cpSync(from, path.join(tmp, f), { recursive: true })
+    }
+    fs.writeFileSync(path.join(tmp, '.complete'), app.getVersion())
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.renameSync(tmp, dir)
+  }
+  for (const old of fs.readdirSync(base)) if (old !== app.getVersion()) fs.rmSync(path.join(base, old), { recursive: true, force: true })
+  cliPath = path.join(dir, 'aifig.mjs')
+  uiDist = path.join(dir, 'ui')
+  builtinSkills = path.join(dir, 'skills')
+  agentCommand = process.env.APPIMAGE
+}
+try {
+  useStableRuntime()
+} catch (e) {
+  console.error('ai-figma: could not copy the CLI out of the AppImage; agent configs will point inside it', e)
+}
 
 let coreProcess = null
 let win = null
@@ -84,12 +141,14 @@ async function healthy() {
 
 function mcpEnv() {
   // agents launch the bundled CLI with Electron's own Node runtime
-  const env = { ELECTRON_RUN_AS_NODE: '1', AIFIG_BIN: cliPath, AIFIG_BUILTIN_SKILLS: builtinSkills }
+  // (AIFIG_UI_DIST so a core started by an agent can still serve the canvas when the app opens later)
+  const env = { ELECTRON_RUN_AS_NODE: '1', AIFIG_BIN: cliPath, AIFIG_BUILTIN_SKILLS: builtinSkills, AIFIG_UI_DIST: uiDist }
   return {
     AIFIG_BIN: cliPath,
     AIFIG_BUILTIN_SKILLS: builtinSkills,
-    AIFIG_MCP_COMMAND: process.execPath,
-    AIFIG_MCP_ARGS: JSON.stringify([cliPath, 'mcp']),
+    AIFIG_MCP_COMMAND: agentCommand,
+    // AppImage: AppRun inserts --no-sandbox before the script unless it's already there, which Node mode rejects
+    AIFIG_MCP_ARGS: JSON.stringify(agentCommand === process.env.APPIMAGE ? [cliPath, 'mcp', '--no-sandbox'] : [cliPath, 'mcp']),
     AIFIG_MCP_ENV: JSON.stringify(env),
     AIFIG_UI_DIST: uiDist,
   }
@@ -215,6 +274,19 @@ ipcMain.handle('assistant:save', async (_e, s) => {
   await pushAssistant(next)
   return { ok: true, persisted: !next?.key || secure, storage: next?.key ? (secure ? vault.backend() : 'session') : null }
 })
+
+// ---- anonymous install counting (opt-in, see telemetry.mjs) --------------------------------------------
+
+let telemetry = null
+const getTelemetry = () =>
+  (telemetry ??= createTelemetry({
+    endpoint: distribution().telemetryUrl,
+    stateFile: path.join(app.getPath('userData'), 'telemetry.json'),
+    appVersion: app.getVersion(),
+    locale: () => locale ?? app.getLocale(),
+  }))
+ipcMain.handle('telemetry:status', () => getTelemetry().status())
+ipcMain.handle('telemetry:set', (_e, granted) => getTelemetry().setConsent(granted === true))
 
 ipcMain.on('aifig:token', (e) => {
   e.returnValue = readToken()
@@ -530,7 +602,13 @@ app.on('open-file', (e, file) => {
   e.preventDefault()
   if (win) openFile(file)
 })
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createWindow()
+  getTelemetry().start()
+  const log = (m) => fs.appendFile(path.join(app.getPath('userData'), 'updates.log'), `${new Date().toISOString()} ${m}\n`, () => {})
+  const updates = startUpdater({ feedUrl: distribution().updateFeedUrl, packaged, log })
+  log(updates.enabled ? `auto-update on (${updates.feedUrl})` : `auto-update off: ${updates.reason}`)
+})
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })

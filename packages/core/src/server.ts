@@ -144,8 +144,10 @@ export async function startCore(port = CORE_PORT) {
   }
 
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
-  const distDir = process.env.AIFIG_UI_DIST ?? path.join(root, 'apps', 'canvas', 'dist')
   const binPath = process.env.AIFIG_BIN ?? path.join(root, 'bin', 'aifig.mjs')
+  // packaged desktop app: the UI sits next to the bundled CLI (Resources/ui)
+  const bundledUi = path.join(path.dirname(binPath), 'ui')
+  const distDir = process.env.AIFIG_UI_DIST ?? (process.env.AIFIG_BIN && fs.existsSync(path.join(bundledUi, 'index.html')) ? bundledUi : path.join(root, 'apps', 'canvas', 'dist'))
   const json_ = (v?: string) => (v ? JSON.parse(v) : undefined)
   const mcpLaunch = process.env.AIFIG_MCP_COMMAND
     ? { command: process.env.AIFIG_MCP_COMMAND, args: json_(process.env.AIFIG_MCP_ARGS) ?? [binPath, 'mcp'], env: json_(process.env.AIFIG_MCP_ENV) }

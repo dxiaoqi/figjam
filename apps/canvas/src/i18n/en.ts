@@ -107,6 +107,17 @@ export const en = {
   'settings.assistant': 'Built-in assistant',
   'settings.assistantHint': 'Optional; your own agents work without it.',
   'settings.assistantOpen': 'Set up…',
+  // ---- anonymous install counting (desktop builds with a counter endpoint)
+  'usage.title': 'Help us count installs',
+  'usage.body': 'Off unless you turn it on. Sends a random install ID, the app version, OS and language — once when you turn it on, then at most once a day. Never your boards, files or anything that identifies you.',
+  'usage.whatSent': 'Exactly what’s sent',
+  'usage.idWhenOn': '(random, created when you turn this on)',
+  'usage.never': 'Turning it off deletes the install ID. AIFIG_TELEMETRY=off turns it off for good.',
+  'usage.settingsTitle': 'Anonymous install count',
+  'usage.settingsHint': 'A random ID, app version, OS and language, at most once a day. No board content.',
+  'usage.on': 'Sharing',
+  'usage.off': 'Not sharing',
+  'usage.envOff': 'Turned off by AIFIG_TELEMETRY=off or DO_NOT_TRACK on this machine.',
 
   // ---- welcome
   'welcome.skip': 'Skip',

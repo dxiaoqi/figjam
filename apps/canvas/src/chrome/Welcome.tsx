@@ -8,6 +8,7 @@ import { LOCALES, useLocale, useT } from '../i18n'
 import { Logo } from './BoardMenu'
 import { AgentSetup } from './AgentSetup'
 import { openNewBoard } from './NewBoardDialog'
+import { UsageSharing } from './UsageSharing'
 
 const SEEN_KEY = 'aifig:welcomed'
 
@@ -258,6 +259,7 @@ export function Welcome({ theme, onClose }: { theme: ThemeMode; onClose: () => v
               ))}
             </ul>
           )}
+          {step === 0 && <UsageSharing variant="welcome" className="mt-4" />}
           {step === 1 && (
             <div className="mt-4 flex flex-wrap gap-2">
               <Button

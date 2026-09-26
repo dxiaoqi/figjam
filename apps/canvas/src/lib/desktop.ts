@@ -13,6 +13,22 @@ export interface DesktopBridge {
     get(): Promise<{ provider: string | null; model: string; baseUrl: string; hasKey: boolean; encryption: string }>
     save(settings: { provider: string | null; model?: string; baseUrl?: string; key?: string }): Promise<{ ok: boolean }>
   }
+  /** Anonymous install counting; older shells don't have it. */
+  telemetry?: {
+    status(): Promise<TelemetryStatus>
+    set(granted: boolean): Promise<TelemetryStatus>
+  }
+}
+
+export interface TelemetryStatus {
+  /** an endpoint is configured for this build (otherwise telemetry is a no-op and the UI hides it) */
+  configured: boolean
+  /** AIFIG_TELEMETRY=off or DO_NOT_TRACK=1 */
+  envDisabled: boolean
+  consent: 'granted' | 'denied' | null
+  enabled: boolean
+  /** exactly the fields a ping carries */
+  preview: Record<string, string | number | undefined>
 }
 
 export const desktop: DesktopBridge | undefined = (globalThis as { aifigDesktop?: DesktopBridge }).aifigDesktop
