@@ -57,7 +57,6 @@ import { useEditor } from '../canvas/editor-context'
 import { useBoardSkills, useTypes } from '../canvas/type-registry'
 import { autoType, isTypeable, setBlocksType, typeIcon, typeLabel, useAutoType } from '../canvas/types-ui'
 import { runSkillAction } from '../lib/skills'
-import { S } from '../lib/strings'
 import { callCore } from '../lib/core'
 import { copySnapshot, downloadDocument, downloadSnapshot } from '../lib/export'
 import { runAssistant, useAssistant } from '../lib/assistant'
@@ -232,7 +231,7 @@ export function ContextMenu() {
                   </DropdownMenuItem>
                   {blocks.length === 1 && isTypeable(blocks[0]) && (
                     <DropdownMenuItem data-save-type onSelect={run(() => window.dispatchEvent(new CustomEvent('aifig:save-type', { detail: ids[0] })))}>
-                      <Puzzle /> {S.skills.saveAsType}
+                      <Puzzle /> {t('skills.saveAsType')}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuCheckboxItem checked={autoTypeOn} onCheckedChange={(v) => autoType.set(!!v)} onSelect={(e) => e.preventDefault()} data-auto-type>

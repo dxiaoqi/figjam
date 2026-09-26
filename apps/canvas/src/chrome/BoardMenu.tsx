@@ -106,20 +106,20 @@ export function BoardMenu() {
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => openVersionHistory()} data-menu-versions>
-            <History className="size-4" /> Version history…
+            <History className="size-4" /> {t('board.versionHistory')}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => openVersionHistory({ checkpoint: true })}>
-            <Bookmark className="size-4" /> Save checkpoint…
+            <Bookmark className="size-4" /> {t('board.saveCheckpoint')}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => openBackupFolder(boardId)}>
-            <FolderOpen className="size-4" /> Open backup folder
+            <FolderOpen className="size-4" /> {t('board.openBackups')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:activity'))}>
-            <ShieldCheck className="size-4" /> Activity & permissions…
+            <ShieldCheck className="size-4" /> {t('board.activity')}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:assistant-settings'))}>
-            <Sparkles className="size-4" /> Assistant settings…
+            <Sparkles className="size-4" /> {t('board.assistantSettings')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>

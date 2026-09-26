@@ -3,11 +3,10 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { CAPABILITIES, type PermissionDecision, type PermissionRequest, type SecurityServerMessage } from '@aifig/shared'
+import { type PermissionDecision, type PermissionRequest, type SecurityServerMessage } from '@aifig/shared'
 import { apiFetch } from '../lib/auth'
 import { SECURITY_EVENT } from '../sync/provider'
-
-const SOURCE: Record<PermissionRequest['source']['kind'], string> = { tool: 'tool', skill: 'skill', assistant: 'assistant', snippet: 'snippet' }
+import { t, tn, useT, type MessageKey } from '../i18n'
 
 /**
  * The one permission prompt: an agent, skill or the assistant asks to touch the network or a secret. Requests
@@ -16,6 +15,7 @@ const SOURCE: Record<PermissionRequest['source']['kind'], string> = { tool: 'too
 export function PermissionPrompt() {
   const [queue, setQueue] = useState<PermissionRequest[]>([])
   const [busy, setBusy] = useState(false)
+  useT()
 
   useEffect(() => {
     apiFetch('/api/permissions')
@@ -38,7 +38,7 @@ export function PermissionPrompt() {
     try {
       const r = await apiFetch('/api/permissions/answer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: req.id, decision }) })
       const body = await r.json()
-      if (!body.ok) toast.info('That request already expired')
+      if (!body.ok) toast.info(t('perm.expired'))
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -48,14 +48,13 @@ export function PermissionPrompt() {
   }
 
   if (!req) return null
-  const cap = CAPABILITIES[req.capability]
   const Icon = req.capability === 'network' ? Globe : req.capability === 'tool' ? Wrench : KeyRound
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && answer('deny')}>
       <DialogContent className="sm:max-w-md" data-permission-prompt={req.id}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ShieldQuestion className="size-4" /> {req.actor.name} is asking for {cap.label.toLowerCase()}
+            <ShieldQuestion className="size-4" /> {t('perm.title', { actor: req.actor.name, capability: t(`perm.cap.${req.capability}` as MessageKey) })}
           </DialogTitle>
           <DialogDescription>{req.reason}.</DialogDescription>
         </DialogHeader>
@@ -63,24 +62,24 @@ export function PermissionPrompt() {
           <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
             <div>
-              Wants to {cap.verb} <span className="font-mono font-medium break-all">{req.target}</span>
+              {tn(`perm.wants.${req.capability}` as MessageKey, { target: <span className="font-mono font-medium break-all">{req.target}</span> })}
             </div>
             <div className="mt-0.5 text-xs text-muted-foreground">
-              via the {SOURCE[req.source.kind]} <span className="font-mono">{req.source.id}</span>
-              {queue.length > 1 ? ` · ${queue.length - 1} more waiting` : ''}
+              {tn('perm.via', { source: t(`perm.source.${req.source.kind}` as MessageKey), id: <span className="font-mono">{req.source.id}</span> })}
+              {queue.length > 1 ? ` · ${t('perm.more', { count: queue.length - 1 })}` : ''}
             </div>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">Every decision is recorded in Activity. You can remove remembered permissions there.</p>
+        <p className="text-xs text-muted-foreground">{t('perm.note')}</p>
         <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="ghost" onClick={() => answer('deny')} disabled={busy} data-permission-deny>
-            Deny
+            {t('perm.deny')}
           </Button>
           <Button variant="outline" onClick={() => answer('allow-always')} disabled={busy} data-permission-always>
-            Always allow {req.actor.name}
+            {t('perm.always', { actor: req.actor.name })}
           </Button>
           <Button onClick={() => answer('allow-once')} disabled={busy} data-permission-once>
-            Allow once
+            {t('perm.once')}
           </Button>
         </DialogFooter>
       </DialogContent>

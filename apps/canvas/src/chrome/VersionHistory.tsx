@@ -10,17 +10,18 @@ import { useBoard, useBoardTitle } from '../board-context'
 import { useEditor } from '../canvas/editor-context'
 import { apiFetch } from '../lib/auth'
 import { callCore } from '../lib/core'
-import { KIND_BADGE, openBackupFolder, restoreVersion, summarize, versionLabel, versionPreviewUrl } from '../lib/versions'
+import { kindBadge, openBackupFolder, restoreVersion, summarize, versionLabel, versionPreviewUrl } from '../lib/versions'
+import { getLocale, t, useT } from '../i18n'
 
-const time = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+const time = (at: number) => new Date(at).toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })
 
-function dayLabel(t: number) {
-  const d = new Date(t)
+function dayLabel(at: number) {
+  const d = new Date(at)
   const today = new Date()
   const yesterday = new Date(Date.now() - 86_400_000)
-  if (d.toDateString() === today.toDateString()) return 'Today'
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
-  return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' })
+  if (d.toDateString() === today.toDateString()) return t('versions.today')
+  if (d.toDateString() === yesterday.toDateString()) return t('versions.yesterday')
+  return d.toLocaleDateString(getLocale(), { weekday: 'short', month: 'short', day: 'numeric', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' })
 }
 
 function groupByDay(versions: VersionInfo[]) {
@@ -61,7 +62,7 @@ function Preview({ boardId, version, theme }: { boardId: string; version: Versio
       {state !== 'error' && src && (
         <img
           src={src}
-          alt={`Board as of ${versionLabel(version)}`}
+          alt={t('versions.previewAlt', { label: versionLabel(version) })}
           onLoad={() => setState('ready')}
           onError={() => setState('error')}
           className={cn('max-h-full max-w-full object-contain p-4 transition-opacity duration-200', state === 'ready' ? 'opacity-100' : 'opacity-0')}
@@ -72,10 +73,10 @@ function Preview({ boardId, version, theme }: { boardId: string; version: Versio
       {state === 'error' && (
         <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
           <ImageOff className="size-5" />
-          This version can’t be previewed — it may be damaged.
+          {t('versions.previewError')}
         </div>
       )}
-      <span className="pointer-events-none absolute top-3 left-3 rounded-full bg-background/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground backdrop-blur">Read-only preview</span>
+      <span className="pointer-events-none absolute top-3 left-3 rounded-full bg-background/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground backdrop-blur">{t('versions.readOnly')}</span>
     </div>
   )
 }
@@ -93,6 +94,7 @@ export function VersionHistory() {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState<'restore' | 'save' | null>(null)
   const nameRef = useRef<HTMLInputElement>(null)
+  useT()
 
   const load = useCallback(async () => {
     setError(null)
@@ -140,7 +142,7 @@ export function VersionHistory() {
       setName('')
       await load()
       setSelected(r.version.id)
-      toast.success(`Saved checkpoint “${n}”`)
+      toast.success(t('versions.savedCheckpoint', { name: n }))
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -175,10 +177,10 @@ export function VersionHistory() {
       <DialogContent className="flex h-[min(640px,88vh)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl" data-ui data-version-history>
         <DialogHeader className="border-b px-5 pt-4 pb-3.5 text-left">
           <DialogTitle className="flex items-center gap-2 text-[15px]">
-            <History className="size-4 text-muted-foreground" strokeWidth={1.75} /> Version history
+            <History className="size-4 text-muted-foreground" strokeWidth={1.75} /> {t('versions.title')}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Versions of “{title || 'Untitled board'}” are saved as you work. Restoring keeps the current state as a version, and ⌘Z undoes it.
+            {t('versions.description', { title: title || t('board.untitled') })}
           </DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
@@ -190,13 +192,13 @@ export function VersionHistory() {
                 save()
               }}
             >
-              <Input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="Name a checkpoint…" className="h-8 text-[13px]" maxLength={120} data-checkpoint-name />
+              <Input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('versions.namePlaceholder')} className="h-8 text-[13px]" maxLength={120} data-checkpoint-name />
               <Button type="submit" size="sm" variant="secondary" className="h-8 shrink-0 gap-1.5" disabled={!name.trim() || busy === 'save'}>
-                {busy === 'save' ? <Loader2 className="size-3.5 animate-spin" /> : <Bookmark className="size-3.5" />} Save
+                {busy === 'save' ? <Loader2 className="size-3.5 animate-spin" /> : <Bookmark className="size-3.5" />} {t('common.save')}
               </Button>
             </form>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 py-1.5" data-version-list>
-              {error && <div className="px-2.5 py-3 text-xs text-destructive">Couldn’t load versions: {error}</div>}
+              {error && <div className="px-2.5 py-3 text-xs text-destructive">{t('versions.loadFailed', { error })}</div>}
               {!error && !versions && (
                 <div className="space-y-1.5 p-1.5">
                   {Array.from({ length: 6 }, (_, i) => (
@@ -206,14 +208,14 @@ export function VersionHistory() {
               )}
               {versions && !versions.length && (
                 <div className="px-3 py-6 text-center text-xs leading-relaxed text-muted-foreground">
-                  No versions yet. They’re saved automatically as the board changes — or name a checkpoint above.
+                  {t('versions.empty')}
                 </div>
               )}
               {groups.map((g) => (
                 <section key={g.day} className="mb-1">
                   <h3 className="sticky top-0 z-[1] bg-background/95 px-2.5 pt-2 pb-1 text-[11px] font-medium text-muted-foreground backdrop-blur">{g.day}</h3>
                   {g.items.map((v) => {
-                    const badge = KIND_BADGE[v.kind]
+                    const badge = kindBadge(v.kind)
                     return (
                       <button
                         key={v.id}
@@ -233,9 +235,7 @@ export function VersionHistory() {
                           <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                             <span className="tabular-nums">{time(v.createdAt)}</span>
                             <span>·</span>
-                            <span className="tabular-nums">
-                              {v.blockCount} block{v.blockCount === 1 ? '' : 's'}
-                            </span>
+                            <span className="tabular-nums">{t('versions.blocks', { count: v.blockCount })}</span>
                             {badge && v.kind !== 'checkpoint' && <span className="rounded bg-muted px-1 text-[10px]">{badge}</span>}
                           </span>
                         </span>
@@ -243,7 +243,7 @@ export function VersionHistory() {
                           <span
                             role="button"
                             tabIndex={-1}
-                            aria-label="Delete checkpoint"
+                            aria-label={t('versions.deleteCheckpoint')}
                             onClick={(e) => {
                               e.stopPropagation()
                               remove(v)
@@ -261,7 +261,7 @@ export function VersionHistory() {
             </div>
             <div className="border-t p-1.5">
               <Button variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 text-xs text-muted-foreground" onClick={() => openBackupFolder(boardId)} data-open-backups>
-                <FolderOpen className="size-3.5" /> Open backup folder
+                <FolderOpen className="size-3.5" /> {t('board.openBackups')}
               </Button>
             </div>
           </aside>
@@ -273,18 +273,18 @@ export function VersionHistory() {
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">{versionLabel(current)}</div>
                     <div className="text-xs text-muted-foreground" data-version-diff>
-                      {new Date(current.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
-                      {current.by ? ` · by ${current.by}` : ''}
+                      {new Date(current.createdAt).toLocaleString(getLocale(), { dateStyle: 'medium', timeStyle: 'short' })}
+                      {current.by ? ` · ${t('versions.by', { name: current.by })}` : ''}
                       {diff ? ` · ${summarize(diff)}` : ''}
                     </div>
                   </div>
                   <Button onClick={restore} disabled={busy === 'restore' || (diff !== null && !diff.added && !diff.removed && !diff.changed)} className="gap-1.5" data-restore-version>
-                    {busy === 'restore' ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />} Restore this version
+                    {busy === 'restore' ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />} {t('versions.restore')}
                   </Button>
                 </div>
               </>
             ) : (
-              <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">{versions ? 'Select a version to preview it.' : ''}</div>
+              <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">{versions ? t('versions.select') : ''}</div>
             )}
           </section>
         </div>

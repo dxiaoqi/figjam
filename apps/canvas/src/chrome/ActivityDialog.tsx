@@ -8,18 +8,12 @@ import type { ActivityCategory, ActivityEntry, PermissionGrant, SecurityServerMe
 import { cn } from '@/lib/utils'
 import { apiFetch } from '../lib/auth'
 import { SECURITY_EVENT } from '../sync/provider'
+import { getLocale, t, useT, type MessageKey } from '../i18n'
 
 const ICON: Record<ActivityCategory, typeof Globe> = { network: Globe, secret: KeyRound, permission: ShieldCheck, auth: ShieldX, skill: Puzzle }
-const FILTERS: { id: ActivityCategory | 'all'; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'network', label: 'Network' },
-  { id: 'secret', label: 'Secrets' },
-  { id: 'permission', label: 'Permissions' },
-  { id: 'skill', label: 'Skills' },
-  { id: 'auth', label: 'Blocked' },
-]
+const FILTERS: (ActivityCategory | 'all')[] = ['all', 'network', 'secret', 'permission', 'skill', 'auth']
 
-const time = (at: number) => new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+const time = (at: number) => new Date(at).toLocaleString(getLocale(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
 /** Activity log (network, secrets, permissions, rejected clients) and remembered permissions. Opened with `aifig:activity`. */
 export function ActivityDialog() {
@@ -28,6 +22,7 @@ export function ActivityDialog() {
   const [grants, setGrants] = useState<PermissionGrant[]>([])
   const [filter, setFilter] = useState<ActivityCategory | 'all'>('all')
   const [error, setError] = useState('')
+  useT()
 
   const load = useCallback(async () => {
     try {
@@ -63,7 +58,7 @@ export function ActivityDialog() {
     const r = await apiFetch('/api/permissions/revoke', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(g) }).then((r) => r.json())
     if (r.ok) {
       setGrants(r.grants)
-      toast.success('Permission removed')
+      toast.success(t('activity.removed'))
     } else toast.error(r.error)
   }
 
@@ -72,29 +67,29 @@ export function ActivityDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-2xl" data-activity-dialog>
         <DialogHeader>
-          <DialogTitle>Activity & permissions</DialogTitle>
-          <DialogDescription>Everything agents, skills and the assistant did with the network or secrets, and every client the core turned away.</DialogDescription>
+          <DialogTitle>{t('activity.title')}</DialogTitle>
+          <DialogDescription>{t('activity.description')}</DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="activity">
           <TabsList>
-            <TabsTrigger value="activity">Activity</TabsTrigger>
-            <TabsTrigger value="grants">Remembered permissions{grants.length ? ` (${grants.length})` : ''}</TabsTrigger>
+            <TabsTrigger value="activity">{t('activity.tab')}</TabsTrigger>
+            <TabsTrigger value="grants">{t('activity.grantsTab')}{grants.length ? ` (${grants.length})` : ''}</TabsTrigger>
           </TabsList>
           <TabsContent value="activity" className="space-y-2 pt-2">
             <div className="flex flex-wrap gap-1">
               {FILTERS.map((f) => (
-                <Button key={f.id} size="sm" variant={filter === f.id ? 'secondary' : 'ghost'} className="h-7 px-2.5 text-xs" onClick={() => setFilter(f.id)}>
-                  {f.label}
+                <Button key={f} size="sm" variant={filter === f ? 'secondary' : 'ghost'} className="h-7 px-2.5 text-xs" onClick={() => setFilter(f)}>
+                  {t(`activity.filter.${f}` as MessageKey)}
                 </Button>
               ))}
             </div>
             <div className="max-h-[50vh] overflow-auto rounded-lg border">
               {error ? (
-                <p className="p-4 text-sm text-destructive">Couldn’t load the activity log: {error}</p>
+                <p className="p-4 text-sm text-destructive">{t('activity.loadFailed', { error })}</p>
               ) : entries === null ? (
-                <p className="p-4 text-sm text-muted-foreground">Loading…</p>
+                <p className="p-4 text-sm text-muted-foreground">{t('activity.loading')}</p>
               ) : !shown.length ? (
-                <p className="p-4 text-sm text-muted-foreground">Nothing here yet. When an agent fetches something or a key is used, it shows up here.</p>
+                <p className="p-4 text-sm text-muted-foreground">{t('activity.empty')}</p>
               ) : (
                 <ul className="divide-y text-sm">
                   {shown.map((e) => {
@@ -107,7 +102,7 @@ export function ActivityDialog() {
                             <span className="font-medium">{e.actor.name}</span> {e.action.replace(/-/g, ' ')} {e.target && <span className="font-mono text-[12px]">{e.target}</span>}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {e.outcome}
+                            {t(`activity.outcome.${e.outcome}` as MessageKey)}
                             {e.via ? ` · ${e.via}` : ''}
                             {e.detail ? ` · ${e.detail}` : ''}
                           </div>
@@ -122,7 +117,7 @@ export function ActivityDialog() {
           </TabsContent>
           <TabsContent value="grants" className="pt-2">
             {!grants.length ? (
-              <p className="rounded-lg border p-4 text-sm text-muted-foreground">No remembered permissions. Agents ask in the canvas before they touch the network or secrets.</p>
+              <p className="rounded-lg border p-4 text-sm text-muted-foreground">{t('activity.noGrants')}</p>
             ) : (
               <ul className="divide-y rounded-lg border text-sm">
                 {grants.map((g) => (
@@ -130,7 +125,7 @@ export function ActivityDialog() {
                     <span className="font-mono text-[12px]">{g.subject}</span>
                     <span className="text-muted-foreground">{g.capability}</span>
                     <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{g.target}</span>
-                    <Button size="icon" variant="ghost" className="size-7" aria-label={`Remove ${g.subject} ${g.capability} ${g.target}`} onClick={() => revoke(g)}>
+                    <Button size="icon" variant="ghost" className="size-7" aria-label={t('activity.remove', { subject: g.subject, capability: g.capability, target: g.target })} onClick={() => revoke(g)}>
                       <X className="size-3.5" />
                     </Button>
                   </li>
