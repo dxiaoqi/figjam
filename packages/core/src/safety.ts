@@ -74,9 +74,10 @@ export class DataSafety {
     this.snapshot(b, 'recovered', `Restored from ${from}`)
   }
 
-  snapshot(b: Board, kind: VersionKind, name: string, by?: string, payload?: Uint8Array): VersionInfo {
-    const info = writeVersion(b, kind, name, by, payload)
-    this.state(b).lastVersionAt = info.createdAt
+  snapshot(b: Board, kind: VersionKind, name: string, by?: string, payload?: Uint8Array, at?: number): VersionInfo {
+    const info = writeVersion(b, kind, name, by, payload, at)
+    const t = this.state(b)
+    t.lastVersionAt = Math.max(t.lastVersionAt, info.createdAt)
     if (kind !== 'checkpoint') pruneVersions(b.id, dataSafetyConfig().versions)
     return info
   }
@@ -89,8 +90,9 @@ export class DataSafety {
     } catch {
       return
     }
-    const { payload } = decodeContainer(old, b.file)
-    this.snapshot(b, 'auto', describeLarge(pending), undefined, payload)
+    const { payload, header } = decodeContainer(old, b.file)
+    // dated when that state was saved, so it sorts before anything made since
+    this.snapshot(b, 'auto', describeLarge(pending), undefined, payload, header?.savedAt)
   }
 
   private afterSave(b: Board) {

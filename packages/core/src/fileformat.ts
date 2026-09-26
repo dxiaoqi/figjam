@@ -96,10 +96,10 @@ export const isContainer = (data: Uint8Array) => data.byteLength >= MAGIC.byteLe
 export function readHeader(data: Uint8Array, file?: string): { header: ContainerHeader; offset: number } {
   if (!isContainer(data)) throw new CorruptFileError('not an ai-figma container', file)
   const buf = Buffer.from(data.buffer, data.byteOffset, data.byteLength)
-  if (buf.byteLength < MAGIC.byteLength + 4) throw new CorruptFileError('file is truncated (no header)', file)
+  if (buf.byteLength < MAGIC.byteLength + 4) throw new CorruptFileError('file is truncated: no header', file)
   const len = buf.readUInt32LE(MAGIC.byteLength)
   const start = MAGIC.byteLength + 4
-  if (len > 1_000_000 || start + len > buf.byteLength) throw new CorruptFileError('file is truncated (header cut off)', file)
+  if (len > 1_000_000 || start + len > buf.byteLength) throw new CorruptFileError('file is truncated: header cut off', file)
   let header: ContainerHeader
   try {
     header = JSON.parse(buf.subarray(start, start + len).toString('utf8'))
@@ -125,7 +125,7 @@ export function decodeContainer(data: Uint8Array, file?: string, supported: Sche
   if (!isContainer(data)) {
     if (!data.byteLength) throw new CorruptFileError('file is empty', file)
     if (data.byteLength < MAGIC.byteLength && MAGIC.subarray(0, data.byteLength).equals(Buffer.from(data))) {
-      throw new CorruptFileError('file is truncated (cut inside the header)', file)
+      throw new CorruptFileError('file is truncated: cut inside the header', file)
     }
     return { schema: LEGACY_SCHEMA, header: null, payload: data }
   }
@@ -134,7 +134,7 @@ export function decodeContainer(data: Uint8Array, file?: string, supported: Sche
   if (schema.major > supported.major) throw new FutureVersionError(header.schema, header.app, file)
   const payload = data.subarray(offset)
   if (payload.byteLength !== header.payload.bytes) {
-    throw new CorruptFileError(`file is truncated (${payload.byteLength} of ${header.payload.bytes} bytes)`, file)
+    throw new CorruptFileError(`file is truncated: ${payload.byteLength} of ${header.payload.bytes} bytes`, file)
   }
   if (sha256(payload) !== header.payload.sha256) throw new CorruptFileError('checksum mismatch — the file is damaged', file)
   return { schema, header, payload }

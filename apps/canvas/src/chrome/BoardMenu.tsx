@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Bookmark, Check, ChevronDown, FolderOpen, History, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { useBoard, useBoardTitle, useProviderState } from '../board-context'
 import { callCore } from '../lib/core'
+import { openBackupFolder, openVersionHistory } from '../lib/versions'
 
 export function Logo({ className }: { className?: string }) {
   return (
@@ -100,6 +101,17 @@ export function BoardMenu() {
           >
             <Pencil className="size-4" /> Rename…
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => openVersionHistory()} data-menu-versions>
+            <History className="size-4" /> Version history…
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openVersionHistory({ checkpoint: true })}>
+            <Bookmark className="size-4" /> Save checkpoint…
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openBackupFolder(boardId)}>
+            <FolderOpen className="size-4" /> Open backup folder
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
             <Trash2 className="size-4" /> Delete board…
           </DropdownMenuItem>
@@ -136,7 +148,7 @@ export function BoardMenu() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Delete “{title}”?</DialogTitle>
-            <DialogDescription>The board file is removed from disk. This can’t be undone.</DialogDescription>
+            <DialogDescription>The board is removed from this machine. A last backup is kept in the backup folder.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>

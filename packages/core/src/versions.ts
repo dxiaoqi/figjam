@@ -64,8 +64,7 @@ export interface VersionSource {
 }
 
 /** Snapshot a board document into its history. */
-export function writeVersion(board: VersionSource, kind: VersionKind, name: string, by?: string, payload?: Uint8Array): VersionInfo {
-  const at = Date.now()
+export function writeVersion(board: VersionSource, kind: VersionKind, name: string, by?: string, payload?: Uint8Array, at = Date.now()): VersionInfo {
   const id = newVersionId(at)
   const doc = payload ? docFrom(payload) : board.doc
   const info: Omit<VersionInfo, 'size'> = {

@@ -1,4 +1,4 @@
-import { History, Undo2 } from 'lucide-react'
+import { History, Layers, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ChangeSet } from '@aifig/shared'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useBoard, useChangeSets } from '../board-context'
 import { authorLabel, groupAuthors } from '../lib/authors'
 import { callCore } from '../lib/core'
+import { openVersionHistory } from '../lib/versions'
 
 const STATUS: Record<ChangeSet['status'], { label: string; cls: string }> = {
   open: { label: 'working', cls: 'bg-violet-500/15 text-violet-600 dark:text-violet-300' },
@@ -112,6 +113,12 @@ export function HistoryMenu() {
             </div>
           </>
         )}
+        <DropdownMenuSeparator className="my-0" />
+        <div className="p-1">
+          <DropdownMenuItem onSelect={() => openVersionHistory()} className="text-xs text-muted-foreground" data-history-versions>
+            <Layers className="size-3.5" /> Version history…
+          </DropdownMenuItem>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   )

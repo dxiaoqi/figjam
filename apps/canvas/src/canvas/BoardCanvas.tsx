@@ -9,6 +9,8 @@ import { AssistantSettings } from '../chrome/AssistantSettings'
 import { EmptyState } from '../chrome/EmptyState'
 import { ReviewPanel } from '../chrome/ReviewPanel'
 import { StatusBanner } from '../chrome/StatusBanner'
+import { DataNotices } from '../chrome/DataNotices'
+import { VersionHistory } from '../chrome/VersionHistory'
 import { StylePanel } from '../chrome/StylePanel'
 import { Toolbar } from '../chrome/Toolbar'
 import { TopRight } from '../chrome/TopRight'
@@ -184,6 +186,8 @@ export function BoardCanvas() {
           <AssistantSettings />
           <SnippetDialog />
           <StatusBanner />
+          <DataNotices />
+          <VersionHistory />
         </EditorContext.Provider>
       ) : (
         <div className="absolute inset-0 z-[1000] flex items-center justify-center">

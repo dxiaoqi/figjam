@@ -54,9 +54,22 @@ function settle<T extends Entity>(v: T): T {
   return { ...v, pending: false, changeSet: null }
 }
 
+/** Content that matters to a person; suggestion state, edit stamps and canvas measurements (contentH) don't. */
 function comparable(v: Entity) {
-  const { pending: _p, changeSet: _c, updatedAt: _u, editedBy: _e, ...rest } = v as Entity & { updatedAt?: number; editedBy?: unknown }
-  return JSON.stringify(rest, Object.keys(rest).sort())
+  const { pending: _p, changeSet: _c, updatedAt: _u, editedBy: _e, contentH: _h, ...rest } = v as Entity & { updatedAt?: number; editedBy?: unknown; contentH?: number }
+  return stable(rest)
+}
+
+function stable(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stable).join(',')}]`
+  if (v && typeof v === 'object') {
+    return `{${Object.keys(v)
+      .filter((k) => (v as Record<string, unknown>)[k] !== undefined)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${stable((v as Record<string, unknown>)[k])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(v) ?? 'null'
 }
 
 function planMap<T extends Entity>(current: Iterable<T>, target: Iterable<T>) {

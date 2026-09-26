@@ -403,7 +403,6 @@ export class BoardRegistry {
         board.externalPath = externalPath
         board.saveNow(true)
         this.safety.onRecovered(board, c.label)
-        const ago = Date.now() - c.at
         this.notices.add({
           id: `recovered:${id}`,
           kind: 'recovered',
@@ -411,7 +410,7 @@ export class BoardRegistry {
           boardId: id,
           boardTitle: board.title,
           title: `“${board.title}” was damaged and has been restored`,
-          detail: `The board file couldn’t be read (${reason}). It was restored from ${c.label}${ago > 60_000 ? ` — edits made after that may be missing` : ''}. The damaged file was kept.`,
+          detail: `The board file couldn’t be read (${reason}). It was restored from ${c.label}; edits made after that may be missing. The damaged file was kept.`,
           file: kept,
         })
         return board

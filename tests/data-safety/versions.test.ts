@@ -90,3 +90,15 @@ test('undoing an agent keeps the state before the undo as a version', async () =
   const v = (await call(HUMAN, 'list_versions', { board })).versions[0]
   assert.match(v.name, /Before undoing/)
 })
+
+test('restore plans see nested edits and ignore canvas measurements and suggestion state', async () => {
+  const { planRestore, diffBlocks } = await import('../../packages/shared/src/versions')
+  const base = { id: 'w', kind: 'web', x: 0, y: 0, w: 200, h: 200, text: '', color: 'gray', size: 'm', web: { mode: 'inline', js: 'a()' } } as any
+  const edited = { ...base, web: { mode: 'inline', js: 'b()' } }
+  assert.deepEqual(diffBlocks([base], [edited]), { added: 0, removed: 0, changed: 1 })
+  const measured = { ...base, contentH: 412, updatedAt: 99, pending: false, changeSet: null }
+  assert.deepEqual(diffBlocks([base], [measured]), { added: 0, removed: 0, changed: 0 })
+  const plan = planRestore({ blocks: [{ ...base, pending: true, changeSet: 'cs1' }], connectors: [] }, { blocks: [base], connectors: [] })
+  assert.equal(plan.upsertBlocks.length, 1, 'a pending block is settled by the restore')
+  assert.equal(plan.upsertBlocks[0].pending, false)
+})
