@@ -94,8 +94,17 @@ claude mcp add --transport http ai-figma http://127.0.0.1:47821/mcp
 (Cursor: `{ "mcpServers": { "ai-figma": { "url": "http://127.0.0.1:47821/mcp" } } }`.) The endpoint only answers
 on `127.0.0.1` and rejects other `Host` headers (DNS-rebinding protection).
 
-The **Connect agent** button in the canvas shows all of these with the correct paths filled in (in the desktop app,
-for its bundled CLI). The agent's name
+**One-click setup.** The **Connect agent** dialog (and the last step of the welcome tour) detects Claude Code and
+Cursor on this machine and adds ai-figma to their MCP settings — `~/.claude.json` (user MCP servers) and
+`~/.cursor/mcp.json` — after you confirm. It writes a stdio entry for the right CLI (in the desktop app, the bundled
+one), backs the existing file up next to it (`*.aifig-backup-<time>`), keeps every other setting and the file's
+indentation, writes atomically, never touches a file it can't parse, and does nothing when the entry is already
+there. **Test connection** launches the configured command and does a real MCP handshake (`initialize` →
+`tools/list`). The endpoints (`/api/agents…`) only answer the app itself on this machine (loopback Host and
+Origin). `AIFIG_AGENT_CONFIG_HOME` / `AIFIG_AGENT_PATH` point detection at another home folder / PATH (tests).
+
+The same dialog keeps the copy-paste fallback: all of these configs with the correct paths filled in (in the
+desktop app, for its bundled CLI). The agent's name
 and color come from its MCP client info (Claude Code, Cursor, Codex); set `AIFIG_AGENT_NAME` to override.
 
 [`skills/ai-figma-canvas/SKILL.md`](skills/ai-figma-canvas/SKILL.md) is an Agent Skill that teaches agents how to
@@ -105,8 +114,8 @@ use the canvas well. Copy it into `~/.claude/skills/` (or your agent's skills fo
 
 | Group | Tools |
 |---|---|
-| Read | `list_boards`, `get_board` (markdown or JSON outline), `get_design_tokens` |
-| Write | `create_blocks` (layout intents `grid` / `row` / `stack` / `cluster` / `tree`; placement `inside` / `right_of` / `below` / new `frame`), `update_blocks` (incl. `rotation`), `delete_blocks`, `connect` (routing `curved` / `elbow` / `straight`), `update_connectors` (routing, label, elbow `waypoints`), `add_image` (file path, URL or base64 — stored inside the board), `group_into_frame`, `create_board` |
+| Read | `list_boards`, `get_board` (markdown or JSON outline), `get_design_tokens`, `list_templates` |
+| Write | `create_blocks` (layout intents `grid` / `row` / `stack` / `cluster` / `tree`; placement `inside` / `right_of` / `below` / new `frame`), `update_blocks` (incl. `rotation`), `delete_blocks`, `connect` (routing `curved` / `elbow` / `straight`), `update_connectors` (routing, label, elbow `waypoints`), `add_image` (file path, URL or base64 — stored inside the board), `group_into_frame`, `create_board` (optionally `template` + `language`) |
 | Layout | `arrange`, `tidy`, `lint_layout` |
 | Look | `render_snapshot` (PNG or SVG of the board, a frame or specific blocks, rendered headlessly by the core) |
 | Collaborate | `set_status`, `begin_change_set`, `commit_change_set`, `list_change_sets` (incl. per-item rejections and reasons), `get_threads`, `reply_thread`, `resolve_thread` |
@@ -122,6 +131,7 @@ Also exposed: resource `aifig://design/tokens` and prompt `layout-best-practices
 npm link                       # optional: puts `aifig` on your PATH (otherwise: node bin/aifig.mjs …)
 
 aifig boards
+aifig new-board --template research-synthesis --lang zh-CN   # or: aifig new-board "Title"; aifig templates
 aifig read                                         # outline of the board open in the canvas
 aifig add "Fast onboarding" "Offline first" --frame "Principles" --intent "Capture principles"
 aifig add "FigJam::Great feel, cloud-first" "tldraw::Best canvas SDK" --kind card --layout row
@@ -186,6 +196,21 @@ screens, one finger pans and two fingers pinch-zoom. The minimap (bottom-left) c
 Far zoom switches to a canvas level of detail, so boards with thousands of blocks stay at 60fps. Dragging snaps to the 8px grid and shows alignment guides against nearby blocks; dropping
 a block into a frame parents it (the frame grows to fit). Selecting blocks shows color and size tokens, plus **Tidy frame** and **Arrange in grid** (both run in the core's
 layout engine, the same one agents use). Light and dark themes are in the top-right corner.
+
+### First run, templates
+
+The first launch shows a short welcome (what it is, a try-it canvas, one-click agent setup) — skippable at every
+step with `Esc`, shown once, and available again from **Settings ▸ Welcome tour**. Automated browsers skip it
+unless the URL has `?welcome=1`. An empty board shows the tool keys, three templates to fill it in place, and
+**Connect an agent**.
+
+**New board…** (board menu, ⌘N in the desktop app) opens a dialog with Blank and five templates: **Research
+synthesis**, **Competitor analysis**, **User journey map**, **Brainstorm** and **Meeting notes**. Templates are
+ordinary typed blocks placed by the layout engine (frames, `cluster` / `grid` / `stack` intents, no coordinates),
+written in the UI language (English or Chinese), and lint clean. Agents get the same through
+`create_board { template, language }` and the CLI through `aifig new-board --template …`; template content applies
+directly instead of as a change set. Templates live in `packages/core/src/templates.ts` (content) and
+`packages/shared/src/templates.ts` (ids, titles).
 
 ### Typed blocks
 
@@ -293,11 +318,34 @@ MCP, a person reviewing item by item and commenting, and the agent reading the c
 - Tray / always-on MCP and multi-window in the desktop app; code signing and auto-update
 - Skills, execution, sync (Phases 1–3)
 
+## Languages (i18n)
+
+The UI ships in English and Simplified Chinese. It follows the OS / browser language (any `zh*` → 简体中文,
+otherwise English); **Settings** (gear, top right; ⌘, in the desktop app) and the desktop **View ▸ Language** menu
+override it. The choice is stored per machine (`localStorage` `aifig:locale`) and the desktop menus follow it.
+
+**How to add strings**
+
+1. Add the key to `apps/canvas/src/i18n/en.ts` (the source of truth), then the same key to `zh-CN.ts` —
+   `npm run typecheck` fails until every locale has it. Keys are namespaced by area: `menu.*`, `review.*`, …
+2. In a component: `const t = useT()` (re-renders on language change), then `t('menu.copy')`. Outside React
+   (toasts, helpers) import `t` directly.
+3. Placeholders: `'board.deleted': 'Deleted “{title}”'` → `t('board.deleted', { title })`. Counts:
+   `{ one: '{count} reply', other: '{count} replies' }` → `t('comments.replies', { count })` (Chinese uses a
+   plain string). Inline markup: `tn('connect.http', { url: <code>{url}</code> })`.
+4. Native desktop menus and dialogs live in `apps/desktop/src/i18n.mjs` (same two locales).
+
+Chinese copy: full-width punctuation, a space between Chinese and Latin words (`连接 Agent`), product names and
+shortcuts unchanged. CJK typography (font fallbacks, line-height, no negative tracking) is set in
+`index.css` under `:lang(zh-CN)`; check new layouts in both languages — Chinese strings are shorter but taller,
+English ones longer.
+
 ## Development
 
 ```bash
 npm run typecheck                                     # every workspace
-npm run test:e2e                                      # canvas engine + app, real pointer/keyboard input (84 checks)
+npm run test:e2e                                      # canvas engine + app, real pointer/keyboard input (166 checks)
+npm run test:onboarding                               # languages, welcome, templates (UI/CLI/MCP), one-click agent setup; isolated core
 npm run test:aesthetics                               # agent-output aesthetics vs baselines (update: test:aesthetics:update)
 node scripts/desktop-e2e.mjs                          # Electron app (window, menus, files, theme, bundled MCP, keychain)
 node scripts/mcp-http-smoke.mjs                       # MCP over local HTTP
