@@ -201,12 +201,6 @@
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
 }
 
-/* Sections below the fold skip style and layout until they come near the viewport. */
-.cv-auto {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 900px;
-}
-
 .shot {
   box-shadow: var(--shot-shadow);
 }

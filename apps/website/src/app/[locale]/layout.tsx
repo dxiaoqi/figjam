@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { notFound } from 'next/navigation'
+import { preload } from 'react-dom'
 import { RevealObserver } from '@/components/reveal'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
@@ -45,10 +46,10 @@ export default async function LocaleLayout({
   const { locale } = await params
   if (!isLocale(locale)) notFound()
   const t = getDictionary(locale)
+  preload('/fonts/inter-latin.woff2', { as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' })
   return (
     <html lang={htmlLang[locale]}>
       <head>
-        <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <TokenStyle />
       </head>
       <body className="min-h-dvh bg-background">

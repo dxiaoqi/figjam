@@ -44,8 +44,16 @@ export function ProductVideo({
       },
       { threshold: 0.25 },
     )
-    io.observe(v)
-    return () => io.disconnect()
+    // Starting media before the first paint puts the page back into a loading state and holds that paint.
+    let timer = 0
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => io.observe(v), 0)
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+      clearTimeout(timer)
+      io.disconnect()
+    }
   }, [])
 
   const toggle = () => {

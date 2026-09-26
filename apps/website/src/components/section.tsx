@@ -1,8 +1,8 @@
 import { Reveal } from '@/components/reveal'
 import { cn } from '@/lib/utils'
 
-/** Vertical rhythm shared by every page section (all of them start below the fold, so they render lazily). */
-export const sectionY = 'cv-auto py-20 sm:py-28 lg:py-32'
+/** Vertical rhythm shared by every page section. */
+export const sectionY = 'py-20 sm:py-28 lg:py-32'
 
 export function Container({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={cn('mx-auto w-full max-w-6xl px-5 sm:px-8', className)}>{children}</div>
