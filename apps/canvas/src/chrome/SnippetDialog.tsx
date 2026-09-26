@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useBoard } from '../board-context'
 import { useEditor } from '../canvas/editor-context'
 import { callCore } from '../lib/core'
+import { useT } from '../i18n'
 
 export interface SnippetDialogRequest {
   id?: string
@@ -28,6 +29,7 @@ export function SnippetDialog() {
   const [css, setCss] = useState('')
   const [js, setJs] = useState('')
   const [busy, setBusy] = useState(false)
+  const t = useT()
 
   useEffect(() => {
     const on = (e: Event) => {
@@ -77,37 +79,34 @@ export function SnippetDialog() {
     <Dialog open={!!req} onOpenChange={(o) => !o && setReq(null)}>
       <DialogContent className="sm:max-w-xl" data-snippet-dialog>
         <DialogHeader>
-          <DialogTitle>{req?.id ? 'Edit web snippet' : 'Add a web snippet'}</DialogTitle>
-          <DialogDescription>
-            Shows a preview on the board and runs only when you double-click it — sandboxed, on its own origin, without access to the board. Inline snippets have
-            no network.
-          </DialogDescription>
+          <DialogTitle>{t(req?.id ? 'snippet.editTitle' : 'snippet.addTitle')}</DialogTitle>
+          <DialogDescription>{t('snippet.description')}</DialogDescription>
         </DialogHeader>
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'url' | 'inline')}>
           <TabsList>
-            <TabsTrigger value="url">Embed a URL</TabsTrigger>
+            <TabsTrigger value="url">{t('snippet.tabUrl')}</TabsTrigger>
             <TabsTrigger value="inline">HTML · CSS · JS</TabsTrigger>
           </TabsList>
           <TabsContent value="url" className="flex flex-col gap-2 pt-2">
             <input autoFocus value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.figma.com/proto/…  ·  YouTube  ·  CodePen  ·  Loom" className={field} data-snippet-url />
             <p className="text-xs text-muted-foreground">
-              {check && 'error' in check ? check.error : check ? `Embeds as ${check.provider}.` : 'Paste a share link; it is converted to its embeddable form.'}
+              {check && 'error' in check ? check.error : check ? t('snippet.embedsAs', { provider: check.provider }) : t('snippet.pasteHint')}
             </p>
           </TabsContent>
           <TabsContent value="inline" className="flex flex-col gap-2 pt-2">
             <textarea value={html} onChange={(e) => setHtml(e.target.value)} placeholder="<div id=app>…</div>" rows={5} className={field} data-snippet-html />
             <textarea value={css} onChange={(e) => setCss(e.target.value)} placeholder="CSS" rows={3} className={field} data-snippet-css />
-            <textarea value={js} onChange={(e) => setJs(e.target.value)} placeholder="JS — keep state with await aifig.getState() / aifig.setState(obj)" rows={4} className={field} data-snippet-js />
-            <p className="text-xs text-muted-foreground tabular-nums">{(bytes / 1024).toFixed(1)} / {SNIPPET_LIMITS.sourceBytes / 1024} KB · no network, no board access</p>
+            <textarea value={js} onChange={(e) => setJs(e.target.value)} placeholder={t('snippet.jsPlaceholder')} rows={4} className={field} data-snippet-js />
+            <p className="text-xs text-muted-foreground tabular-nums">{t('snippet.limits', { used: (bytes / 1024).toFixed(1), max: SNIPPET_LIMITS.sourceBytes / 1024 })}</p>
           </TabsContent>
         </Tabs>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (optional)" className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-foreground/30" />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('snippet.titlePlaceholder')} className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-foreground/30" />
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setReq(null)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={save} disabled={invalid || busy} data-snippet-save>
-            {req?.id ? 'Save' : 'Add to board'}
+            {t(req?.id ? 'common.save' : 'snippet.add')}
           </Button>
         </div>
       </DialogContent>

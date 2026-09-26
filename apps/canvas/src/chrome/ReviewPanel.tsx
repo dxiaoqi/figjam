@@ -11,16 +11,7 @@ import { useEditor } from '../canvas/editor-context'
 import { callCore } from '../lib/core'
 import { blockChanges, type DiffPart, type FieldChange } from '../lib/diff'
 import { AgentAvatar, useNow } from './TopRight'
-
-function ago(ts: number, now: number) {
-  const s = Math.max(0, Math.round((now - ts) / 1000))
-  if (s < 10) return 'just now'
-  if (s < 60) return `${s}s ago`
-  const m = Math.round(s / 60)
-  if (m < 60) return `${m}m ago`
-  const h = Math.round(m / 60)
-  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`
-}
+import { ago, t, tn, useT, type MessageKey } from '../i18n'
 
 function summarize(cs: ChangeSet) {
   let blocks = 0
@@ -39,12 +30,12 @@ function summarize(cs: ChangeSet) {
     } else if (e.op === 'delete') removed++
   }
   const parts: string[] = []
-  if (blocks) parts.push(`${blocks} new`)
-  if (connectors) parts.push(`${connectors} connector${connectors === 1 ? '' : 's'}`)
-  if (edits) parts.push(`${edits} edited`)
-  if (frames && !edits) parts.push(`${frames} frame${frames === 1 ? '' : 's'} resized`)
-  if (removed) parts.push(`${removed} removed`)
-  return parts.join(' · ') || 'No changes'
+  if (blocks) parts.push(t('review.sumNew', { count: blocks }))
+  if (connectors) parts.push(t('review.sumConnectors', { count: connectors }))
+  if (edits) parts.push(t('review.sumEdited', { count: edits }))
+  if (frames && !edits) parts.push(t('review.sumFrames', { count: frames }))
+  if (removed) parts.push(t('review.sumRemoved', { count: removed }))
+  return parts.join(' · ') || t('review.none')
 }
 
 interface ReviewItem {
@@ -69,19 +60,19 @@ function itemsOf(cs: ChangeSet, editor: ReturnType<typeof useEditor>): ReviewIte
       const c = cur as Connector | undefined
       const name = (id?: string | null) => {
         const b = id ? editor.block(id) : undefined
-        return b ? `“${snippet(b.kind === 'card' || b.kind === 'frame' ? b.title : b.text) || b.kind}”` : 'a point'
+        return b ? `“${snippet(b.kind === 'card' || b.kind === 'frame' ? b.title : b.text) || kindName(b.kind)}”` : t('review.aPoint')
       }
-      what = `connector ${name(c?.from)} → ${name(c?.to)}`
+      what = t('review.connectorWhat', { from: name(c?.from), to: name(c?.to) })
     } else {
       const b = cur as Block | undefined
       const text = b ? snippet(b.kind === 'card' || b.kind === 'frame' ? b.title || b.text : b.text) : ''
-      what = `${b?.kind ?? 'block'}${text ? ` “${text}”` : ''}`
+      what = `${kindName(b?.kind ?? 'block')}${text ? ` “${text}”` : ''}`
       if (e.op === 'update' && b?.kind === 'frame') {
-        seen.set(e.id, { id: e.id, op: 'update', label: `Resized frame${text ? ` “${text}”` : ''}` })
+        seen.set(e.id, { id: e.id, op: 'update', label: t('review.itemResized', { text: text ? ` “${text}”` : '' }) })
         continue
       }
     }
-    seen.set(e.id, { id: e.id, op: e.op, label: `${e.op === 'create' ? 'New' : e.op === 'update' ? 'Edited' : 'Removed'} ${what}` })
+    seen.set(e.id, { id: e.id, op: e.op, label: t(e.op === 'create' ? 'review.itemNew' : e.op === 'update' ? 'review.itemEdited' : 'review.itemRemoved', { what }) })
   }
   return [...seen.values()]
 }
@@ -106,8 +97,10 @@ function Parts({ parts }: { parts: DiffPart[] }) {
   )
 }
 
+const kindName = (k: string) => t(`kind.${k}` as MessageKey)
+
 const direction = (dx: number, dy: number) =>
-  [dx ? `${Math.abs(dx)}px ${dx > 0 ? 'right' : 'left'}` : '', dy ? `${Math.abs(dy)}px ${dy > 0 ? 'down' : 'up'}` : ''].filter(Boolean).join(', ')
+  [dx ? t(dx > 0 ? 'review.dirRight' : 'review.dirLeft', { n: Math.abs(dx) }) : '', dy ? t(dy > 0 ? 'review.dirDown' : 'review.dirUp', { n: Math.abs(dy) }) : ''].filter(Boolean).join(', ')
 
 function ChangeRow({ c }: { c: FieldChange }) {
   const label = (s: string) => <span className="w-14 shrink-0 text-muted-foreground">{s}</span>
@@ -117,21 +110,21 @@ function ChangeRow({ c }: { c: FieldChange }) {
     case 'source':
       return (
         <div className={cn('flex gap-2', c.field === 'source' && 'font-mono text-[11px]')} data-diff-field={c.field}>
-          {label(c.field === 'title' ? 'Title' : c.field === 'source' ? 'Source' : 'Text')}
+          {label(t(c.field === 'title' ? 'review.fieldTitle' : c.field === 'source' ? 'review.fieldSource' : 'review.fieldText'))}
           <Parts parts={c.parts} />
         </div>
       )
     case 'moved':
       return (
         <div className="flex gap-2" data-diff-field="moved">
-          {label('Moved')}
-          <span>{direction(c.dx, c.dy)} · ghost shows where it was</span>
+          {label(t('review.fieldMoved'))}
+          <span>{t('review.ghostHint', { dir: direction(c.dx, c.dy) })}</span>
         </div>
       )
     default:
       return (
         <div className="flex gap-2" data-diff-field={c.field}>
-          {label({ resized: 'Size', color: 'Color', size: 'Scale', rotation: 'Rotation', frame: 'Frame', url: 'URL' }[c.field])}
+          {label(t(({ resized: 'review.fieldSize', color: 'review.fieldColor', size: 'review.fieldScale', rotation: 'review.fieldRotation', frame: 'review.fieldFrame', url: 'review.fieldUrl' } as const)[c.field]))}
           <span>
             <span className="text-muted-foreground line-through">{c.from}</span> → {c.to}
           </span>
@@ -145,7 +138,7 @@ function ItemDiff({ cs, id }: { cs: ChangeSet; id: string }) {
   const editor = useEditor()
   const entry = cs.entries.find((e) => e.id === id)
   if (!entry || entry.target !== 'block') return null
-  const frameTitle = (fid?: string | null) => (fid ? editor.block(fid)?.title || 'frame' : 'canvas')
+  const frameTitle = (fid?: string | null) => (fid ? editor.block(fid)?.title || kindName('frame') : t('review.canvas'))
   let body: ReactNode = null
   if (entry.op === 'update') {
     const now = editor.block(id)
@@ -158,8 +151,8 @@ function ItemDiff({ cs, id }: { cs: ChangeSet; id: string }) {
     const b = entry.before as Block
     body = (
       <div className="flex gap-2">
-        <span className="w-14 shrink-0 text-muted-foreground">Removed</span>
-        <del className="text-red-700/80 dark:text-red-300/80">{snippet(b.kind === 'card' ? `${b.title ?? ''} ${b.text}` : b.text) || b.kind}</del>
+        <span className="w-14 shrink-0 text-muted-foreground">{t('review.removed')}</span>
+        <del className="text-red-700/80 dark:text-red-300/80">{snippet(b.kind === 'card' ? `${b.title ?? ''} ${b.text}` : b.text) || kindName(b.kind)}</del>
       </div>
     )
   } else {
@@ -167,7 +160,7 @@ function ItemDiff({ cs, id }: { cs: ChangeSet; id: string }) {
     if (!b || (!b.text && !b.title)) return null
     body = (
       <div className="flex gap-2">
-        <span className="w-14 shrink-0 text-muted-foreground">Adds</span>
+        <span className="w-14 shrink-0 text-muted-foreground">{t('review.adds')}</span>
         <ins className="text-emerald-800 no-underline dark:text-emerald-300">{snippet(b.kind === 'card' ? `${b.title ?? ''} — ${b.text}` : b.text)}</ins>
       </div>
     )
@@ -184,6 +177,7 @@ export function ReviewPanel() {
   const { boardId } = useBoard()
   const all = useChangeSets()
   const now = useNow(5000)
+  useT()
   const [busy, setBusy] = useState<string | null>(null)
   const pending = useMemo(
     () => all.filter((c) => (c.status === 'pending' || c.status === 'open') && c.entries.length).sort((a, b) => b.updatedAt - a.updatedAt),
@@ -196,7 +190,7 @@ export function ReviewPanel() {
       try {
         const r = await callCore<{ reviewed: string[] }>('review_change_set', { board: boardId, id, action })
         const n = r.reviewed.length
-        toast(action === 'accept' ? `Accepted ${n === 1 ? 'change' : `${n} changes`}` : `Rejected ${n === 1 ? 'change' : `${n} changes`} — the canvas is back to how it was`)
+        toast(t(action === 'accept' ? 'review.accepted' : 'review.rejected', { count: n }))
       } catch (e) {
         toast.error((e as Error).message)
       } finally {
@@ -242,7 +236,7 @@ export function ReviewPanel() {
         setReason('')
         if ((document.activeElement as HTMLElement | null)?.dataset.reviewReason) (document.activeElement as HTMLElement).blur()
         if (items.length <= 1) {
-          toast('Change set reviewed')
+          toast(t('review.reviewed'))
           setItemMode(null)
         }
       } catch (e) {
@@ -313,13 +307,13 @@ export function ReviewPanel() {
     <div className="pointer-events-auto absolute right-3 bottom-24 z-[300] sm:bottom-11 flex w-[340px] max-w-[calc(100vw-24px)] flex-col gap-2">
       {pending.length > 1 && (
         <div className="chrome flex items-center justify-between rounded-xl py-1.5 pr-1.5 pl-3 text-xs">
-          <span className="font-medium">{pending.length} changes to review</span>
+          <span className="font-medium">{t('review.changesToReview', { count: pending.length })}</span>
           <div className="flex gap-1">
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => review('all', 'reject')}>
-              Reject all
+              {t('review.rejectAll')}
             </Button>
             <Button size="sm" className="h-7 text-xs" onClick={() => review('all', 'accept')}>
-              Accept all
+              {t('review.acceptAll')}
             </Button>
           </div>
         </div>
@@ -335,15 +329,15 @@ export function ReviewPanel() {
                   {cs.author.name} · {summarize(cs)} · {ago(cs.updatedAt, now)}
                 </div>
               </button>
-              <Button size="icon" variant="ghost" className="size-7" disabled={!!busy} onClick={() => review(cs.id, 'reject')} aria-label="Reject">
+              <Button size="icon" variant="ghost" className="size-7" disabled={!!busy} onClick={() => review(cs.id, 'reject')} aria-label={t('review.reject')}>
                 <X className="size-3.5" />
               </Button>
-              <Button size="icon" variant="ghost" className="size-7" disabled={!!busy} onClick={() => review(cs.id, 'accept')} aria-label="Accept">
+              <Button size="icon" variant="ghost" className="size-7" disabled={!!busy} onClick={() => review(cs.id, 'accept')} aria-label={t('review.accept')}>
                 <Check className="size-3.5" />
               </Button>
             </div>
           ))}
-          {pending.length > 5 && <div className="px-2 py-1 text-[11px] text-muted-foreground">+{pending.length - 5} more</div>}
+          {pending.length > 5 && <div className="px-2 py-1 text-[11px] text-muted-foreground">{t('review.more', { count: pending.length - 5 })}</div>}
         </div>
       )}
       {activeCs && current && (
@@ -372,29 +366,29 @@ export function ReviewPanel() {
             data-review-reason="true"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason if you reject (optional — the agent reads it)"
+            placeholder={t('review.reasonPlaceholder')}
             className="mt-2.5 h-8 w-full rounded-lg bg-muted/70 px-2.5 text-xs outline-none placeholder:text-muted-foreground/70"
           />
           <div className="mt-2 flex items-center gap-1.5">
-            <Button size="icon" variant="ghost" className="size-8" disabled={index === 0} onClick={() => setItemMode({ ...itemMode!, index: index - 1 })} aria-label="Previous item">
+            <Button size="icon" variant="ghost" className="size-8" disabled={index === 0} onClick={() => setItemMode({ ...itemMode!, index: index - 1 })} aria-label={t('review.prev')}>
               <ChevronLeft className="size-4" />
             </Button>
-            <Button size="icon" variant="ghost" className="size-8" disabled={index >= items.length - 1} onClick={() => setItemMode({ ...itemMode!, index: index + 1 })} aria-label="Next item">
+            <Button size="icon" variant="ghost" className="size-8" disabled={index >= items.length - 1} onClick={() => setItemMode({ ...itemMode!, index: index + 1 })} aria-label={t('review.next')}>
               <ChevronRight className="size-4" />
             </Button>
             <Button size="sm" variant="outline" className="h-8 flex-1 gap-1.5 text-xs" disabled={!!busy} onClick={() => decideItem('reject')}>
-              <X className="size-3.5" /> Reject <kbd className="ml-auto font-mono text-[10px] text-muted-foreground">R</kbd>
+              <X className="size-3.5" /> {t('review.reject')} <kbd className="ml-auto font-mono text-[10px] text-muted-foreground">R</kbd>
             </Button>
             <Button size="sm" className="h-8 flex-1 gap-1.5 text-xs" disabled={!!busy} onClick={() => decideItem('accept')}>
-              <Check className="size-3.5" /> Accept <kbd className="ml-auto font-mono text-[10px] opacity-60">A</kbd>
+              <Check className="size-3.5" /> {t('review.accept')} <kbd className="ml-auto font-mono text-[10px] opacity-60">A</kbd>
             </Button>
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
             <span>
-              <kbd className="font-mono">J</kbd>/<kbd className="font-mono">K</kbd> next/previous · <kbd className="font-mono">Esc</kbd> done
+              {tn('review.keys', { j: <kbd className="font-mono">J</kbd>, k: <kbd className="font-mono">K</kbd>, esc: <kbd className="font-mono">Esc</kbd> })}
             </span>
             <button className="font-medium text-foreground hover:underline" onClick={() => review(activeCs.id, 'accept')}>
-              Accept the rest <kbd className="font-mono opacity-60">⇧A</kbd>
+              {t('review.acceptRest')} <kbd className="font-mono opacity-60">⇧A</kbd>
             </button>
           </div>
         </div>
@@ -411,34 +405,34 @@ export function ReviewPanel() {
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{cs.author.name}</span>
                 <span>·</span>
-                <span>{cs.status === 'open' ? 'working…' : ago(cs.updatedAt, now)}</span>
+                <span>{cs.status === 'open' ? t('review.working') : ago(cs.updatedAt, now)}</span>
               </div>
               <div className="mt-0.5 text-[13px] leading-snug font-medium">{cs.intent}</div>
               <div className="mt-1 text-xs text-muted-foreground">{summarize(cs)}</div>
             </div>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button size="icon" variant="ghost" className="-mt-1 -mr-1 size-7" onClick={() => locate(cs)} aria-label="Show on canvas">
+                <Button size="icon" variant="ghost" className="-mt-1 -mr-1 size-7" onClick={() => locate(cs)} aria-label={t('review.show')}>
                   <Crosshair className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Show on canvas</TooltipContent>
+              <TooltipContent>{t('review.show')}</TooltipContent>
             </Tooltip>
           </div>
           <button
             className="mt-2.5 flex w-full items-center gap-1.5 rounded-lg px-1 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
             onClick={() => setItemMode({ csId: cs.id, index: 0 })}
           >
-            <ListChecks className="size-3.5" /> Review item by item
+            <ListChecks className="size-3.5" /> {t('review.itemByItem')}
             <kbd className="ml-auto font-mono text-[10px]">J</kbd>
           </button>
           <div className="mt-2 flex gap-1.5">
             <Button size="sm" variant="outline" className="h-8 flex-1 gap-1.5 text-xs" disabled={!!busy} onClick={() => review(cs.id, 'reject')}>
-              <X className="size-3.5" /> Reject
+              <X className="size-3.5" /> {t('review.reject')}
               {i === 0 && <kbd className="ml-auto font-mono text-[10px] text-muted-foreground">⌥R</kbd>}
             </Button>
             <Button size="sm" className="h-8 flex-1 gap-1.5 text-xs" disabled={!!busy} onClick={() => review(cs.id, 'accept')}>
-              <Check className="size-3.5" /> Accept
+              <Check className="size-3.5" /> {t('review.accept')}
               {i === 0 && <kbd className="ml-auto font-mono text-[10px] opacity-60">⌥A</kbd>}
             </Button>
           </div>
