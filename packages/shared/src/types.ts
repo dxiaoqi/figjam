@@ -39,6 +39,33 @@ export interface BlockTypeDef {
   template?: { rows?: readonly string[]; summary?: readonly string[] }
   /** Suggested relation from this type to others, by target type id. */
   relations?: Readonly<Record<string, Relation>>
+  /** Skill types: display translations by locale (stored values stay as declared). */
+  locales?: Readonly<Record<string, TypeLocale>>
+}
+
+export interface TypeLocale {
+  label?: string
+  plural?: string
+  description?: string
+  /** Field key → label. */
+  fields?: Readonly<Record<string, string>>
+  /** Enum option value → label (shared by all fields of the type). */
+  options?: Readonly<Record<string, string>>
+  /** Number field key → unit. */
+  units?: Readonly<Record<string, string>>
+}
+
+/** Display strings of a type in a locale (falls back to the declared English). */
+export function typeText(def: BlockTypeDef, locale?: string) {
+  const l = locale ? def.locales?.[locale] : undefined
+  return {
+    label: l?.label ?? def.label,
+    plural: l?.plural ?? def.plural,
+    description: l?.description ?? def.description,
+    field: (key: string, fallback: string) => l?.fields?.[key] ?? fallback,
+    option: (value: string) => l?.options?.[value] ?? value,
+    unit: (key: string, fallback?: string) => l?.units?.[key] ?? fallback,
+  }
 }
 
 export type TypeRegistry = Readonly<Record<TypeId, BlockTypeDef>>
@@ -239,36 +266,42 @@ export function matchesQuery(b: Pick<Block, 'type' | 'typeData'>, q: { type?: Ty
   })
 }
 
-const fieldText = (d: FieldDef, v: FieldValue | undefined) => {
+const fieldText = (d: FieldDef, v: FieldValue | undefined, tx?: ReturnType<typeof typeText>) => {
   if (v === undefined || v === '') return ''
-  if (d.kind === 'boolean') return v ? d.label.toLowerCase() : ''
-  if (d.kind === 'number') return `${typeof v === 'number' ? v.toLocaleString('en-US') : v}${d.unit ? ` ${d.unit}` : ''}`
+  if (d.kind === 'boolean') return v ? (tx?.field(d.key, d.label) ?? d.label).toLowerCase() : ''
+  if (d.kind === 'number') {
+    const unit = tx ? tx.unit(d.key, d.unit) : d.unit
+    return `${typeof v === 'number' ? v.toLocaleString('en-US') : v}${unit ? ` ${unit}` : ''}`
+  }
+  if (d.kind === 'enum' && tx) return tx.option(String(v))
   return String(v)
 }
 
 /** One-line field summary: "unverified · high", "P3 · Interview", "@maya · done". */
-export function fieldSummary(b: Pick<Block, 'type' | 'typeData'>, reg: TypeRegistry = BUILTIN_TYPES): string {
+export function fieldSummary(b: Pick<Block, 'type' | 'typeData'>, reg: TypeRegistry = BUILTIN_TYPES, locale?: string): string {
   if (!b.type) return ''
   const def = typeDef(b.type, reg)
+  const tx = typeText(def, locale)
   const f = typeFields(b, reg)
   const keys = def.template?.summary ?? def.fields.filter((d) => !def.template?.rows?.includes(d.key)).map((d) => d.key)
   return keys
     .map((k) => def.fields.find((d) => d.key === k))
     .filter((d): d is FieldDef => !!d)
-    .map((d) => fieldText(d, f[d.key]))
+    .map((d) => fieldText(d, f[d.key], tx))
     .filter(Boolean)
     .join(' · ')
 }
 
 /** Label/value rows a card template shows on the block. */
-export function templateRows(b: Pick<Block, 'type' | 'typeData'>, reg: TypeRegistry = BUILTIN_TYPES): { key: string; label: string; value: string }[] {
+export function templateRows(b: Pick<Block, 'type' | 'typeData'>, reg: TypeRegistry = BUILTIN_TYPES, locale?: string): { key: string; label: string; value: string }[] {
   if (!b.type) return []
   const def = typeDef(b.type, reg)
+  const tx = typeText(def, locale)
   const f = typeFields(b, reg)
   return (def.template?.rows ?? [])
     .map((k) => def.fields.find((d) => d.key === k))
     .filter((d): d is FieldDef => !!d)
-    .map((d) => ({ key: d.key, label: d.label, value: d.kind === 'boolean' ? (f[d.key] === undefined ? '' : f[d.key] ? 'Yes' : 'No') : fieldText(d, f[d.key]) }))
+    .map((d) => ({ key: d.key, label: tx.field(d.key, d.label), value: d.kind === 'boolean' ? (f[d.key] === undefined ? '' : f[d.key] ? 'Yes' : 'No') : fieldText(d, f[d.key], tx) }))
 }
 
 for (const def of Object.values(BLOCK_TYPES)) {

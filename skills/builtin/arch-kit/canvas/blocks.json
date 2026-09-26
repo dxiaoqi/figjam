@@ -1,0 +1,232 @@
+{
+  "$schema": "https://aifig.dev/schemas/skill-blocks-1.json",
+  "version": 1,
+  "types": {
+    "module": {
+      "label": "Module",
+      "plural": "Modules",
+      "base": "card",
+      "color": "blue",
+      "icon": "Package",
+      "glyph": "▦",
+      "description": "A package, library or folder with one job.",
+      "fields": [
+        { "key": "path", "label": "Path", "kind": "text", "placeholder": "packages/core" },
+        { "key": "layer", "label": "Layer", "kind": "enum", "options": ["ui", "api", "domain", "data", "infra", "tooling"] },
+        { "key": "language", "label": "Language", "kind": "text", "placeholder": "TypeScript" },
+        { "key": "owner", "label": "Owner", "kind": "text", "placeholder": "@team" },
+        { "key": "status", "label": "Status", "kind": "enum", "options": ["stable", "changing", "new", "deprecated"], "default": "stable" }
+      ],
+      "template": { "rows": ["path", "layer"], "summary": ["language", "status"] },
+      "prefixes": ["mod:"],
+      "i18n": {
+        "zh-CN": {
+          "label": "模块",
+          "plural": "模块",
+          "fields": { "path": "路径", "layer": "层", "language": "语言", "owner": "负责人", "status": "状态" },
+          "options": {
+            "ui": "界面",
+            "api": "接口层",
+            "domain": "领域",
+            "data": "数据",
+            "infra": "基础设施",
+            "tooling": "工具",
+            "stable": "稳定",
+            "changing": "变更中",
+            "new": "新增",
+            "deprecated": "已废弃"
+          }
+        }
+      }
+    },
+    "service": {
+      "label": "Service",
+      "plural": "Services",
+      "base": "card",
+      "color": "purple",
+      "icon": "Server",
+      "glyph": "◧",
+      "description": "Something that runs: a process, a server, a worker, an app.",
+      "fields": [
+        { "key": "runtime", "label": "Runtime", "kind": "text", "placeholder": "Node 22" },
+        { "key": "port", "label": "Port", "kind": "text", "placeholder": "47821" },
+        { "key": "entry", "label": "Entry point", "kind": "text", "placeholder": "bin/aifig.mjs core" },
+        { "key": "layer", "label": "Layer", "kind": "enum", "options": ["ui", "api", "domain", "data", "infra", "tooling"] }
+      ],
+      "template": { "rows": ["runtime", "port"], "summary": ["entry"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "服务",
+          "plural": "服务",
+          "fields": { "runtime": "运行时", "port": "端口", "entry": "入口", "layer": "层" },
+          "options": { "ui": "界面", "api": "接口层", "domain": "领域", "data": "数据", "infra": "基础设施", "tooling": "工具" }
+        }
+      }
+    },
+    "interface": {
+      "label": "Interface",
+      "plural": "Interfaces",
+      "base": "card",
+      "color": "teal",
+      "icon": "Plug",
+      "glyph": "⇄",
+      "description": "A contract between parts: an endpoint, a tool, a CLI command, an event, a file format.",
+      "fields": [
+        { "key": "kind", "label": "Kind", "kind": "enum", "options": ["http", "websocket", "mcp", "cli", "event", "function", "file"] },
+        { "key": "signature", "label": "Signature", "kind": "text", "placeholder": "POST /api/call {tool, args}" },
+        { "key": "stability", "label": "Stability", "kind": "enum", "options": ["stable", "experimental", "internal"], "default": "stable" },
+        { "key": "auth", "label": "Auth", "kind": "text", "placeholder": "Bearer token" }
+      ],
+      "template": { "rows": ["kind", "signature"], "summary": ["stability", "auth"] },
+      "prefixes": ["api:"],
+      "i18n": {
+        "zh-CN": {
+          "label": "接口",
+          "plural": "接口",
+          "fields": { "kind": "类型", "signature": "签名", "stability": "稳定性", "auth": "鉴权" },
+          "options": { "event": "事件", "function": "函数", "file": "文件", "stable": "稳定", "experimental": "实验性", "internal": "内部" }
+        }
+      }
+    },
+    "datastore": {
+      "label": "Data store",
+      "plural": "Data stores",
+      "base": "card",
+      "color": "orange",
+      "icon": "Database",
+      "glyph": "⛁",
+      "description": "Where state lives: a database, a folder of files, a cache, a queue.",
+      "fields": [
+        { "key": "engine", "label": "Engine", "kind": "text", "placeholder": "Yjs files on disk" },
+        { "key": "holds", "label": "Holds", "kind": "text", "placeholder": "Boards, versions" },
+        { "key": "location", "label": "Location", "kind": "text", "placeholder": "~/.aifig/boards" }
+      ],
+      "template": { "rows": ["engine", "holds"], "summary": ["location"] },
+      "i18n": { "zh-CN": { "label": "数据存储", "plural": "数据存储", "fields": { "engine": "引擎", "holds": "存放", "location": "位置" } } }
+    },
+    "external": {
+      "label": "External",
+      "plural": "External dependencies",
+      "base": "card",
+      "color": "gray",
+      "icon": "Globe",
+      "glyph": "◌",
+      "description": "Something you don't own: a library, a SaaS API, a platform.",
+      "fields": [
+        { "key": "kind", "label": "Kind", "kind": "enum", "options": ["library", "service", "platform", "tool"] },
+        { "key": "version", "label": "Version", "kind": "text" },
+        { "key": "license", "label": "License", "kind": "text", "placeholder": "MIT" }
+      ],
+      "template": { "rows": ["kind"], "summary": ["version", "license"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "外部依赖",
+          "plural": "外部依赖",
+          "fields": { "kind": "类型", "version": "版本", "license": "许可证" },
+          "options": { "library": "库", "service": "服务", "platform": "平台", "tool": "工具" }
+        }
+      }
+    },
+    "decision": {
+      "label": "Decision",
+      "plural": "Decisions",
+      "base": "card",
+      "color": "green",
+      "icon": "Scale",
+      "glyph": "⚖",
+      "description": "An architecture decision record (ADR): context, decision, consequences.",
+      "fields": [
+        { "key": "status", "label": "Status", "kind": "enum", "options": ["proposed", "accepted", "superseded", "rejected"], "default": "proposed" },
+        { "key": "date", "label": "Date", "kind": "text", "placeholder": "2026-09" },
+        { "key": "deciders", "label": "Deciders", "kind": "text" }
+      ],
+      "template": { "rows": ["status", "date"], "summary": ["deciders"] },
+      "prefixes": ["adr:"],
+      "i18n": {
+        "zh-CN": {
+          "label": "决策",
+          "plural": "决策",
+          "fields": { "status": "状态", "date": "日期", "deciders": "决策人" },
+          "options": { "proposed": "提议", "accepted": "已采纳", "superseded": "已取代", "rejected": "已否决" }
+        }
+      }
+    },
+    "risk": {
+      "label": "Risk",
+      "plural": "Risks",
+      "base": "sticky",
+      "color": "red",
+      "icon": "AlertTriangle",
+      "glyph": "⚠",
+      "description": "Something that could go wrong, and how bad it would be.",
+      "fields": [
+        { "key": "severity", "label": "Severity", "kind": "enum", "options": ["high", "medium", "low"], "default": "medium" },
+        { "key": "likelihood", "label": "Likelihood", "kind": "enum", "options": ["low", "medium", "high"], "default": "medium" },
+        { "key": "mitigation", "label": "Mitigation", "kind": "text" }
+      ],
+      "template": { "summary": ["severity", "likelihood"] },
+      "prefixes": ["risk:"],
+      "i18n": {
+        "zh-CN": {
+          "label": "风险",
+          "plural": "风险",
+          "fields": { "severity": "严重度", "likelihood": "可能性", "mitigation": "缓解措施" },
+          "options": { "high": "高", "medium": "中", "low": "低" }
+        }
+      }
+    },
+    "event": {
+      "label": "Event",
+      "plural": "Events",
+      "base": "sticky",
+      "color": "yellow",
+      "icon": "Siren",
+      "glyph": "◷",
+      "description": "One moment of an incident timeline: detection, impact, action, recovery.",
+      "fields": [
+        { "key": "time", "label": "Time", "kind": "text", "placeholder": "2026-09-12 14:05" },
+        { "key": "phase", "label": "Phase", "kind": "enum", "options": ["trigger", "detect", "impact", "respond", "recover", "learn"] },
+        { "key": "actor", "label": "Who", "kind": "text", "placeholder": "on-call" }
+      ],
+      "template": { "summary": ["time", "phase", "actor"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "事件",
+          "plural": "事件",
+          "fields": { "time": "时间", "phase": "阶段", "actor": "执行人" },
+          "options": { "trigger": "触发", "detect": "发现", "impact": "影响", "respond": "响应", "recover": "恢复", "learn": "复盘" }
+        }
+      }
+    }
+  },
+  "relations": [
+    { "from": "module", "to": "module", "relation": "depends on" },
+    { "from": "module", "to": "interface", "relation": "exposes" },
+    { "from": "module", "to": "datastore", "relation": "stores in" },
+    { "from": "module", "to": "external", "relation": "uses" },
+    { "from": "service", "to": "module", "relation": "runs" },
+    { "from": "service", "to": "interface", "relation": "serves" },
+    { "from": "service", "to": "datastore", "relation": "stores in" },
+    { "from": "interface", "to": "module", "relation": "calls" },
+    { "from": "interface", "to": "service", "relation": "calls" },
+    { "from": "decision", "to": "module", "relation": "shapes" },
+    { "from": "decision", "to": "interface", "relation": "shapes" },
+    { "from": "risk", "to": "module", "relation": "threatens" },
+    { "from": "risk", "to": "interface", "relation": "threatens" },
+    { "from": "risk", "to": "decision", "relation": "questions" },
+    { "from": "event", "to": "event", "relation": "leads to" },
+    { "from": "event", "to": "module", "relation": "involves" },
+    { "from": "event", "to": "decision", "relation": "prompts" }
+  ],
+  "layouts": [
+    { "id": "layers", "label": "Layers", "intent": "cluster", "types": ["module", "service"], "field": "layer", "description": "Modules and services in columns by layer, UI on the left, infrastructure on the right." },
+    { "id": "contracts", "label": "Contracts by kind", "intent": "matrix", "types": ["interface"], "rows": "stability", "cols": "kind", "description": "Interfaces by kind × stability." },
+    { "id": "risk-matrix", "label": "Risk matrix", "intent": "matrix", "types": ["risk"], "rows": "severity", "cols": "likelihood", "description": "Severity (high on top) × likelihood." },
+    { "id": "adr-log", "label": "Decision log", "intent": "timeline", "types": ["decision"], "field": "date", "description": "ADRs in date order." },
+    { "id": "incident-timeline", "label": "Incident timeline", "intent": "timeline", "types": ["event"], "field": "time", "description": "Incident events in time order, joined by arrows." }
+  ],
+  "prompts": [
+    { "id": "map-repo", "label": "Map a repository", "file": "prompts/map-repo.md" },
+    { "id": "postmortem", "label": "Incident review", "file": "prompts/postmortem.md" }
+  ]
+}

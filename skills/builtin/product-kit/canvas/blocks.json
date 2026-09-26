@@ -1,0 +1,216 @@
+{
+  "$schema": "https://aifig.dev/schemas/skill-blocks-1.json",
+  "version": 1,
+  "types": {
+    "competitor": {
+      "label": "Competitor",
+      "plural": "Competitors",
+      "base": "card",
+      "color": "blue",
+      "icon": "Building2",
+      "glyph": "▣",
+      "description": "A competing product.",
+      "fields": [
+        { "key": "segment", "label": "Segment", "kind": "text", "placeholder": "Design teams" },
+        { "key": "positioning", "label": "Positioning", "kind": "enum", "options": ["budget", "mainstream", "premium"] },
+        { "key": "price", "label": "Price", "kind": "number", "unit": "$/seat/mo" },
+        { "key": "url", "label": "Website", "kind": "text" }
+      ],
+      "template": { "rows": ["segment", "positioning", "price"], "summary": ["url"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "竞品",
+          "plural": "竞品",
+          "fields": { "segment": "人群", "positioning": "定位", "price": "价格", "url": "网站" },
+          "options": { "budget": "低价", "mainstream": "主流", "premium": "高端" },
+          "units": { "price": "美元/席位/月" }
+        }
+      }
+    },
+    "feature": {
+      "label": "Feature",
+      "plural": "Features",
+      "base": "sticky",
+      "color": "yellow",
+      "icon": "Layers",
+      "glyph": "◆",
+      "description": "Whether a competitor has a capability.",
+      "fields": [
+        { "key": "status", "label": "Status", "kind": "enum", "options": ["has", "partial", "missing"], "default": "has" },
+        { "key": "competitor", "label": "Competitor", "kind": "text" },
+        { "key": "capability", "label": "Capability", "kind": "text", "placeholder": "Local files" }
+      ],
+      "template": { "summary": ["competitor", "status"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "功能",
+          "plural": "功能",
+          "fields": { "status": "状态", "competitor": "竞品", "capability": "能力" },
+          "options": { "has": "有", "partial": "部分", "missing": "没有" }
+        }
+      }
+    },
+    "launch": {
+      "label": "Launch",
+      "plural": "Launches",
+      "base": "sticky",
+      "color": "orange",
+      "icon": "Rocket",
+      "glyph": "▲",
+      "description": "A dated release or event.",
+      "fields": [{ "key": "date", "label": "Date", "kind": "text", "placeholder": "2026-03" }, { "key": "competitor", "label": "Competitor", "kind": "text" }],
+      "i18n": { "zh-CN": { "label": "发布", "plural": "发布", "fields": { "date": "日期", "competitor": "竞品" } } }
+    },
+    "opportunity": {
+      "label": "Opportunity",
+      "plural": "Opportunities",
+      "base": "card",
+      "color": "green",
+      "icon": "Target",
+      "glyph": "◎",
+      "description": "An unmet need or pain worth solving — the root of an opportunity-solution tree.",
+      "fields": [
+        { "key": "segment", "label": "For", "kind": "text", "placeholder": "Teams using coding agents" },
+        { "key": "evidence", "label": "Evidence", "kind": "text", "placeholder": "6 of 8 interviews" },
+        { "key": "size", "label": "Size", "kind": "enum", "options": ["small", "medium", "large"], "default": "medium" }
+      ],
+      "template": { "rows": ["segment", "evidence"], "summary": ["size"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "机会",
+          "plural": "机会",
+          "fields": { "segment": "面向", "evidence": "证据", "size": "规模" },
+          "options": { "small": "小", "medium": "中", "large": "大" }
+        }
+      }
+    },
+    "solution": {
+      "label": "Solution",
+      "plural": "Solutions",
+      "base": "card",
+      "color": "purple",
+      "icon": "Lightbulb",
+      "glyph": "✱",
+      "description": "A way to address an opportunity.",
+      "fields": [
+        { "key": "impact", "label": "Impact", "kind": "enum", "options": ["low", "medium", "high"], "default": "medium" },
+        { "key": "effort", "label": "Effort", "kind": "enum", "options": ["low", "medium", "high"], "default": "medium" },
+        { "key": "confidence", "label": "Confidence", "kind": "enum", "options": ["low", "medium", "high"], "default": "medium" },
+        { "key": "status", "label": "Status", "kind": "enum", "options": ["idea", "exploring", "committed", "shipped", "dropped"], "default": "idea" }
+      ],
+      "template": { "rows": ["impact", "effort"], "summary": ["confidence", "status"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "方案",
+          "plural": "方案",
+          "fields": { "impact": "影响", "effort": "投入", "confidence": "把握", "status": "状态" },
+          "options": { "low": "低", "medium": "中", "high": "高", "idea": "想法", "exploring": "探索中", "committed": "已承诺", "shipped": "已上线", "dropped": "已放弃" }
+        }
+      }
+    },
+    "experiment": {
+      "label": "Experiment",
+      "plural": "Experiments",
+      "base": "card",
+      "color": "orange",
+      "icon": "FlaskConical",
+      "glyph": "⚗",
+      "description": "The cheapest test of a solution's riskiest assumption.",
+      "fields": [
+        { "key": "assumption", "label": "Tests", "kind": "text", "placeholder": "People will connect an agent in week one" },
+        { "key": "method", "label": "Method", "kind": "text", "placeholder": "Fake door, prototype, concierge…" },
+        { "key": "status", "label": "Status", "kind": "enum", "options": ["planned", "running", "passed", "failed"], "default": "planned" }
+      ],
+      "template": { "rows": ["assumption", "method"], "summary": ["status"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "实验",
+          "plural": "实验",
+          "fields": { "assumption": "验证", "method": "方法", "status": "状态" },
+          "options": { "planned": "计划中", "running": "进行中", "passed": "通过", "failed": "未通过" }
+        }
+      }
+    },
+    "metric": {
+      "label": "Metric",
+      "plural": "Metrics",
+      "base": "sticky",
+      "color": "teal",
+      "icon": "Gauge",
+      "glyph": "◔",
+      "description": "A number that tells you if it worked.",
+      "fields": [
+        { "key": "baseline", "label": "Baseline", "kind": "text", "placeholder": "18%" },
+        { "key": "target", "label": "Target", "kind": "text", "placeholder": "35%" },
+        { "key": "kind", "label": "Kind", "kind": "enum", "options": ["north star", "input", "guardrail"], "default": "input" }
+      ],
+      "template": { "summary": ["baseline", "target", "kind"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "指标",
+          "plural": "指标",
+          "fields": { "baseline": "基线", "target": "目标", "kind": "类型" },
+          "options": { "north star": "北极星", "input": "过程指标", "guardrail": "护栏" }
+        }
+      }
+    },
+    "requirement": {
+      "label": "Requirement",
+      "plural": "Requirements",
+      "base": "card",
+      "color": "gray",
+      "icon": "ListChecks",
+      "glyph": "☰",
+      "description": "What the committed solution must do — a line of the PRD.",
+      "fields": [
+        { "key": "priority", "label": "Priority", "kind": "enum", "options": ["must", "should", "could", "won't"], "default": "should" },
+        { "key": "area", "label": "Area", "kind": "text", "placeholder": "Onboarding" },
+        { "key": "status", "label": "Status", "kind": "enum", "options": ["draft", "agreed", "building", "done"], "default": "draft" }
+      ],
+      "template": { "rows": ["priority", "area"], "summary": ["status"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "需求",
+          "plural": "需求",
+          "fields": { "priority": "优先级", "area": "模块", "status": "状态" },
+          "options": { "must": "必须", "should": "应该", "could": "可以", "won't": "暂不", "draft": "草稿", "agreed": "已确认", "building": "开发中", "done": "完成" }
+        }
+      }
+    }
+  },
+  "relations": [
+    { "from": "feature", "to": "competitor", "relation": "belongs to" },
+    { "from": "launch", "to": "competitor", "relation": "belongs to" },
+    { "from": "competitor", "to": "competitor", "relation": "competes with" },
+    { "from": "feature", "to": "opportunity", "relation": "reveals" },
+    { "from": "opportunity", "to": "opportunity", "relation": "contains" },
+    { "from": "opportunity", "to": "solution", "relation": "solved by" },
+    { "from": "solution", "to": "experiment", "relation": "tested by" },
+    { "from": "experiment", "to": "metric", "relation": "measures" },
+    { "from": "solution", "to": "metric", "relation": "moves" },
+    { "from": "solution", "to": "requirement", "relation": "needs" }
+  ],
+  "layouts": [
+    { "id": "positioning-matrix", "label": "Positioning matrix", "intent": "matrix", "types": ["competitor"], "rows": "segment", "cols": "positioning" },
+    { "id": "feature-grid", "label": "Feature grid", "intent": "matrix", "types": ["feature"], "rows": "competitor", "cols": "status" },
+    { "id": "competitor-matrix", "label": "Competitor matrix", "intent": "matrix", "types": ["feature"], "rows": "capability", "cols": "competitor", "description": "Capabilities × competitors: the classic comparison table." },
+    { "id": "launches", "label": "Launch timeline", "intent": "timeline", "types": ["launch"], "field": "date" },
+    { "id": "priority-matrix", "label": "Priority matrix", "intent": "matrix", "types": ["solution"], "rows": "impact", "cols": "effort", "rowOrder": ["high", "medium", "low"], "description": "Impact (high on top) × effort (low on the left): do the top-left first." },
+    { "id": "requirements", "label": "Requirements by priority", "intent": "cluster", "types": ["requirement"], "field": "priority", "description": "MoSCoW columns." }
+  ],
+  "actions": [
+    {
+      "id": "fetch-homepage",
+      "label": "Fetch homepage",
+      "description": "Read the competitor's website and add a summary sticky for review.",
+      "tool": "fetch.fetch",
+      "args": { "url": "{{fields.url}}", "max_length": 1500 },
+      "appliesTo": ["competitor"],
+      "output": { "mode": "blocks" }
+    }
+  ],
+  "prompts": [
+    { "id": "compare", "label": "Compare competitors", "file": "prompts/compare.md" },
+    { "id": "prd", "label": "Write the PRD outline", "file": "prompts/prd.md" }
+  ]
+}

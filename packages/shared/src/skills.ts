@@ -26,6 +26,9 @@ export interface SkillLayout {
   cols?: string
   /** timeline: field holding a date or sortable label. cluster: field to group by. */
   field?: string
+  /** matrix / cluster: order of row and column values (default: the field's enum options, in order). */
+  rowOrder?: string[]
+  colOrder?: string[]
 }
 
 export interface SkillAction {
@@ -85,6 +88,8 @@ export const SKILL_ICONS = [
   'Sparkles', 'CircleHelp', 'Quote', 'FlaskConical', 'Lightbulb', 'SquareCheck', 'Tag', 'User', 'Users', 'Building2', 'Store', 'Swords',
   'Target', 'Flag', 'Star', 'Heart', 'ThumbsUp', 'ThumbsDown', 'AlertTriangle', 'Bug', 'Rocket', 'Calendar', 'Clock', 'MapPin',
   'DollarSign', 'ChartBar', 'TrendingUp', 'Layers', 'Link', 'FileText', 'BookOpen', 'MessageSquare', 'Mic', 'Search', 'Puzzle', 'Package',
+  'Database', 'Server', 'Globe', 'Scale', 'Plug', 'Code', 'GitBranch', 'Monitor', 'Gauge',
+  'ListChecks', 'GraduationCap', 'Library', 'ShieldAlert', 'Milestone', 'Workflow', 'Siren', 'PanelsTopLeft', 'MessageCircle',
 ] as const
 export type SkillIcon = (typeof SKILL_ICONS)[number]
 

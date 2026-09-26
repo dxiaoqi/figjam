@@ -2,6 +2,31 @@
   "$schema": "https://aifig.dev/schemas/skill-blocks-1.json",
   "version": 1,
   "types": {
+    "interview": {
+      "label": "Interview",
+      "plural": "Interviews",
+      "base": "card",
+      "color": "blue",
+      "icon": "Users",
+      "glyph": "◉",
+      "description": "One research session: who, when, and a one-line summary.",
+      "fields": [
+        { "key": "participant", "label": "Participant", "kind": "text", "placeholder": "P3" },
+        { "key": "role", "label": "Role", "kind": "text", "placeholder": "Staff engineer" },
+        { "key": "date", "label": "Date", "kind": "text", "placeholder": "2026-09-14" },
+        { "key": "segment", "label": "Segment", "kind": "text", "placeholder": "Agent power user" },
+        { "key": "method", "label": "Method", "kind": "enum", "options": ["interview", "usability test", "survey", "support ticket", "diary"], "default": "interview" }
+      ],
+      "template": { "rows": ["participant", "role", "date"], "summary": ["segment", "method"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "访谈",
+          "plural": "访谈",
+          "fields": { "participant": "受访者", "role": "角色", "date": "日期", "segment": "人群", "method": "方式" },
+          "options": { "interview": "访谈", "usability test": "可用性测试", "survey": "问卷", "support ticket": "工单", "diary": "日记" }
+        }
+      }
+    },
     "quote": {
       "label": "Quote",
       "plural": "Quotes",
@@ -9,15 +34,25 @@
       "color": "teal",
       "icon": "Mic",
       "glyph": "❝",
-      "description": "A verbatim quote from a participant.",
+      "description": "A verbatim quote from a participant, with where it came from.",
       "fields": [
         { "key": "participant", "label": "Participant", "kind": "text", "placeholder": "P3" },
         { "key": "source", "label": "Source", "kind": "text", "placeholder": "Interview" },
+        { "key": "ref", "label": "Where", "kind": "text", "placeholder": "p3.md:42 or 12:40" },
+        { "key": "theme", "label": "Theme", "kind": "text" },
         { "key": "sentiment", "label": "Sentiment", "kind": "enum", "options": ["positive", "neutral", "negative"] },
         { "key": "stage", "label": "Stage", "kind": "text", "placeholder": "Onboarding" }
       ],
-      "template": { "summary": ["participant", "source", "sentiment"] },
-      "prefixes": ["rq:"]
+      "template": { "summary": ["participant", "ref", "sentiment"] },
+      "prefixes": ["rq:"],
+      "i18n": {
+        "zh-CN": {
+          "label": "原话",
+          "plural": "原话",
+          "fields": { "participant": "受访者", "source": "来源", "ref": "出处", "theme": "主题", "sentiment": "情绪", "stage": "阶段" },
+          "options": { "positive": "正面", "neutral": "中性", "negative": "负面" }
+        }
+      }
     },
     "insight": {
       "label": "Insight",
@@ -31,9 +66,19 @@
         { "key": "theme", "label": "Theme", "kind": "text" },
         { "key": "confidence", "label": "Confidence", "kind": "enum", "options": ["low", "medium", "high"], "default": "medium" },
         { "key": "evidence", "label": "Evidence", "kind": "number", "unit": "quotes" },
+        { "key": "participants", "label": "Participants", "kind": "number", "unit": "people" },
         { "key": "stage", "label": "Stage", "kind": "text" }
       ],
-      "template": { "rows": ["theme", "confidence", "evidence"] }
+      "template": { "rows": ["theme", "confidence", "evidence"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "洞察",
+          "plural": "洞察",
+          "fields": { "theme": "主题", "confidence": "把握", "evidence": "证据", "participants": "受访人数", "stage": "阶段" },
+          "options": { "low": "低", "medium": "中", "high": "高" },
+          "units": { "evidence": "条", "participants": "人" }
+        }
+      }
     },
     "opportunity": {
       "label": "Opportunity",
@@ -47,17 +92,26 @@
         { "key": "impact", "label": "Impact", "kind": "enum", "options": ["low", "medium", "high"], "default": "medium" },
         { "key": "effort", "label": "Effort", "kind": "enum", "options": ["low", "medium", "high"], "default": "medium" }
       ],
-      "template": { "rows": ["impact", "effort"] }
+      "template": { "rows": ["impact", "effort"] },
+      "i18n": {
+        "zh-CN": { "label": "机会点", "plural": "机会点", "fields": { "impact": "影响", "effort": "投入" }, "options": { "low": "低", "medium": "中", "high": "高" } }
+      }
     }
   },
   "relations": [
+    { "from": "interview", "to": "quote", "relation": "yields" },
     { "from": "quote", "to": "insight", "relation": "supports" },
+    { "from": "quote", "to": "hypothesis", "relation": "supports" },
     { "from": "insight", "to": "opportunity", "relation": "inspires" },
+    { "from": "insight", "to": "hypothesis", "relation": "raises" },
+    { "from": "opportunity", "to": "hypothesis", "relation": "tests" },
     { "from": "quote", "to": "question", "relation": "raises" }
   ],
   "layouts": [
     { "id": "affinity", "label": "Affinity map", "intent": "cluster", "types": ["insight"], "field": "theme", "description": "Insights grouped by theme." },
-    { "id": "opportunity-matrix", "label": "Opportunity matrix", "intent": "matrix", "types": ["opportunity"], "rows": "impact", "cols": "effort" },
+    { "id": "quote-affinity", "label": "Quotes by theme", "intent": "cluster", "types": ["quote"], "field": "theme", "description": "Quotes in columns by theme — the first pass of affinity clustering." },
+    { "id": "by-participant", "label": "Quotes by participant", "intent": "cluster", "types": ["quote"], "field": "participant", "description": "One column per participant, to check coverage." },
+    { "id": "opportunity-matrix", "label": "Opportunity matrix", "intent": "matrix", "types": ["opportunity"], "rows": "impact", "cols": "effort", "rowOrder": ["high", "medium", "low"] },
     { "id": "journey", "label": "Journey", "intent": "matrix", "types": ["quote", "insight"], "rows": "type", "cols": "stage", "description": "Quotes and insights along the journey stages." }
   ],
   "actions": [
@@ -72,6 +126,7 @@
     }
   ],
   "prompts": [
-    { "id": "synthesize", "label": "Synthesize quotes into insights", "file": "prompts/synthesize.md" }
+    { "id": "synthesize", "label": "Synthesize quotes into insights", "file": "prompts/synthesize.md" },
+    { "id": "report", "label": "Write the research report", "file": "prompts/report.md" }
   ]
 }

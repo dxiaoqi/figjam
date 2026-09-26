@@ -1,7 +1,8 @@
 import type { ContentLanguage, TemplateId } from '@aifig/shared'
+import { SCENARIO_BUILDERS } from './scenario-templates'
 
 export interface TemplateStep {
-  tool: 'create_blocks' | 'connect'
+  tool: 'create_blocks' | 'connect' | 'create_snippet'
   args: Record<string, unknown>
 }
 
@@ -264,6 +265,8 @@ const BUILDERS: Record<TemplateId, (l: L) => TemplateStep[]> = {
       },
     },
   ],
+
+  ...SCENARIO_BUILDERS,
 }
 
 export function templateSteps(id: TemplateId, language: ContentLanguage = 'en'): TemplateStep[] {

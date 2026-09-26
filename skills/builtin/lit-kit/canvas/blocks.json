@@ -1,0 +1,172 @@
+{
+  "$schema": "https://aifig.dev/schemas/skill-blocks-1.json",
+  "version": 1,
+  "types": {
+    "question": {
+      "label": "Research question",
+      "plural": "Research questions",
+      "base": "card",
+      "color": "orange",
+      "icon": "CircleHelp",
+      "glyph": "?",
+      "description": "What the review sets out to answer.",
+      "fields": [
+        { "key": "rq", "label": "ID", "kind": "text", "placeholder": "RQ1" },
+        { "key": "status", "label": "Status", "kind": "enum", "options": ["open", "partly answered", "answered", "contested"], "default": "open" }
+      ],
+      "template": { "rows": ["rq", "status"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "研究问题",
+          "plural": "研究问题",
+          "fields": { "rq": "编号", "status": "状态" },
+          "options": { "open": "待解", "partly answered": "部分解答", "answered": "已解答", "contested": "有争议" }
+        }
+      }
+    },
+    "paper": {
+      "label": "Paper",
+      "plural": "Papers",
+      "base": "card",
+      "color": "blue",
+      "icon": "BookOpen",
+      "glyph": "▯",
+      "description": "One source: a paper, book chapter, report or preprint.",
+      "fields": [
+        { "key": "authors", "label": "Authors", "kind": "text", "placeholder": "Lee & Park" },
+        { "key": "year", "label": "Year", "kind": "text", "placeholder": "2024" },
+        { "key": "venue", "label": "Venue", "kind": "text", "placeholder": "CHI" },
+        { "key": "method", "label": "Method", "kind": "enum", "options": ["experiment", "field study", "survey", "case study", "meta-analysis", "theory", "benchmark"] },
+        { "key": "cite", "label": "Cite key", "kind": "text", "placeholder": "lee2024" },
+        { "key": "url", "label": "Link", "kind": "text", "placeholder": "https://doi.org/…" }
+      ],
+      "template": { "rows": ["authors", "year", "venue"], "summary": ["method", "cite"] },
+      "prefixes": ["paper:"],
+      "i18n": {
+        "zh-CN": {
+          "label": "文献",
+          "plural": "文献",
+          "fields": { "authors": "作者", "year": "年份", "venue": "出处", "method": "方法", "cite": "引用键", "url": "链接" },
+          "options": {
+            "experiment": "实验",
+            "field study": "实地研究",
+            "survey": "调查",
+            "case study": "案例研究",
+            "meta-analysis": "元分析",
+            "theory": "理论",
+            "benchmark": "基准测试"
+          }
+        }
+      }
+    },
+    "claim": {
+      "label": "Claim",
+      "plural": "Claims",
+      "base": "card",
+      "color": "purple",
+      "icon": "Sparkles",
+      "glyph": "✦",
+      "description": "An argument the literature makes, in one sentence.",
+      "fields": [
+        { "key": "rq", "label": "Answers", "kind": "text", "placeholder": "RQ1" },
+        { "key": "consensus", "label": "Consensus", "kind": "enum", "options": ["strong", "moderate", "weak", "contested"], "default": "moderate" },
+        { "key": "sources", "label": "Sources", "kind": "number", "unit": "papers" }
+      ],
+      "template": { "rows": ["rq", "consensus"], "summary": ["sources"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "论点",
+          "plural": "论点",
+          "fields": { "rq": "回答", "consensus": "共识", "sources": "来源" },
+          "options": { "strong": "强", "moderate": "中等", "weak": "弱", "contested": "有争议" },
+          "units": { "sources": "篇" }
+        }
+      }
+    },
+    "evidence": {
+      "label": "Evidence",
+      "plural": "Evidence",
+      "base": "sticky",
+      "color": "teal",
+      "icon": "FileText",
+      "glyph": "¶",
+      "description": "A finding or quote from a paper that supports a claim, with where it is.",
+      "fields": [
+        { "key": "cite", "label": "Source", "kind": "text", "placeholder": "lee2024" },
+        { "key": "loc", "label": "Where", "kind": "text", "placeholder": "p. 7, Table 2" },
+        { "key": "strength", "label": "Strength", "kind": "enum", "options": ["strong", "moderate", "weak"], "default": "moderate" },
+        { "key": "rq", "label": "RQ", "kind": "text" }
+      ],
+      "template": { "summary": ["cite", "loc", "strength"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "证据",
+          "plural": "证据",
+          "fields": { "cite": "来源", "loc": "位置", "strength": "强度", "rq": "问题" },
+          "options": { "strong": "强", "moderate": "中等", "weak": "弱" }
+        }
+      }
+    },
+    "counter": {
+      "label": "Counter-evidence",
+      "plural": "Counter-evidence",
+      "base": "sticky",
+      "color": "red",
+      "icon": "Swords",
+      "glyph": "✕",
+      "description": "A finding that challenges a claim: a failed replication, a limitation, an opposing result.",
+      "fields": [
+        { "key": "cite", "label": "Source", "kind": "text", "placeholder": "chen2025" },
+        { "key": "loc", "label": "Where", "kind": "text", "placeholder": "§5.2" },
+        { "key": "kind", "label": "Kind", "kind": "enum", "options": ["opposing result", "limitation", "failed replication", "confound"], "default": "opposing result" },
+        { "key": "rq", "label": "RQ", "kind": "text" }
+      ],
+      "template": { "summary": ["cite", "loc", "kind"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "反驳",
+          "plural": "反驳",
+          "fields": { "cite": "来源", "loc": "位置", "kind": "类型", "rq": "问题" },
+          "options": { "opposing result": "相反结果", "limitation": "局限", "failed replication": "复现失败", "confound": "混杂因素" }
+        }
+      }
+    },
+    "gap": {
+      "label": "Gap",
+      "plural": "Gaps",
+      "base": "sticky",
+      "color": "yellow",
+      "icon": "Search",
+      "glyph": "◌",
+      "description": "Something the literature doesn't answer yet — a candidate for future work.",
+      "fields": [
+        { "key": "rq", "label": "RQ", "kind": "text" },
+        { "key": "priority", "label": "Priority", "kind": "enum", "options": ["high", "medium", "low"], "default": "medium" }
+      ],
+      "template": { "summary": ["rq", "priority"] },
+      "i18n": {
+        "zh-CN": { "label": "空白", "plural": "空白", "fields": { "rq": "问题", "priority": "优先级" }, "options": { "high": "高", "medium": "中", "low": "低" } }
+      }
+    }
+  },
+  "relations": [
+    { "from": "evidence", "to": "claim", "relation": "supports" },
+    { "from": "counter", "to": "claim", "relation": "contradicts" },
+    { "from": "claim", "to": "question", "relation": "answers" },
+    { "from": "paper", "to": "evidence", "relation": "reports" },
+    { "from": "paper", "to": "counter", "relation": "reports" },
+    { "from": "paper", "to": "paper", "relation": "builds on" },
+    { "from": "gap", "to": "question", "relation": "leaves open" },
+    { "from": "claim", "to": "claim", "relation": "qualifies" }
+  ],
+  "layouts": [
+    { "id": "argument-map", "label": "Argument map", "intent": "matrix", "types": ["evidence", "claim", "counter", "gap"], "rows": "rq", "cols": "type", "colOrder": ["evidence", "claim", "counter", "gap"], "description": "A row per research question: supporting evidence → claims ← counter-evidence, then gaps." },
+    { "id": "papers-timeline", "label": "Papers by year", "intent": "timeline", "types": ["paper"], "field": "year", "description": "How the field developed." },
+    { "id": "papers-by-method", "label": "Papers by method", "intent": "cluster", "types": ["paper"], "field": "method" },
+    { "id": "consensus", "label": "Claims by consensus", "intent": "matrix", "types": ["claim"], "rows": "consensus", "cols": "rq", "description": "Where the literature agrees, per research question." }
+  ],
+  "prompts": [
+    { "id": "extract", "label": "Extract claims and evidence", "file": "prompts/extract.md" },
+    { "id": "outline", "label": "Write the review outline", "file": "prompts/outline.md" }
+  ]
+}

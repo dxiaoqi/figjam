@@ -1,0 +1,106 @@
+{
+  "$schema": "https://aifig.dev/schemas/skill-blocks-1.json",
+  "version": 1,
+  "types": {
+    "brief": {
+      "label": "Brief",
+      "plural": "Briefs",
+      "base": "card",
+      "color": "blue",
+      "icon": "Target",
+      "glyph": "◎",
+      "description": "What the prototypes are for: the job, the audience, what good looks like.",
+      "fields": [
+        { "key": "audience", "label": "For", "kind": "text", "placeholder": "First-time users" },
+        { "key": "success", "label": "Good when", "kind": "text", "placeholder": "Finishes setup in under 2 minutes" },
+        { "key": "constraints", "label": "Constraints", "kind": "text", "placeholder": "Mobile first, no new API" }
+      ],
+      "template": { "rows": ["audience", "success"], "summary": ["constraints"] },
+      "i18n": { "zh-CN": { "label": "需求简报", "plural": "需求简报", "fields": { "audience": "面向", "success": "成功标准", "constraints": "约束" } } }
+    },
+    "variant": {
+      "label": "Variant",
+      "plural": "Variants",
+      "base": "card",
+      "color": "purple",
+      "icon": "PanelsTopLeft",
+      "glyph": "▤",
+      "description": "One prototype direction — sits above its web snippet in the variant's frame.",
+      "fields": [
+        { "key": "label", "label": "Variant", "kind": "text", "placeholder": "A" },
+        { "key": "approach", "label": "Approach", "kind": "text", "placeholder": "Wizard with progress" },
+        { "key": "round", "label": "Round", "kind": "number", "default": 1 },
+        { "key": "status", "label": "Status", "kind": "enum", "options": ["exploring", "shortlisted", "chosen", "dropped"], "default": "exploring" }
+      ],
+      "template": { "rows": ["approach", "status"], "summary": ["label", "round"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "方案",
+          "plural": "方案",
+          "fields": { "label": "编号", "approach": "思路", "round": "轮次", "status": "状态" },
+          "options": { "exploring": "探索中", "shortlisted": "入围", "chosen": "选定", "dropped": "放弃" }
+        }
+      }
+    },
+    "feedback": {
+      "label": "Feedback",
+      "plural": "Feedback",
+      "base": "sticky",
+      "color": "yellow",
+      "icon": "MessageCircle",
+      "glyph": "✎",
+      "description": "A review note on one variant.",
+      "fields": [
+        { "key": "variant", "label": "Variant", "kind": "text", "placeholder": "A" },
+        { "key": "verdict", "label": "Verdict", "kind": "enum", "options": ["keep", "change", "drop"], "default": "change" },
+        { "key": "author", "label": "From", "kind": "text", "placeholder": "Design review" }
+      ],
+      "template": { "summary": ["variant", "verdict", "author"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "评审意见",
+          "plural": "评审意见",
+          "fields": { "variant": "方案", "verdict": "结论", "author": "来自" },
+          "options": { "keep": "保留", "change": "修改", "drop": "放弃" }
+        }
+      }
+    },
+    "decision": {
+      "label": "Decision",
+      "plural": "Decisions",
+      "base": "card",
+      "color": "green",
+      "icon": "Flag",
+      "glyph": "⚑",
+      "description": "Which variant goes forward, and why.",
+      "fields": [
+        { "key": "chosen", "label": "Chosen", "kind": "text", "placeholder": "B, with A's progress bar" },
+        { "key": "status", "label": "Status", "kind": "enum", "options": ["proposed", "decided"], "default": "proposed" },
+        { "key": "date", "label": "Date", "kind": "text" }
+      ],
+      "template": { "rows": ["chosen", "status"], "summary": ["date"] },
+      "i18n": {
+        "zh-CN": {
+          "label": "决定",
+          "plural": "决定",
+          "fields": { "chosen": "选定", "status": "状态", "date": "日期" },
+          "options": { "proposed": "提议", "decided": "已决定" }
+        }
+      }
+    }
+  },
+  "relations": [
+    { "from": "brief", "to": "variant", "relation": "explored by" },
+    { "from": "feedback", "to": "variant", "relation": "reviews" },
+    { "from": "feedback", "to": "decision", "relation": "informs" },
+    { "from": "variant", "to": "decision", "relation": "leads to" }
+  ],
+  "layouts": [
+    { "id": "feedback-by-variant", "label": "Feedback by variant", "intent": "cluster", "types": ["feedback"], "field": "variant", "description": "One column of review notes per variant." },
+    { "id": "feedback-matrix", "label": "Verdicts", "intent": "matrix", "types": ["feedback"], "rows": "verdict", "cols": "variant", "description": "Keep / change / drop × variant — where the variants agree and differ." }
+  ],
+  "prompts": [
+    { "id": "wall", "label": "Build a prototype wall", "file": "prompts/wall.md" },
+    { "id": "iterate", "label": "Iterate on feedback", "file": "prompts/iterate.md" }
+  ]
+}
