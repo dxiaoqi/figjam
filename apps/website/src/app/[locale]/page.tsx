@@ -57,7 +57,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
             {h.hero.eyebrow}
           </p>
           <h1 className="display mx-auto mt-6 max-w-4xl text-[2.5rem] leading-[1.06] font-semibold text-foreground sm:mt-7 sm:text-6xl lg:text-[4.5rem]">
-            {h.hero.titleA} <span className="marker whitespace-nowrap">{h.hero.titleB}</span>
+            {h.hero.titleA}
+            <br />
+            <span className="marker">{h.hero.titleB}</span>
           </h1>
           <p className="lede mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:mt-7 sm:text-lg">{h.hero.lede}</p>
           <div className="mx-auto mt-8 flex max-w-xs flex-col items-stretch justify-center gap-3 sm:mt-9 sm:max-w-none sm:flex-row sm:items-center">

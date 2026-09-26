@@ -67,7 +67,7 @@ export default async function PrivacyPage({ params }: { params: Promise<{ locale
 
       <section className="border-t border-border/70 bg-white py-16 sm:py-20">
         <Container className="grid gap-10 lg:grid-cols-[13rem_1fr] lg:gap-16 [&>*]:min-w-0">
-          <aside className="lg:sticky lg:top-24 lg:self-start">
+          <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
             <DocsToc title={t.toc} items={sections} />
           </aside>
           <div className="max-w-2xl space-y-14 text-[15.5px] leading-relaxed text-foreground/85">

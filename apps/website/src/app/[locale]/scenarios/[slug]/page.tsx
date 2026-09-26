@@ -193,8 +193,8 @@ export default async function ScenarioPage({ params }: { params: Params }) {
       <section id="try" aria-labelledby="try-title" className={cn('scroll-mt-14', sectionY)}>
         <Container>
           <SectionHeading id="try-title" eyebrow={p.tryIt} title={it.tagline} lede={p.tryLede} dot="var(--tk-green-accent)" />
-          <ol className="mt-10 grid gap-5 sm:mt-14 lg:grid-cols-[0.85fr_1.15fr]">
-            <li className="grid content-start gap-5">
+          <ol className="mt-10 grid gap-5 sm:mt-14 lg:grid-cols-[0.85fr_1.15fr] [&>*]:min-w-0">
+            <li className="grid content-start gap-5 [&>*]:min-w-0">
               <Reveal className="rounded-2xl border border-border bg-card p-6">
                 <TryStep n={1} title={p.install.title} />
                 <p className="mt-2 text-[14.5px] leading-relaxed text-muted-foreground">{p.install.body}</p>

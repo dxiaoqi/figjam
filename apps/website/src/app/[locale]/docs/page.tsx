@@ -97,7 +97,7 @@ export default async function DocsPage({ params }: { params: Promise<{ locale: s
       </section>
 
       <Container className="grid gap-10 py-12 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-16 lg:py-16">
-        <aside className="lg:sticky lg:top-24 lg:self-start">
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
           <DocsToc items={toc} title={d.toc} />
         </aside>
 
