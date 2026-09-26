@@ -1,6 +1,8 @@
-// Serves the static export in ./out, for checking the build as a static host would.
+// Serves the static export in ./out, for checking the build as a static host would: compressed text
+// (brotli or gzip) and long-lived caching for hashed assets and media, short caching for HTML.
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
+import { createBrotliCompress, createGzip } from 'node:zlib'
 import { extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -18,6 +20,15 @@ const types = {
   '.webm': 'video/webm',
   '.woff2': 'font/woff2',
   '.txt': 'text/plain',
+  '.xml': 'application/xml',
+}
+
+const compressible = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.xml'])
+
+function cacheControl(path) {
+  if (path.startsWith('/_next/static/')) return 'public, max-age=31536000, immutable'
+  if (/^\/(media|og)\//.test(path) || path === '/favicon.svg') return 'public, max-age=604800'
+  return 'public, max-age=0, must-revalidate'
 }
 
 if (!existsSync(root)) {
@@ -42,6 +53,13 @@ createServer((req, res) => {
     res.writeHead(206, { 'content-type': type, 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes', 'content-length': end - start + 1 })
     return createReadStream(file, { start, end }).pipe(res)
   }
-  res.writeHead(200, { 'content-type': type, 'content-length': size, 'accept-ranges': 'bytes' })
+  const headers = { 'content-type': type, 'cache-control': cacheControl(path), vary: 'accept-encoding' }
+  const accept = String(req.headers['accept-encoding'] ?? '')
+  if (compressible.has(extname(file)) && /\b(br|gzip)\b/.test(accept)) {
+    const br = /\bbr\b/.test(accept)
+    res.writeHead(200, { ...headers, 'content-encoding': br ? 'br' : 'gzip' })
+    return createReadStream(file).pipe(br ? createBrotliCompress() : createGzip()).pipe(res)
+  }
+  res.writeHead(200, { ...headers, 'content-length': size, 'accept-ranges': 'bytes' })
   createReadStream(file).pipe(res)
 }).listen(port, '127.0.0.1', () => console.log(`Static export on http://127.0.0.1:${port}`))

@@ -4,11 +4,14 @@ import { Reveal } from '@/components/reveal'
 import { Container, Eyebrow } from '@/components/section'
 import { type Locale, htmlLang, isLocale } from '@/i18n/config'
 import { getDictionary } from '@/i18n'
+import { pageMetadata } from '@/lib/seo'
 import { isShot } from '@/lib/media'
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
-  const { locale } = await params
-  return { title: getDictionary(isLocale(locale) ? locale : 'zh').meta.changelog }
+  const { locale: raw } = await params
+  const locale = isLocale(raw) ? raw : 'zh'
+  const m = getDictionary(locale).meta
+  return pageMetadata({ locale, path: '/changelog/', title: m.changelog, description: m.changelogDescription, og: 'changelog' })
 }
 
 function formatDate(iso: string, locale: Locale) {

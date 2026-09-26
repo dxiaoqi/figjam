@@ -1,17 +1,25 @@
 import type { Site } from '@/config/site'
 import type { Dict } from './en'
+import privacyZh from './privacy-zh'
+import scenariosZh from './scenarios-zh'
 
 export default function zh(s: Site): Dict {
   return {
     meta: {
-      title: `${s.name} — 一块安静的画布，给你和你的 Agent`,
-      description: `${s.name} 是一块本地优先的白板：亲手用起来顺手，Claude Code、Cursor 等任何 MCP 客户端也能直接驱动。Agent 写下的内容自动排整齐、实时可见，并等你审阅。`,
+      title: `${s.name} — Agent 来画，你来拍板`,
+      description: `${s.name} 是一块本地优先的画布，Claude Code、Cursor 等任何 MCP 客户端都能驱动。Agent 把代码库、研究资料和想法实时铺到画板上，每一处改动都等你审阅。`,
+      ogAlt: `${s.name}：Agent 在画布上画，你来审阅`,
       download: '下载',
       docs: '文档',
       changelog: '更新日志',
+      downloadDescription: `下载 ${s.name}，支持 macOS、Windows 和 Linux。一个安装包，内含画布、本地核心，以及给 Claude Code 和 Cursor 用的 MCP 服务。`,
+      docsDescription: `安装 ${s.name}，通过 MCP 连接 Claude Code 或 Cursor，了解你的 Agent 会用到的工具和 Skill。`,
+      changelogDescription: `${s.name} 已发布的全部内容，按时间倒序。`,
     },
     nav: {
       product: '产品',
+      scenarios: '场景',
+      privacy: '隐私',
       docs: '文档',
       changelog: '更新日志',
       download: '下载',
@@ -34,12 +42,12 @@ export default function zh(s: Site): Dict {
     },
     home: {
       hero: {
-        eyebrow: '桌面端内测 · 本地优先 · MCP 与 CLI',
-        titleA: '一块安静的画布，',
-        titleB: '给你和你的 Agent。',
-        lede: `${s.name} 是一块亲手用起来就顺手的白板，Claude Code、Cursor 和任何 MCP 客户端也能直接驱动它。Agent 添加的内容自动排整齐，带着它的光标实时出现，并等你点头后才生效。`,
+        eyebrow: '桌面端内测 · 本地优先 · 支持 Claude Code 与 Cursor',
+        titleA: 'Agent 来画，',
+        titleB: '你来拍板。',
+        lede: `${s.name} 是一块本地画布，Claude Code、Cursor 和任何 MCP 客户端都能驱动。把代码仓库、一叠访谈稿或一摞论文交给你的 Agent：它把思考实时铺在空间里，每一处改动都等你审阅。`,
         primary: '下载内测版',
-        secondary: '阅读快速上手',
+        secondary: '看看场景',
         stickyA: '“面对空白画布，我就不知道从哪下手。” — P3',
         stickyB: '默认就整齐',
         caption: 'Claude Code 通过 MCP 综合六份访谈，人逐项审阅并留下批注，Agent 读到批注后自行修改。',
@@ -140,7 +148,7 @@ export default function zh(s: Site): Dict {
           { title: '版本历史', body: '大改动之前、以及每十分钟自动保留版本；可以命名检查点，恢复操作本身也能撤销。' },
           { title: '崩溃也不丢', body: '原子化自动保存，两秒内落盘。文件损坏时会被移到一旁，自动打开最近一份完好的副本。' },
           { title: '只监听本机', body: 'Core 只监听 127.0.0.1，校验 Host 与 Origin，每个请求都需要本机专属的访问令牌。' },
-          { title: '密钥只进钥匙串', body: '可选助手的 API 密钥保存在系统钥匙串里，从不写进画板或明文文件。' },
+          { title: '使用统计需你开启', body: '在你打开匿名安装统计之前，应用什么都不发送。具体发送哪些字段，隐私页逐项写明。' },
           { title: '往外走之前先问你', body: 'Agent 和 Skill 访问网络或密钥之前都要征得同意。每个决定都写进活动日志，授权随时可以收回。' },
         ],
         alt: '版本历史：自动版本、命名检查点与只读预览',
@@ -211,7 +219,7 @@ export default function zh(s: Site): Dict {
         label: '工作邮箱',
         placeholder: 'you@company.com',
         submit: '通知我',
-        placeholderNote: `占位表单 —— 尚未接入服务器。提交后会在你的邮件应用里打开一封发往 ${s.betaEmail} 的邮件。`,
+        placeholderNote: `占位表单 —— 尚未接入服务器。提交后会在你的邮件应用里打开一封发往 ${s.contactEmail} 的邮件。`,
         thanks: '邮件应用应该已经打开并填好了内容。发送后就加入名单了。',
         invalid: '请输入类似 you@company.com 的邮箱地址。',
         subject: `${s.name} 内测`,
@@ -354,7 +362,6 @@ export default function zh(s: Site): Dict {
             '用 J / K、A、R 逐项审阅；支持部分接受的变更集；按作者撤销',
             '块上的批注，Agent 会阅读、回复并解决',
             '除 stdio 外，支持本地 Streamable HTTP 的 MCP',
-            '可选的内置助手，配置模型提供方之前不会出现',
           ],
           image: 'item-review',
         },
@@ -385,6 +392,9 @@ export default function zh(s: Site): Dict {
       resources: '资源',
       source: '源代码',
       rights: `© 2026 ${s.name}`,
+      legal: '法律与隐私',
     },
+    scenarios: scenariosZh(s),
+    privacy: privacyZh(s),
   }
 }

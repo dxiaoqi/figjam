@@ -7,10 +7,13 @@ import { commands } from '@/content/commands'
 import { site } from '@/config/site'
 import { isLocale } from '@/i18n/config'
 import { getDictionary } from '@/i18n'
+import { pageMetadata } from '@/lib/seo'
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
-  const { locale } = await params
-  return { title: getDictionary(isLocale(locale) ? locale : 'zh').meta.docs }
+  const { locale: raw } = await params
+  const locale = isLocale(raw) ? raw : 'zh'
+  const m = getDictionary(locale).meta
+  return pageMetadata({ locale, path: '/docs/', title: m.docs, description: m.docsDescription, og: 'docs' })
 }
 
 function H2({ id, n, children }: { id: string; n: number; children: React.ReactNode }) {

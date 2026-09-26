@@ -38,12 +38,15 @@ export function CodeBlock({
   lang = 'bash',
   title,
   className,
+  wrap,
 }: {
   code: string
   labels: { copy: string; copied: string }
   lang?: 'bash' | 'json' | 'md'
   title?: string
   className?: string
+  /** Soft-wrap long lines (prose prompts) instead of scrolling. */
+  wrap?: boolean
 }) {
   const copyText = lang === 'bash' ? code.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n') : code
   return (
@@ -52,13 +55,13 @@ export function CodeBlock({
         <div className="flex h-9 items-center border-b border-border px-3.5 font-mono text-[11.5px] text-muted-foreground">{title}</div>
       )}
       <CopyButton text={copyText} labels={labels} className={cn('absolute right-2', title ? 'top-1' : 'top-2')} />
-      <pre className="overflow-x-auto px-4 py-3.5 pr-12 font-mono text-[12.5px] leading-6 text-stone-800">
+      <pre className={cn('px-4 py-3.5 pr-12 font-mono text-[12.5px] leading-6 text-stone-800', wrap ? 'break-words whitespace-pre-wrap' : 'overflow-x-auto')}>
         <code>
           {code.split('\n').map((line, i) => (
-            <span key={i} className={cn('block', line.trim().startsWith('#') && lang !== 'md' ? 'text-stone-400' : undefined)}>
+            <span key={i} className={cn('block', line.trim().startsWith('#') && lang !== 'md' ? 'text-stone-500' : undefined)}>
               {lang === 'bash' && line && !line.trim().startsWith('#') && !/^\s/.test(line) ? (
                 <>
-                  <span className="text-stone-400 select-none">$ </span>
+                  <span className="text-stone-500 select-none">$ </span>
                   {line}
                 </>
               ) : (

@@ -1,6 +1,9 @@
 import { Reveal } from '@/components/reveal'
 import { cn } from '@/lib/utils'
 
+/** Vertical rhythm shared by every page section. */
+export const sectionY = 'py-20 sm:py-28 lg:py-32'
+
 export function Container({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={cn('mx-auto w-full max-w-6xl px-5 sm:px-8', className)}>{children}</div>
 }
@@ -32,14 +35,14 @@ export function SectionHeading({
   className?: string
 }) {
   return (
-    <Reveal className={cn(align === 'center' && 'mx-auto text-center', 'max-w-2xl', className)}>
-      <Eyebrow dot={dot} className={cn(align === 'center' && 'justify-center')}>
+    <Reveal className={cn(align === 'center' && 'sm:mx-auto sm:text-center', 'max-w-2xl', className)}>
+      <Eyebrow dot={dot} className={cn(align === 'center' && 'sm:justify-center')}>
         {eyebrow}
       </Eyebrow>
-      <h2 id={id} className="headline mt-4 text-3xl font-semibold text-foreground sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]">
+      <h2 id={id} className="headline mt-4 text-[1.875rem] leading-[1.15] font-semibold text-foreground sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]">
         {title}
       </h2>
-      {lede && <p className="lede mt-5 text-[17px] leading-relaxed text-muted-foreground">{lede}</p>}
+      {lede && <p className="lede mt-4 text-base leading-relaxed text-muted-foreground sm:mt-5 sm:text-[17px]">{lede}</p>}
     </Reveal>
   )
 }

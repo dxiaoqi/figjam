@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/copy-fonts.mjs",
     "dev": "next dev -H 127.0.0.1 -p 47900",
+    "prebuild": "node scripts/copy-fonts.mjs",
     "build": "next build",
     "start": "node scripts/serve.mjs",
     "typecheck": "tsc --noEmit"

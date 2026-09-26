@@ -21,11 +21,11 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   const t = getDictionary(locale)
   return {
     metadataBase: new URL(site.url),
+    applicationName: site.name,
     title: { default: t.meta.title, template: `%s — ${site.name}` },
     description: t.meta.description,
     icons: { icon: '/favicon.svg' },
-    alternates: { languages: { 'zh-CN': '/zh/', en: '/en/' } },
-    openGraph: { title: t.meta.title, description: t.meta.description, images: ['/media/final-board.webp'], type: 'website' },
+    formatDetection: { telephone: false, email: false, address: false },
   }
 }
 
@@ -48,6 +48,7 @@ export default async function LocaleLayout({
   return (
     <html lang={htmlLang[locale]}>
       <head>
+        <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <TokenStyle />
       </head>
       <body className="min-h-dvh bg-background">

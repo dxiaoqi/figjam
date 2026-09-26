@@ -13,7 +13,7 @@ export const site = {
   repoUrl: 'https://cursor.com/codebase/we-ding/genesis',
   cloneUrl: 'https://origin.cursor.com/git/we-ding/genesis.git',
   repoDir: 'genesis',
-  betaEmail: 'beta@example.com',
+  contactEmail: 'dwt199718@gmail.com',
   corePort: 47821,
   uiPort: 47820,
   /**

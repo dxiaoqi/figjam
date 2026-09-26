@@ -3,8 +3,11 @@ import { site } from '@/config/site'
 import '../globals.css'
 
 export const metadata: Metadata = {
+  metadataBase: new URL(site.url),
   title: site.name,
   icons: { icon: '/favicon.svg' },
+  robots: { index: false, follow: true },
+  alternates: { canonical: '/zh/', languages: { 'zh-CN': '/zh/', en: '/en/' } },
 }
 
 export default function RootRedirectLayout({ children }: { children: React.ReactNode }) {

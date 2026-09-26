@@ -26,6 +26,7 @@ export function SiteHeader({ locale, t }: { locale: Locale; t: Dict['nav'] }) {
   const base = `/${locale}`
   const links = [
     { href: `${base}/#features`, label: t.product, match: null },
+    { href: `${base}/scenarios/`, label: t.scenarios, match: '/scenarios' },
     { href: `${base}/docs/`, label: t.docs, match: '/docs' },
     { href: `${base}/changelog/`, label: t.changelog, match: '/changelog' },
     { href: `${base}/download/`, label: t.download, match: '/download' },
@@ -39,7 +40,7 @@ export function SiteHeader({ locale, t }: { locale: Locale; t: Dict['nav'] }) {
       )}
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-5 sm:px-8">
-        <Link href={`${base}/`} className="flex items-center gap-2.5 rounded-md" aria-label={t.home}>
+        <Link href={`${base}/`} className="flex items-center gap-2.5 rounded-md" title={t.home}>
           <BrandMark />
           <BrandName className="text-[15px]" />
           <span className="rounded-full border border-border bg-card px-1.5 py-px text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -92,6 +93,7 @@ export function SiteHeader({ locale, t }: { locale: Locale; t: Dict['nav'] }) {
                       <Link
                         href={l.href}
                         onClick={() => setOpen(false)}
+                        aria-current={l.match != null && pathname.includes(l.match) ? 'page' : undefined}
                         className="block border-b border-border/60 py-3.5 text-[15px] text-foreground"
                       >
                         {l.label}

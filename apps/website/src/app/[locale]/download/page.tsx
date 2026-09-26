@@ -10,11 +10,14 @@ import { commands } from '@/content/commands'
 import { site } from '@/config/site'
 import { isLocale } from '@/i18n/config'
 import { getDictionary } from '@/i18n'
+import { pageMetadata } from '@/lib/seo'
 import { loadRelease } from '@/lib/load-release'
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
-  const { locale } = await params
-  return { title: getDictionary(isLocale(locale) ? locale : 'zh').meta.download }
+  const { locale: raw } = await params
+  const locale = isLocale(raw) ? raw : 'zh'
+  const m = getDictionary(locale).meta
+  return pageMetadata({ locale, path: '/download/', title: m.download, description: m.downloadDescription, og: 'download' })
 }
 
 export default async function DownloadPage({ params }: { params: Promise<{ locale: string }> }) {

@@ -2,9 +2,14 @@
 
 import { Pause, Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { shotSrcSet } from '@/components/product-shot'
+import { type ShotName, shots } from '@/lib/media'
 import { cn } from '@/lib/utils'
 
-/** A muted product clip that plays only while on screen, never with reduced motion unless asked, and can be paused. */
+/**
+ * A muted product clip that plays only while on screen, never with reduced motion unless asked, and can be paused.
+ * The poster is a responsive image underneath, so phones get the small one and nothing loads before it's needed.
+ */
 export function ProductVideo({
   src,
   poster,
@@ -12,14 +17,17 @@ export function ProductVideo({
   className,
   pauseLabel,
   playLabel,
+  priority,
 }: {
   src: string
-  poster: string
+  poster: ShotName
   label: string
   className?: string
   pauseLabel: string
   playLabel: string
+  priority?: boolean
 }) {
+  const [w, h] = shots[poster]
   const ref = useRef<HTMLVideoElement>(null)
   const [playing, setPlaying] = useState(false)
   const userPaused = useRef(false)
@@ -54,17 +62,30 @@ export function ProductVideo({
 
   return (
     <div className={cn('group relative', className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- static export, pre-optimized WebP */}
+      <img
+        src={`/media/${poster}.webp`}
+        srcSet={shotSrcSet(poster)}
+        sizes="(min-width: 1152px) 1024px, 100vw"
+        alt=""
+        aria-hidden
+        width={w}
+        height={h}
+        loading={priority ? 'eager' : 'lazy'}
+        fetchPriority={priority ? 'high' : undefined}
+        decoding="async"
+        className="absolute inset-0 size-full object-cover"
+      />
       <video
         ref={ref}
-        className="block h-auto w-full"
-        poster={poster}
+        className="relative block h-auto w-full"
         muted
         loop
         playsInline
-        preload="metadata"
+        preload="none"
         aria-label={label}
-        width={1440}
-        height={900}
+        width={w}
+        height={h}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
       >
