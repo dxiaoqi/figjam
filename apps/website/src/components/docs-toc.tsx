@@ -28,7 +28,7 @@ export function DocsToc({ items, title }: { items: { id: string; label: string }
               href={`#${i.id}`}
               aria-current={active === i.id ? 'location' : undefined}
               className={cn(
-                'block rounded-full border px-3 py-1 text-[13.5px] whitespace-nowrap transition-colors lg:-ml-px lg:rounded-none lg:border-0 lg:border-l lg:px-4 lg:py-1.5',
+                'block rounded-full border px-3 py-1 text-[13.5px] whitespace-nowrap transition-colors lg:-ml-px lg:whitespace-normal lg:rounded-none lg:border-0 lg:border-l lg:px-4 lg:py-1.5',
                 active === i.id
                   ? 'border-foreground/20 text-foreground lg:border-foreground'
                   : 'border-border text-muted-foreground hover:text-foreground lg:border-transparent',

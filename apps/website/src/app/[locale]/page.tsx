@@ -36,7 +36,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
           </Reveal>
           <Reveal delay={60}>
             <h1 className="display mx-auto mt-7 max-w-4xl text-[2.6rem] leading-[1.05] font-semibold text-foreground sm:text-6xl lg:text-[4.5rem]">
-              {h.hero.titleA} <span className="marker whitespace-nowrap sm:whitespace-normal">{h.hero.titleB}</span>
+              {h.hero.titleA} <span className="marker">{h.hero.titleB}</span>
             </h1>
           </Reveal>
           <Reveal delay={120}>

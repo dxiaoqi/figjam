@@ -159,6 +159,8 @@
 :lang(zh-CN) .headline {
   letter-spacing: 0;
   line-height: 1.25;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 :lang(zh-CN) .lede,
 :lang(zh-CN) p {

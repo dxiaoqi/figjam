@@ -1,5 +1,5 @@
 // Screenshots of every page in both languages, desktop and mobile.
-// usage: node scripts/screenshots.mjs <out-dir> [--base=http://127.0.0.1:47900] [--full] [--pages=/,/docs/]
+// usage: node scripts/screenshots.mjs <out-dir> [--base=http://127.0.0.1:47900] [--full] [--pages=/,/docs/] [--scale=2]
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { chromium } from 'playwright-core'
@@ -10,6 +10,7 @@ const opt = (k, d) => args.find((a) => a.startsWith(`--${k}=`))?.split('=')[1] ?
 const base = opt('base', 'http://127.0.0.1:47900')
 const full = args.includes('--full')
 const pages = opt('pages', '/,/download/,/docs/,/changelog/').split(',')
+const scale = Number(opt('scale', 0))
 const viewports = {
   desktop: { width: 1440, height: 900, deviceScaleFactor: 2 },
   mobile: { width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
@@ -18,7 +19,7 @@ const viewports = {
 mkdirSync(out, { recursive: true })
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH ?? '/usr/local/bin/google-chrome' })
 for (const [vp, conf] of Object.entries(viewports)) {
-  const ctx = await browser.newContext({ viewport: { width: conf.width, height: conf.height }, deviceScaleFactor: conf.deviceScaleFactor, isMobile: conf.isMobile, hasTouch: conf.hasTouch })
+  const ctx = await browser.newContext({ viewport: { width: conf.width, height: conf.height }, deviceScaleFactor: scale || conf.deviceScaleFactor, isMobile: conf.isMobile, hasTouch: conf.hasTouch })
   const page = await ctx.newPage()
   for (const locale of ['zh', 'en']) {
     for (const p of pages) {
