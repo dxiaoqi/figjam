@@ -11,8 +11,10 @@ import { checker, connectAgent, readSkill, root, startCore, toolsNamedIn } from 
 import * as arch from './arch-kit.mjs'
 import * as research from './research-kit.mjs'
 import * as product from './product-kit.mjs'
+import * as prototype from './prototype-kit.mjs'
+import * as lit from './lit-kit.mjs'
 
-const SCENARIOS = [arch, research, product]
+const SCENARIOS = [arch, research, product, prototype, lit]
 const arg = (k) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split('=')[1]
 const only = arg('only')?.split(',')
 const langs = (arg('lang') ?? 'all') === 'all' ? ['en', 'zh-CN'] : [arg('lang')]

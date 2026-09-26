@@ -1,7 +1,7 @@
 ---
 cite: ziegler2022
 title: "Productivity Assessment of Neural Code Completion"
-authors: Ziegler, Kalliamvakou, Simister, Sittampalam, Li, Rice, Rifkin, Aftandilian
+authors: Ziegler et al.
 year: 2022
 venue: MAPS
 method: survey

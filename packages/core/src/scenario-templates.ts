@@ -439,7 +439,7 @@ export const SCENARIO_BUILDERS: Record<'architecture-map' | 'incident-review' | 
         layout: 'timeline',
         blocks: [
           { type: 'lit-kit.paper', title: 'Grounded Copilot: How Programmers Interact with Code-Generating Models', text: l('Two interaction modes: acceleration and exploration.', '两种交互模式：加速与探索。'), date: '2023', fields: { authors: 'Barke, James, Polikarpova', year: '2023', venue: 'OOPSLA', method: 'field study', cite: 'barke2023' } },
-          { type: 'lit-kit.paper', title: 'The Impact of AI on Developer Productivity: Evidence from GitHub Copilot', text: l('Controlled experiment with GitHub Copilot on one task.', '针对单个任务的 GitHub Copilot 对照实验。'), date: '2023', fields: { authors: 'Peng, Kalliamvakou, Cihon, Demirer', year: '2023', venue: 'arXiv', method: 'experiment', cite: 'peng2023' } },
+          { type: 'lit-kit.paper', title: 'The Impact of AI on Developer Productivity: Evidence from GitHub Copilot', text: l('Controlled experiment with GitHub Copilot on one task.', '针对单个任务的 GitHub Copilot 对照实验。'), date: '2023', fields: { authors: 'Peng et al.', year: '2023', venue: 'arXiv', method: 'experiment', cite: 'peng2023' } },
           { type: 'lit-kit.paper', title: 'Measuring the Impact of Early-2025 AI on Experienced Open-Source Developer Productivity', text: l('Randomized trial on real issues in mature repositories.', '在成熟仓库的真实任务上做的随机对照试验。'), date: '2025', fields: { authors: 'METR', year: '2025', venue: 'arXiv', method: 'experiment', cite: 'metr2025' } },
         ],
       },
