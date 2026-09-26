@@ -1,4 +1,4 @@
-// Media for Skill v1: Skills panel, competitor-kit and research-kit boards with layouts, permission prompt,
+// Media for Skill v1: Skills panel, product-kit and research-kit boards with layouts, permission prompt,
 // activity log, Save as block type, and the `aifig skill` CLI.
 // usage: node scripts/skills-media.mjs <out-dir>   (expects `npm run dev`)
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -19,13 +19,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const board = JSON.parse(cli('--json', 'new-board', 'Whiteboard market — competitors')).board.id
 const call = (who, tool, args) => JSON.parse(cli('--json', '--board', board, ...who, 'call', tool, JSON.stringify({ board, ...args })))
-cli('--board', board, '--human', 'skill', 'enable', 'competitor-kit')
+cli('--board', board, '--human', 'skill', 'enable', 'product-kit')
 cli('--board', board, '--human', 'skill', 'enable', 'research-kit')
 cli('--human', 'call', 'load_dev_skill', JSON.stringify({ path: path.join(root, 'tests/fixtures/skills/probe-kit') }))
 await fetch('http://127.0.0.1:47821/api/permissions/revoke', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ subject: 'skill:probe-kit' }) })
 
 // an agent (Claude Code) fills the board using the skill's types
-const comp = (title, text, segment, positioning, price, url) => ({ title, text, type: 'competitor-kit.competitor', fields: { segment, positioning, price, url } })
+const comp = (title, text, segment, positioning, price, url) => ({ title, text, type: 'product-kit.competitor', fields: { segment, positioning, price, url } })
 call(['--as', 'Claude Code'], 'create_blocks', {
   frame: 'Competitors',
   at: { x: 0, y: 0 },
@@ -44,11 +44,11 @@ call(['--as', 'Claude Code'], 'create_blocks', {
   frame: 'Launches',
   at: { x: 0, y: 1100 },
   blocks: [
-    { text: 'Miro AI', type: 'competitor-kit.launch', fields: { date: '2023-04', competitor: 'Miro' } },
-    { text: 'FigJam AI', type: 'competitor-kit.launch', fields: { date: '2023-11', competitor: 'FigJam' } },
-    { text: 'tldraw SDK 2.0', type: 'competitor-kit.launch', fields: { date: '2024-05', competitor: 'tldraw' } },
-    { text: 'Excalidraw+ collab', type: 'competitor-kit.launch', fields: { date: '2022-09', competitor: 'Excalidraw' } },
-    { text: 'Heptabase 1.0', type: 'competitor-kit.launch', fields: { date: '2023-07', competitor: 'Heptabase' } },
+    { text: 'Miro AI', type: 'product-kit.launch', fields: { date: '2023-04', competitor: 'Miro' } },
+    { text: 'FigJam AI', type: 'product-kit.launch', fields: { date: '2023-11', competitor: 'FigJam' } },
+    { text: 'tldraw SDK 2.0', type: 'product-kit.launch', fields: { date: '2024-05', competitor: 'tldraw' } },
+    { text: 'Excalidraw+ collab', type: 'product-kit.launch', fields: { date: '2022-09', competitor: 'Excalidraw' } },
+    { text: 'Heptabase 1.0', type: 'product-kit.launch', fields: { date: '2023-07', competitor: 'Heptabase' } },
   ],
 })
 cli('--board', board, '--human', 'accept')
@@ -75,7 +75,7 @@ await page.locator('[data-skills-button]').click()
 await sleep(500)
 await page.getByRole('tab', { name: 'Library' }).click()
 await sleep(600)
-await page.locator('[data-skill-card="competitor-kit"] button', { hasText: 'Instructions for agents' }).first().click()
+await page.locator('[data-skill-card="product-kit"] button', { hasText: 'Instructions for agents' }).first().click()
 await sleep(900)
 await shot('01-skills-panel-library.png')
 await page.keyboard.press('Escape')
@@ -84,11 +84,11 @@ await sleep(400)
 // 2. competitor cards with card templates, then the positioning matrix
 await fitFrame('Competitors')
 await shot('02-competitor-cards-templates.png')
-cli('--board', board, '--human', 'call', 'apply_skill_layout', JSON.stringify({ board, layout: 'competitor-kit.positioning-matrix', frame: 'Competitors' }))
+cli('--board', board, '--human', 'call', 'apply_skill_layout', JSON.stringify({ board, layout: 'product-kit.positioning-matrix', frame: 'Competitors' }))
 await sleep(900)
 await fitFrame('Competitors')
 await shot('03-positioning-matrix.png')
-cli('--board', board, '--human', 'call', 'apply_skill_layout', JSON.stringify({ board, layout: 'competitor-kit.launches', frame: 'Launches' }))
+cli('--board', board, '--human', 'call', 'apply_skill_layout', JSON.stringify({ board, layout: 'product-kit.launches', frame: 'Launches' }))
 await sleep(900)
 await fitFrame('Launches')
 await shot('04-launch-timeline.png')

@@ -342,8 +342,8 @@ export async function startCore(port = CORE_PORT) {
         res.writeHead(200, { 'content-type': 'image/png' })
         return res.end(Buffer.from(r.image!.data, 'base64'))
       }
-      // built canvas app (npm run build) — optional single-process mode
-      if (req.method === 'GET' && fs.existsSync(distDir)) {
+      // built canvas app (npm run build) — optional single-process mode; unknown API paths stay a JSON 404
+      if (req.method === 'GET' && fs.existsSync(distDir) && !url.pathname.startsWith('/api/')) {
         if (!policy.hostOk(req.headers.host)) return json(res, 403, { ok: false, error: 'Forbidden host' })
         const rel = url.pathname === '/' ? '/index.html' : url.pathname
         let file = path.join(distDir, path.normalize(rel))

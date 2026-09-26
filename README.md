@@ -6,9 +6,10 @@ ai-figma is a whiteboard that feels good to use by hand and that Claude Code, Cu
 through MCP or a CLI. Whatever an agent adds is laid out by the engine (tokens, 8px grid, layout intents), shows up
 live with the agent's cursor, and waits in a change set for you to accept or reject.
 
-This is **Phase 0** (the MVP in §8 of the product concept): desktop app, canvas, core, design system, agent access
-over MCP (stdio and local HTTP) and the CLI, review, comments, exports and an optional built-in assistant. No
-execution, skills or sync yet.
+This is **Phase 0** (the MVP in §8 of the product concept) plus typed blocks and Skills: desktop app, canvas, core,
+design system, agent access over MCP (stdio and local HTTP) and the CLI, review, comments, exports, and five
+[scenarios](#scenarios) packaged as skills. There is no built-in AI: the canvas is driven by your own agents
+(Claude Code, Cursor, …). No execution or sync yet.
 
 ## Quick start
 
@@ -255,13 +256,15 @@ step with `Esc`, shown once, and available again from **Settings ▸ Welcome tou
 unless the URL has `?welcome=1`. An empty board shows the tool keys, three templates to fill it in place, and
 **Connect an agent**.
 
-**New board…** (board menu, ⌘N in the desktop app) opens a dialog with Blank and five templates: **Research
-synthesis**, **Competitor analysis**, **User journey map**, **Brainstorm** and **Meeting notes**. Templates are
+**New board…** (board menu, ⌘N in the desktop app) opens on **Scenarios** (see [Scenarios](#scenarios)); the
+**Templates** tab has Blank and five general templates: **Research synthesis**, **Competitor analysis**, **User
+journey map**, **Brainstorm** and **Meeting notes**. Templates are
 ordinary typed blocks placed by the layout engine (frames, `cluster` / `grid` / `stack` intents, no coordinates),
 written in the UI language (English or Chinese), and lint clean. Agents get the same through
 `create_board { template, language }` and the CLI through `aifig new-board --template …`; template content applies
-directly instead of as a change set. Templates live in `packages/core/src/templates.ts` (content) and
-`packages/shared/src/templates.ts` (ids, titles).
+directly instead of as a change set. Templates live in `packages/core/src/templates.ts` and
+`scenario-templates.ts` (content) and `packages/shared/src/templates.ts` (ids, titles, the skill a template
+enables, scenarios).
 
 ### Typed blocks
 
@@ -280,24 +283,31 @@ A skill is a standard [Agent Skill](https://agentskills.io) folder — any agent
 optional canvas extension that ai-figma reads:
 
 ```
-competitor-kit/
+product-kit/
   SKILL.md              # frontmatter: name, description, metadata.aifig { version, canvas, capability, permissions }
-  canvas/blocks.json    # block types (fields + card template), relations, layouts, actions, prompts
+  canvas/blocks.json    # block types (fields + card template, translations), relations, layouts, actions, prompts
   canvas/prompts/*.md   # prompt templates
+  examples/             # optional sample boards: sample.en.aifig, sample.zh-CN.aifig
 ```
 
-- **Block types** build on typed blocks: namespaced ids (`competitor-kit.competitor`), a sticky or card base, token
+- **Block types** build on typed blocks: namespaced ids (`product-kit.competitor`), a sticky or card base, token
   color and icon, up to 8 fields (text, number, choice, yes/no) and a card template (`rows` shown on the block,
-  `summary` as a one-liner). Relations between types are suggested on connectors.
+  `summary` as a one-liner). Relations between types are suggested on connectors. An optional `i18n` per type
+  translates what's displayed — `{ "zh-CN": { "label", "plural", "fields": { key: label }, "options": { value:
+  label }, "units": { key: unit } } }` (and `en` for display casing, e.g. `"ui": "UI"`); stored values stay as
+  declared. The canvas uses the UI language; snapshots and skill layouts use the board's content language.
 - **Layouts** use the `matrix`, `timeline`, `flow`, `cluster` and `type` intents (also available to agents directly:
-  `create_blocks` `layout: "matrix" | "timeline" | "flow"` with `row` / `col` / `date`, and `arrange`).
+  `create_blocks` `layout: "matrix" | "timeline" | "flow"` with `row` / `col` / `date`, and `arrange`). Matrix and
+  cluster axes follow the field's option order (`rowOrder` / `colOrder` override it; a `"type"` axis lists type
+  ids).
 - **Capabilities**: **L0** is declarative (types, templates, layouts, instructions). **L1** can also call tools by
   name — built-in ones (`aifig.get_board`, `aifig.create_blocks`, …) or tools of MCP servers you configure in
   `~/.aifig/mcp.json` (`{ "mcpServers": { "web": { "command": "…", "args": [] } } }` → `web.search`). The first
   use of a tool on a board asks you (allow once / always on this board / deny); results arrive as a change set,
   and every call and decision is in the board's activity log (Skills › Activity), where grants can be revoked.
   L2 (sandboxed scripts) is not supported yet.
-- Skills come from `skills/builtin` (`research-kit`, `competitor-kit`), `~/.aifig/skills` (installed) and folders
+- Skills come from `skills/builtin` (the scenario skills `arch-kit`, `research-kit`, `product-kit`,
+  `prototype-kit`, `lit-kit`), `~/.aifig/skills` (installed) and folders
   under `aifig skill dev`. Enable them per board in the **Skills** panel (puzzle icon, top right); disabling keeps
   blocks' types and fields. Agents see them through MCP: `list_skills`, `get_skill` (instructions, types, layouts),
   `apply_skill_layout`, `run_skill_action`, and `aifig://skills/<name>/SKILL.md` resources.
@@ -311,6 +321,33 @@ aifig skill validate ./persona-kit     # errors point at file › path
 aifig skill install ./persona-kit      # copy into ~/.aifig/skills
 aifig skill list | show <name> | enable <name> | disable <name> | activity
 ```
+
+### Scenarios
+
+A scenario is a use case packaged as a built-in skill — block types, card templates, layouts and a step-by-step
+agent workflow in its `SKILL.md` — plus a template in English and Chinese and a sample board. **New board ▸
+Scenarios** (also on the welcome tour and on empty boards) shows each scenario's workflow and the prompt to give
+your agent; **Create board** enables the skill on a new board and fills it from the template, **Open sample board**
+opens a copy of the finished example. Agents get the same with `create_board { template }` (scenario templates
+enable their skill; the result says to read `get_skill`) and the CLI with `aifig new-board --template <id>`.
+
+| Scenario | Skill | Templates | What the agent does (SKILL.md) |
+|---|---|---|---|
+| Architecture & code | `arch-kit` | `architecture-map`, `incident-review` | Reads the repo, lays out modules by layer, draws dependencies, annotates interface contracts, adds data stores, ADRs and risks for review, then implements what was accepted; incident timelines |
+| User research | `research-kit` | `interview-synthesis` | Logs interviews, pulls verbatim quotes with `file:line` sources, clusters them for the person to correct, writes insights (3+ quotes), opportunities and hypotheses, exports a report |
+| Product discovery | `product-kit` (includes the former `competitor-kit`) | `product-discovery` | Competitor × capability matrix → opportunities → solutions on an impact × effort matrix (connectors form the opportunity-solution tree) → experiments and metrics → requirements (MoSCoW) → PRD outline |
+| Prototype wall | `prototype-kit` | `prototype-wall` | A brief, then 2–4 genuinely different interactive HTML variants side by side as web snippets; comments become feedback, the agent iterates with `update_snippet`, the board ends with a decision |
+| Literature review | `lit-kit` | `literature-review` | Papers and research questions, evidence and counter-evidence with citation and location, claims, an argument map (evidence → claim ← counter-evidence per question), gaps, a review outline |
+
+`npm run test:scenarios` (part of `test:skills`) validates each workflow end to end: an agent connected over MCP
+stdio follows the skill's SKILL.md on an isolated core while a person reviews, accepts, corrects and comments —
+arch-kit maps this repository's own packages, research-kit synthesizes three interview transcripts
+(`tests/fixtures/scenarios/interviews`, every quote checked verbatim against its source line), product-kit goes from
+four competitors to a PRD outline, prototype-kit builds three variants and clicks through each in headless Chrome,
+lit-kit builds an argument map from five paper notes (`tests/fixtures/scenarios/papers`). Each run checks that it
+called every tool its workflow names and ends lint-clean and fully reviewed, in English and Chinese.
+`npm run scenarios:samples` rewrites the sample boards (`skills/builtin/*/examples`) from those runs; add
+`--out=<dir>` to `node scripts/scenarios/run.mjs` for snapshots, the research report, the PRD and the review outline.
 
 ### Web snippets
 
@@ -341,7 +378,7 @@ token file, the desktop app gets it from its shell, a browser gets it once from 
 never sent to a server) and keeps it in localStorage. `AIFIG_TOKEN` overrides the file; `aifig token --rotate` replaces
 it (running cores notice).
 
-**Permissions and activity.** Agents, skills and the built-in assistant ask the core's permission broker before they
+**Permissions and activity.** Agents and skills ask the core's permission broker before they
 touch the network or a secret. People (the canvas, `--human`) are trusted; an agent needs a remembered grant or a yes in
 the canvas prompt (Deny / Allow once / Always allow this agent), otherwise the tool call fails with an explanation. With
 no canvas open the answer is no, and the error says how to allow it ahead of time. Grants are per agent client (or
@@ -351,25 +388,10 @@ File menu in the desktop app). Outbound fetches by the core (images by URL, vide
 metadata addresses, and redirects are re-checked. For Skills: `core.security.permissions.request({ capability, target,
 actor, source: { kind: 'skill', id }, reason })` and `activity.record(…)`, types in `@aifig/shared` (`security.ts`).
 
-**API keys.** Keys are only persisted in an OS keychain and never in boards or plain files:
-
-| Where you set the key | Stored in | No keychain available |
-|---|---|---|
-| Desktop app (Assistant Settings) | Electron `safeStorage` (macOS Keychain, Windows DPAPI, Linux Secret Service/KWallet) | Kept in memory for this session; Linux `basic_text` counts as no keychain |
-| Browser canvas / core | `SecretStore`: macOS Keychain via `security` (secret passed on stdin, not argv), Linux `secret-tool` | Kept in memory for this session |
-
-The settings dialog says which one applies. Tests use `AIFIG_SECRET_STORE=mock` (core) and `AIFIG_DESKTOP_KEYCHAIN=mock`
-or `none` (desktop), both in-memory or obfuscated test doubles that are never selected automatically.
-
-Verifying on macOS:
-
-1. Desktop: `npm run desktop`, File › Assistant Settings…, choose Anthropic, paste a key, Save. Keychain Access shows an
-   **ai-figma Safe Storage** item (the encryption key Electron keeps in your login keychain), and
-   `strings ~/Library/Application\ Support/ai-figma/assistant.bin | grep sk-` finds nothing.
-2. Browser/core: `npm run dev`, open the signed-in link, board menu › Assistant settings…, save a key. Then `security find-generic-password -s ai-figma -a assistant.anthropic`
-   lists the item (add `-w` to print it after a Keychain prompt), `grep -r sk- ~/.aifig` finds nothing, and
-   `aifig activity -c secret` shows `store assistant.anthropic (macos-keychain)`.
-3. Restart the core: the assistant stays configured (the key is read back from the Keychain).
+**Secrets.** The core's `SecretStore` (for skills and integrations) only persists secrets in an OS keychain — macOS
+Keychain via `security` (the secret goes over stdin, never argv) or Linux `secret-tool` — and otherwise keeps them in
+memory for the session; they never go into boards or plain files, and every access is logged by name. Tests use
+`AIFIG_SECRET_STORE=mock`, an in-memory double that is never selected automatically.
 
 ### Threat model
 
@@ -380,7 +402,7 @@ Verifying on macOS:
 | Other users on the same machine, or the LAN | Listens on 127.0.0.1 only; token file `0600`, `AIFIG_HOME` `0700`; the token is never printed to log files |
 | Prompt-injected agent exfiltrating data or reaching local services via the core | Network needs a grant or a yes in the canvas; SSRF guard blocks loopback/private/metadata addresses; everything is logged |
 | Malicious web snippet | Separate site, opaque origin, strict CSP (no network), sandboxed frame / webview with its own partition, narrow state bridge, watchdog |
-| API keys leaking into files, boards or logs | OS keychain or session memory only; boards never hold keys; logs record names, never values |
+| Secrets leaking into files, boards or logs | OS keychain or session memory only; boards never hold keys; logs record names, never values |
 | The app window being framed | `X-Frame-Options: DENY`, `frame-ancestors 'none'` |
 
 Out of scope: malware running as your own user (it can read the token file, your keychain session and the boards, and
@@ -457,9 +479,8 @@ MCP, a person reviewing item by item and commenting, and the agent reading the c
   rest, partly accepted change sets; undo by change set or by author, including accepted work (later edits by people
   are kept)
 - Comments on blocks (`M`) that agents read and answer (`get_threads`, `reply_thread`, `resolve_thread`)
-- Optional built-in assistant (Extract ideas, Cluster into themes, Tidy up) — hidden unless a provider is set up in
-  Assistant Settings; keys go to the OS keychain via Electron `safeStorage` and never into boards; a deterministic
-  mock provider for tests and demos
+- Typed blocks and Skills (L0 / L1, permission prompts, activity log, `aifig skill new/dev/validate`, Save as block
+  type) with five scenario skills, their templates (en, zh-CN) and sample boards
 - Agent-output aesthetics regression set (`npm run test:aesthetics`)
 
 **Not yet (next phases)**
@@ -468,7 +489,7 @@ MCP, a person reviewing item by item and commenting, and the agent reading the c
 - Holding agent layout moves while a person is dragging or typing; animated tidy and layout pushes
 - Rotating frames and multi-selections as a group, image cropping, curved-connector waypoints, rich text in exports
 - Tray / always-on MCP and multi-window in the desktop app; code signing and auto-update
-- Skills, execution, sync (Phases 1–3)
+- Sandboxed skill scripts (L2), execution, sync (Phases 2–3)
 
 ## Languages (i18n)
 
@@ -509,9 +530,20 @@ node scripts/mvp-run.mjs <out-dir>                    # the recorded Phase 0 val
 node scripts/shot.mjs out.png [--dark] [--w=390]      # screenshot the running canvas (headless Chrome)
 npm run test:contrast                                 # WCAG AA contrast of tokens and theme, light and dark
 npm run bench                                         # performance report + budgets (see below)
-npm run test:skills                                   # skill format, L0/L1, permissions, CLI, save as block type
+npm run test:skills                                   # skill format, L0/L1, permissions, CLI, save as block type + scenario runs
+npm run test:scenarios                                # just the scenario runs (MCP agent follows each SKILL.md; see Scenarios)
 npm run ci                                            # all of the above in one run (see CI)
 ```
+
+### Feature flags
+
+Build-time flags live in `packages/shared/src/features.ts` and are off by default. `AIFIG_FEATURE_ASSISTANT=1`
+brings back the built-in assistant (selection commands, provider settings, key storage via Electron `safeStorage` or
+the core's secret store): set it when building (`npm run build`, `npm run desktop:build`) — Vite and the desktop
+bundle bake it in — and, when running from source, for `npm run dev` / `npm run desktop`. Without it the assistant's
+menus, settings, desktop bridge and `/api/assistant/*` routes don't exist; its code stays in the tree
+(`packages/core/src/assistant.ts`, `apps/canvas/src/chrome/AssistantSettings.tsx`) and the e2e, security and
+desktop suites test whichever state the flag is in.
 
 ### CI
 

@@ -86,10 +86,12 @@ check('follows the OS light / dark appearance', dark && light)
 const before = (await call('list_boards', {})).boards.length
 await app.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('new-board').click())
 await win.waitForSelector('[data-new-board-dialog]', { timeout: 5000 }).catch(() => {})
-const dialogOpened = (await win.locator('[data-new-board-dialog] [data-template]').count()) === 6
+const scenariosFirst = (await win.locator('[data-new-board-dialog] [data-scenario]').count()) === 5
+await win.click('[data-new-board-tab-trigger="templates"]').catch(() => {})
+const dialogOpened = scenariosFirst && (await win.locator('[data-new-board-dialog] [data-template]').count()) === 6
 await win.click('[data-new-board-create]')
 await win.waitForTimeout(1000)
-check('File ▸ New Board… opens the template dialog, then creates and opens a board', dialogOpened && (await call('list_boards', {})).boards.length === before + 1 && (await win.title()).startsWith('Untitled board'))
+check('File ▸ New Board… opens the dialog (Scenarios, then Templates), then creates and opens a board', dialogOpened && (await call('list_boards', {})).boards.length === before + 1 && (await win.title()).startsWith('Untitled board'))
 
 // File ▸ Version History… (native menu → renderer)
 await app.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('version-history').click())
