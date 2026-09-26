@@ -6,6 +6,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { Placeholder } from '@tiptap/extensions'
 import { useCamera, type Editor } from '@aifig/canvas-engine'
 import { cn } from '@/lib/utils'
+import { t } from '../i18n'
 import { docToMarkdown, mdToHtml, renderMarkdown } from './markdown'
 
 /** Rendered (read-only) rich text, same typography as the editor. */
@@ -90,32 +91,32 @@ function Toolbar({ tiptap, engine, linkOpen, setLinkOpen }: { tiptap: TipTap; en
                 tiptap.commands.focus()
               }
             }}
-            placeholder="Paste a link"
+            placeholder={t('rich.pasteLink')}
             className="h-7 w-52 rounded-md bg-muted px-2 text-xs outline-none"
           />
           <button type="submit" className="h-7 rounded-md px-2 text-xs font-medium hover:bg-accent">
-            {href && href !== 'https://' ? 'Apply' : 'Remove'}
+            {t(href && href !== 'https://' ? 'rich.apply' : 'rich.remove')}
           </button>
         </form>
       ) : (
         <>
-          <ToolButton label="Bold (⌘B)" active={state.bold} onClick={() => tiptap.chain().focus().toggleBold().run()}>
+          <ToolButton label={t('rich.bold')} active={state.bold} onClick={() => tiptap.chain().focus().toggleBold().run()}>
             <Bold className="size-3.5" />
           </ToolButton>
-          <ToolButton label="Italic (⌘I)" active={state.italic} onClick={() => tiptap.chain().focus().toggleItalic().run()}>
+          <ToolButton label={t('rich.italic')} active={state.italic} onClick={() => tiptap.chain().focus().toggleItalic().run()}>
             <Italic className="size-3.5" />
           </ToolButton>
-          <ToolButton label="Code (⌘E)" active={state.code} onClick={() => tiptap.chain().focus().toggleCode().run()}>
+          <ToolButton label={t('rich.code')} active={state.code} onClick={() => tiptap.chain().focus().toggleCode().run()}>
             <Code className="size-3.5" />
           </ToolButton>
-          <ToolButton label="Link (⌘K)" active={state.link} onClick={() => setLinkOpen(true)}>
+          <ToolButton label={t('rich.link')} active={state.link} onClick={() => setLinkOpen(true)}>
             <Link2 className="size-3.5" />
           </ToolButton>
           <div className="mx-0.5 h-4 w-px bg-border" />
-          <ToolButton label="Bulleted list" active={state.bullet} onClick={() => tiptap.chain().focus().toggleBulletList().run()}>
+          <ToolButton label={t('rich.bullet')} active={state.bullet} onClick={() => tiptap.chain().focus().toggleBulletList().run()}>
             <List className="size-3.5" />
           </ToolButton>
-          <ToolButton label="Numbered list" active={state.ordered} onClick={() => tiptap.chain().focus().toggleOrderedList().run()}>
+          <ToolButton label={t('rich.ordered')} active={state.ordered} onClick={() => tiptap.chain().focus().toggleOrderedList().run()}>
             <ListOrdered className="size-3.5" />
           </ToolButton>
         </>

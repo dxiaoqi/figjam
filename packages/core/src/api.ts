@@ -57,6 +57,8 @@ import {
 import { PresenceHub, identify } from './presence'
 import { renderSnapshot } from './snapshot'
 import { checkSnippetJs } from './snippet-host'
+import { templateSteps } from './templates'
+import { TEMPLATE_IDS, TEMPLATES, type ContentLanguage, type TemplateId } from '@aifig/shared'
 
 export class ToolError extends Error {}
 
@@ -304,10 +306,12 @@ export class CanvasCore {
         return {
           boards: this.registry.all().map((b) => ({ ...b.summary(), open: b.id === this.activeBoardId })),
         }
-      case 'create_board': {
-        const b = this.registry.create(a.title)
-        return { board: b.summary() }
-      }
+      case 'create_board':
+        return this.createBoard(a)
+      case 'apply_template':
+        return this.applyTemplate(this.board(a.board), a.template, a.language ?? 'en', a.rename)
+      case 'list_templates':
+        return { templates: TEMPLATE_IDS.map((id) => ({ id, title: TEMPLATES[id].title.en, titles: TEMPLATES[id].title, description: TEMPLATES[id].description })) }
       case 'rename_board': {
         const b = this.board(a.board)
         b.doc.transact(() => {
@@ -423,6 +427,30 @@ export class CanvasCore {
       case 'get_design_tokens':
         return tokenManifest()
     }
+  }
+
+  /** New board, optionally filled from a template. Template content is applied as the person's own (not a change set). */
+  private async createBoard(a: Args) {
+    const language = a.language ?? 'en'
+    const title = a.title?.trim() || (a.template ? TEMPLATES[a.template as TemplateId].title[language as ContentLanguage] : language === 'zh-CN' ? '未命名画板' : 'Untitled board')
+    const b = this.registry.create(title)
+    if (!a.template) return { board: b.summary() }
+    await this.applyTemplate(b, a.template, language)
+    return { board: b.summary(), template: a.template, language, next: 'The board is ready. Read it with get_board before adding to it.' }
+  }
+
+  private async applyTemplate(b: Board, template: TemplateId, language: ContentLanguage, rename = false) {
+    const caller: CallerInfo = { id: 'human:template', name: 'Template', client: 'template', kind: 'human' }
+    for (const step of templateSteps(template, language)) {
+      const r = await this.call({ tool: step.tool, args: { ...step.args, board: b.id }, caller })
+      if (!r.ok) throw new ToolError(`Template "${template}" failed at ${step.tool}: ${r.error}`)
+    }
+    if (rename)
+      b.doc.transact(() => {
+        b.meta.set('title', TEMPLATES[template].title[language])
+        b.touch()
+      }, 'api')
+    return { board: b.summary(), template, language }
   }
 
   // ---- helpers ------------------------------------------------------------

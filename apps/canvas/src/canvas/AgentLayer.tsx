@@ -3,6 +3,7 @@ import { useCamera, type Editor } from '@aifig/canvas-engine'
 import type { AgentPresence, Point } from '@aifig/shared'
 import { useAgentsOnBoard } from '../board-context'
 import { useEditor } from './editor-context'
+import { t } from '../i18n'
 
 const CURSOR_VISIBLE_MS = 20_000
 const FOCUS_VISIBLE_MS = 6_000
@@ -108,7 +109,7 @@ function AgentPresenceView({ editor, agent, now, zoom, pos, screenW, screenH }: 
           }}
         >
           <span style={{ display: 'inline-block', transform: `rotate(${Math.atan2(p.y - screenH / 2, p.x - screenW / 2)}rad)` }}>➜</span>
-          {agent.name} is working off-screen
+          {t('presence.offscreen', { name: agent.name })}
         </div>
       )}
     </>

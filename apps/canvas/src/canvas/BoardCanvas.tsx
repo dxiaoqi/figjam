@@ -25,6 +25,7 @@ import { desktop } from '../lib/desktop'
 import { downloadDocument, downloadSnapshot } from '../lib/export'
 import { draftForPastedText, draftForTool, importImages, nextColor, shapeDefs } from './shapes'
 import { toast } from 'sonner'
+import { t, useT } from '../i18n'
 
 const ME: Author = { kind: 'human', id: 'human:ui', name: 'You' }
 
@@ -62,7 +63,7 @@ function createEditor(doc: Editor['doc']) {
     },
     onDoubleClickCanvas: (at) => editor.createWithTool('sticky', at),
     onFiles: (files, at) => {
-      importImages(editor, files, at).catch(() => toast.error('Couldn’t read that image — try PNG, JPEG, GIF or WebP.'))
+      importImages(editor, files, at).catch(() => toast.error(t('tool.imageError')))
     },
     onPasteText: (text, at) => {
       if (!text.trim()) return
@@ -77,6 +78,7 @@ export function BoardCanvas() {
   const { provider } = useBoard()
   const { synced } = useProviderState()
   const [editor, setEditor] = useState<Editor | null>(null)
+  useT()
   useRelationSuggestions(editor)
 
   useEffect(() => {
@@ -188,7 +190,7 @@ export function BoardCanvas() {
       ) : (
         <div className="absolute inset-0 z-[1000] flex items-center justify-center">
           <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Opening board…
+            <Loader2 className="size-4 animate-spin" /> {t('app.openingBoard')}
           </div>
         </div>
       )}

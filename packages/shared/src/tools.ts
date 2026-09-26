@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { COLOR_TOKENS, SIZE_TOKENS } from './tokens'
 import { BLOCK_TYPE_IDS, RELATIONS } from './types'
+import { CONTENT_LANGUAGES, TEMPLATE_IDS } from './templates'
 
 /**
  * Canvas API contract. Every surface (MCP, CLI, UI) calls the core with one of these tools.
@@ -60,8 +61,17 @@ export const toolDefs = {
   },
   create_board: {
     title: 'Create board',
-    description: 'Create a new empty board.',
-    input: { title: z.string().describe('Board title') },
+    description: `Create a new board — empty, or from a template (${TEMPLATE_IDS.join(', ')}; see list_templates). Template content is laid out by the engine with typed blocks and applies directly (no review), so you can build on it right away.`,
+    input: {
+      title: z.string().optional().describe('Board title. Defaults to the template name, or "Untitled board".'),
+      template: z.enum(TEMPLATE_IDS).optional().describe('Start from a template.'),
+      language: z.enum(CONTENT_LANGUAGES).optional().describe('Language of the template content: en (default) or zh-CN.'),
+    },
+  },
+  list_templates: {
+    title: 'List templates',
+    description: 'Board templates for create_board: id, title and what each contains.',
+    input: {},
   },
   get_board: {
     title: 'Read board',
@@ -380,6 +390,14 @@ export const humanToolDefs = {
       items: z
         .array(z.object({ id: z.string(), content_h: z.number().optional(), expanded: z.boolean().optional() }))
         .describe('Measured content heights from the canvas, and expand/collapse toggles'),
+    },
+  },
+  apply_template: {
+    input: {
+      board: z.string(),
+      template: z.enum(TEMPLATE_IDS),
+      language: z.enum(CONTENT_LANGUAGES).optional(),
+      rename: z.boolean().optional().describe('Also retitle the board after the template'),
     },
   },
   rename_board: { input: { board, title: z.string() } },

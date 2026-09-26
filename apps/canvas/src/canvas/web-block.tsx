@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { Code2, ExternalLink, Globe, Play, TriangleAlert } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -133,7 +134,7 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
   const stop = (reason: string) => {
     setStopped(reason)
     if (editor.editingId === block.id) editor.stopEditing()
-    toast.warning('Snippet stopped', { description: reason })
+    toast.warning(t('snippet.stopped'), { description: reason })
   }
 
   // running: watchdog (heartbeat, memory), idle and offscreen → back to the preview
@@ -141,17 +142,17 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
     if (!running || !web) return
     setStopped(null)
     beat.current = { at: 0, ready: false, activity: Date.now(), startedAt: Date.now() }
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       const now = Date.now()
       const r = editor.visualRect(block.id)
       if (!r || !intersects(r, editor.viewportPageBounds())) return editor.stopEditing()
       if (web.mode === 'inline') {
         const since = beat.current.at || beat.current.startedAt
-        if (now - since > SNIPPET_LIMITS.heartbeatMs + (beat.current.ready ? 0 : 4000)) return stop('It stopped responding (possibly an endless loop), so it was paused to keep the canvas fast.')
+        if (now - since > SNIPPET_LIMITS.heartbeatMs + (beat.current.ready ? 0 : 4000)) return stop(t('snippet.stopHang'))
       } else if (document.activeElement === frame.current) beat.current.activity = now
       if (now - beat.current.activity > SNIPPET_LIMITS.idleMs) editor.stopEditing()
     }, 500)
-    return () => clearInterval(t)
+    return () => clearInterval(timer)
   }, [running, web?.mode, block.id, editor])
 
   useBridge(frame, {
@@ -163,8 +164,8 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
     },
     onHeartbeat: (m) => {
       beat.current.at = Date.now()
-      if ((m.mem ?? 0) > SNIPPET_LIMITS.heapBytes) stop('It used too much memory.')
-      else if ((m.nodes ?? 0) > SNIPPET_LIMITS.domNodes) stop('It created too many elements.')
+      if ((m.mem ?? 0) > SNIPPET_LIMITS.heapBytes) stop(t('snippet.stopMemory'))
+      else if ((m.nodes ?? 0) > SNIPPET_LIMITS.domNodes) stop(t('snippet.stopNodes'))
     },
     onActivity: () => (beat.current.activity = Date.now()),
     onExit: () => editor.stopEditing(),
@@ -258,7 +259,7 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
       )}
       <div className="aifig-web-badge">
         {web.mode === 'url' ? <Play className="size-3" fill="currentColor" /> : <Code2 className="size-3" />}
-        <span className="truncate">{running ? `${snippetLabel(web)} · Esc to stop` : snippetLabel(web)}</span>
+        <span className="truncate">{running ? t('snippet.escStop', { label: snippetLabel(web) }) : snippetLabel(web)}</span>
       </div>
       {web.mode === 'url' && web.url && (
         <a
@@ -270,17 +271,17 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
           rel="noopener noreferrer"
           onPointerDown={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
-          title={`Open ${web.url}`}
+          title={t('snippet.open', { url: web.url })}
         >
-          {running ? `Not playing? Watch on ${web.provider ?? 'the site'}` : `Watch on ${web.provider ?? 'the site'}`}
+          {t(running ? 'snippet.notPlaying' : 'snippet.watchOn', { site: web.provider ?? t('snippet.theSite') })}
           <ExternalLink className="size-3" />
         </a>
       )}
-      {!running && !stopped && <div className="aifig-web-hint">Double-click to {web.mode === 'url' ? 'open' : 'run'}</div>}
+      {!running && !stopped && <div className="aifig-web-hint">{t(web.mode === 'url' ? 'snippet.hintOpen' : 'snippet.hintRun')}</div>}
       {stopped && !running && (
         <div className="aifig-web-stopped" data-web-stopped>
           <TriangleAlert className="size-4 shrink-0" />
-          <span>{stopped} Double-click to try again.</span>
+          <span>{t('snippet.tryAgain', { reason: stopped })}</span>
         </div>
       )}
     </div>
