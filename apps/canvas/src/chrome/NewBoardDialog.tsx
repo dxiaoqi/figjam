@@ -71,7 +71,7 @@ export function NewBoardDialog({ theme, onCreate }: { theme: ThemeMode; onCreate
 
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
-      <DialogContent className="max-h-[calc(100dvh-32px)] overflow-y-auto sm:max-w-3xl" data-new-board-dialog>
+      <DialogContent className="max-h-[calc(100dvh-32px)] overflow-x-hidden overflow-y-auto sm:max-w-3xl [&>*]:min-w-0" data-new-board-dialog>
         <DialogHeader>
           <DialogTitle>{t('newBoard.title')}</DialogTitle>
           <DialogDescription>{t('newBoard.hint')}</DialogDescription>

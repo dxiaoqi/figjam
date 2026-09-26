@@ -291,9 +291,10 @@ function buildMenu() {
         { role: 'togglefullscreen' },
       ],
     },
-    { role: 'windowMenu' },
+    { role: 'windowMenu', label: tr('window') },
     {
       role: 'help',
+      label: tr('help'),
       submenu: [
         { id: 'connect-agent', label: tr('connectAgent'), click: send('connect-agent') },
         { label: tr('openBoardsFolder'), click: async () => shell.openPath((await healthy())?.home ?? app.getPath('home')) },

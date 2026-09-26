@@ -251,7 +251,7 @@ export const en = {
   'setup.cursor.name': 'Cursor',
   'setup.claude.where': 'User MCP servers in {file}',
   'setup.cursor.where': 'Global MCP servers in {file}',
-  'setup.notInstalledHint': 'Install {agent} first, or copy the config manually below.',
+  'setup.notInstalledHint': 'Install {agent} first, or copy the config from Manual setup in Connect agent.',
 
   // ---- assistant
   'assistant.title': 'Built-in assistant',

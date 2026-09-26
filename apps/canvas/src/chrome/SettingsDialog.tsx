@@ -9,9 +9,9 @@ export type ThemePref = 'system' | 'light' | 'dark'
 
 export const openSettings = () => window.dispatchEvent(new Event('aifig:settings'))
 
-function Segmented<T extends string>({ value, options, onChange, name }: { value: T; options: { id: T; label: ReactNode; icon?: ReactNode }[]; onChange: (v: T) => void; name: string }) {
+function Segmented<T extends string>({ value, options, onChange, name, id }: { value: T; options: { id: T; label: ReactNode; icon?: ReactNode }[]; onChange: (v: T) => void; name: string; id: string }) {
   return (
-    <div role="radiogroup" aria-label={name} className="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
+    <div role="radiogroup" aria-label={name} data-setting={id} className="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
       {options.map((o) => (
         <button
           key={o.id}
@@ -68,6 +68,7 @@ export function SettingsDialog({ themePref, setTheme, onShowWelcome }: { themePr
         <div className="divide-y">
           <Row icon={<Languages className="size-4" />} title={t('settings.language')} hint={pref === 'system' ? t('settings.languageSystemNow', { name: sysName }) : undefined}>
             <Segmented<LocalePref>
+              id="language"
               name={t('settings.language')}
               value={pref}
               onChange={setPref}
@@ -76,6 +77,7 @@ export function SettingsDialog({ themePref, setTheme, onShowWelcome }: { themePr
           </Row>
           <Row icon={<Sun className="size-4" />} title={t('settings.appearance')}>
             <Segmented<ThemePref>
+              id="theme"
               name={t('settings.appearance')}
               value={themePref}
               onChange={setTheme}

@@ -230,7 +230,7 @@ export const zhCN: Messages = {
   'setup.cursor.name': 'Cursor',
   'setup.claude.where': '{file} 中的用户级 MCP 服务',
   'setup.cursor.where': '{file} 中的全局 MCP 服务',
-  'setup.notInstalledHint': '请先安装 {agent}，或复制下方配置手动设置。',
+  'setup.notInstalledHint': '请先安装 {agent}，或在“连接 Agent”的手动设置中复制配置。',
 
   'assistant.title': '内置助手',
   'assistant.description': '可选的选区命令 —— 提取想法、按主题聚类、整理排版。它的修改和其他 Agent 一样，以变更集的形式等你审阅。',

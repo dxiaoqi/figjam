@@ -38,7 +38,7 @@ export function ConnectDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const s = mcpSnippets(health, t('connect.cliExample').split('|') as [string, string, string])
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-32px)] overflow-y-auto sm:max-w-xl" data-connect-dialog>
+      <DialogContent className="max-h-[calc(100dvh-32px)] overflow-x-hidden overflow-y-auto sm:max-w-xl [&>*]:min-w-0" data-connect-dialog>
         <DialogHeader>
           <DialogTitle>{t('connect.title')}</DialogTitle>
           <DialogDescription>{tn('connect.description', { cli: <code className="font-mono">aifig</code> })}</DialogDescription>
