@@ -15,7 +15,7 @@ import {
   type Box,
   type Vec,
 } from './geometry'
-import { SpatialGrid } from './spatial'
+import { SpatialGrid } from '@aifig/shared'
 
 export interface Camera {
   /** screen = page * z + (x, y) */

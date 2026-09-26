@@ -349,6 +349,22 @@ if (want('mcp')) {
   M['mcp.renderSnapshotSvg.board10k.ms'] = await time('render_snapshot', { board, format: 'svg' }, 2)
   M['mcp.renderSnapshotPng.frame.ms'] = await time('render_snapshot', { board, format: 'png', frame: fx[10000].firstFrame }, 2)
   M['mcp.renderSnapshotPng.board1k.ms'] = await time('render_snapshot', { board: fx[1000].id, format: 'png' }, 2)
+  // the core must keep serving sync and other agents while it rasterizes a huge board
+  {
+    const t0 = performance.now()
+    let done = false
+    const snap = call('render_snapshot', { board, format: 'png' }).finally(() => (done = true))
+    const pings = []
+    while (!done) {
+      const p0 = performance.now()
+      await fetch(`${core.base}/api/health`)
+      pings.push(performance.now() - p0)
+      await sleep(25)
+    }
+    await snap
+    M['mcp.renderSnapshotPng.board10k.ms'] = round(performance.now() - t0)
+    M['mcp.coreResponsiveDuringSnapshot.maxMs'] = round(Math.max(...pings))
+  }
   M['memory.coreRssMB.afterMcp'] = rssMB(core.proc.pid)
   log('get_board', M['mcp.getBoard.board10k.ms'], 'ms · lint', M['mcp.lintLayout.board10k.ms'], 'ms · snapshot svg', M['mcp.renderSnapshotSvg.board10k.ms'], 'ms')
   await client.close()

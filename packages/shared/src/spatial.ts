@@ -1,4 +1,4 @@
-import type { Box } from './geometry'
+import type { Rect as Box } from './model'
 
 const OFFSET = 1 << 15
 const key = (cx: number, cy: number) => (cx + OFFSET) * 65536 + (cy + OFFSET)

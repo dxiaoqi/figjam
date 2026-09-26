@@ -43,6 +43,20 @@ profile.samples.forEach((id, i) => {
   const key = `${f.functionName || '(anon)'} ${f.url.split('/').slice(-2).join('/').replace(/\?.*$/, '')}:${f.lineNumber + 1}`
   self.set(key, (self.get(key) ?? 0) + (dt[i] ?? 0) / 1000)
 })
+// CALLERS=<functionName> prints the heaviest call stacks leading to that function
+if (process.env.CALLERS) {
+  const parent = new Map()
+  for (const n of profile.nodes) for (const c of n.children ?? []) parent.set(c, n.id)
+  const stacks = new Map()
+  profile.samples.forEach((id, i) => {
+    if (byId.get(id).callFrame.functionName !== process.env.CALLERS) return
+    const names = []
+    for (let p = parent.get(id); p && names.length < 12; p = parent.get(p)) names.push(byId.get(p).callFrame.functionName || '(anon)')
+    const k = names.join(' < ')
+    stacks.set(k, (stacks.get(k) ?? 0) + (dt[i] ?? 0) / 1000)
+  })
+  for (const [k, v] of [...stacks.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)) console.log(`${v.toFixed(1)} ms  ${k}`)
+}
 const total = [...self.values()].reduce((s, v) => s + v, 0)
 for (const [k, v] of [...self.entries()].sort((a, b) => b[1] - a[1]).slice(0, Number(top))) console.log(`${v.toFixed(1).padStart(9)} ms  ${((v / total) * 100).toFixed(1).padStart(5)}%  ${k}`)
 await browser.close()
