@@ -237,7 +237,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       </section>
 
       {/* Local-first & security */}
-      <section aria-labelledby="local" className={`dot-grid-dark relative text-white ${sectionY}`}>
+      <section aria-labelledby="local" className="dot-grid-dark relative py-20 text-white sm:py-28 lg:py-32">
         <Container>
           <Reveal className="max-w-2xl">
             <Eyebrow dot="var(--tk-green-accent)" className="text-white/70">

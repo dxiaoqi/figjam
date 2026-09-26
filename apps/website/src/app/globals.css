@@ -177,6 +177,10 @@
 :lang(zh-CN) p {
   line-height: 1.8;
 }
+/* Chinese breaks between any two characters already; "pretty" wrapping only adds layout cost on long pages. */
+:lang(zh-CN) .lede {
+  text-wrap: wrap;
+}
 
 /* The canvas: warm off-white with the 8px-grid dots of the product (drawn every 24px here). */
 .dot-grid {
@@ -195,6 +199,12 @@
   background: var(--chrome);
   backdrop-filter: blur(16px) saturate(1.4);
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+
+/* Sections below the fold skip style and layout until they come near the viewport. */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 900px;
 }
 
 .shot {

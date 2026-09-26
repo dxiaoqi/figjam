@@ -1,6 +1,8 @@
 // Lighthouse (mobile and desktop) for pages in both languages, against a running static export (`npm start`).
 // usage: node scripts/lighthouse.mjs <out-dir> [--base=http://127.0.0.1:47901] [--pages=/,/scenarios/architecture/]
 // Writes one JSON report per run plus summary.json / summary.md. Needs network once for `npx lighthouse`.
+// One discarded warm-up run comes first: on a machine where no browser has drawn Chinese text yet, the OS font
+// lookup for CJK adds about a second to the first paint of whichever page happens to be audited first.
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -14,6 +16,7 @@ const chrome = process.env.CHROME_PATH ?? '/usr/local/bin/google-chrome'
 
 mkdirSync(out, { recursive: true })
 const rows = []
+spawnSync('npx', ['-y', 'lighthouse@12', `${base}/zh/`, `--chrome-path=${chrome}`, '--chrome-flags=--headless=new --no-sandbox', '--output=json', '--output-path=/dev/null', '--quiet'], { stdio: 'ignore' })
 for (const locale of ['zh', 'en']) {
   for (const p of pages) {
     for (const form of ['mobile', 'desktop']) {
