@@ -4,11 +4,9 @@
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { authHeaders, signIn } from './lib/core-auth.mjs'
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'scenarios-media')
 fs.mkdirSync(out, { recursive: true })
 const base = 'http://127.0.0.1:47820'
