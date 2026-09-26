@@ -70,7 +70,7 @@ function distribution() {
  * Copy the CLI bundle, UI and skills to ~/.aifig/runtime/<version> once, and have agents run the AppImage file
  * itself (stable path, updated in place by the updater) in Node mode with that copy.
  */
-function useStableRuntime() {
+function adoptStableRuntime() {
   if (!packaged || !process.env.APPIMAGE) return
   const base = path.join(aifigHome(), 'runtime')
   const dir = path.join(base, app.getVersion())
@@ -93,7 +93,7 @@ function useStableRuntime() {
   agentCommand = process.env.APPIMAGE
 }
 try {
-  useStableRuntime()
+  adoptStableRuntime()
 } catch (e) {
   console.error('ai-figma: could not copy the CLI out of the AppImage; agent configs will point inside it', e)
 }

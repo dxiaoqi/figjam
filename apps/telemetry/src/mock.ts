@@ -24,7 +24,7 @@ export function seedMock(db: DatabaseSync, now = Date.now(), days = 90) {
   const today = dayOf(now)
   const insertEvent = db.prepare('INSERT OR IGNORE INTO events (install_id, event, day, app_version, os, arch, locale) VALUES (?, ?, ?, ?, ?, ?, ?)')
   const insertDownload = db.prepare('INSERT INTO downloads (day, platform, arch, kind, version, source) VALUES (?, ?, ?, ?, ?, ?)')
-  const installs: { id: string; os: string; arch: string; locale: string; version: string; stickiness: number }[] = []
+  const installs: { id: string; os: string; arch: string; locale: string; version: string; stickiness: number; until: number }[] = []
   db.exec('BEGIN')
   for (let i = days - 1; i >= 0; i--) {
     const day = daysBefore(today, i)
@@ -50,12 +50,14 @@ export function seedMock(db: DatabaseSync, now = Date.now(), days = 90) {
         locale: pick(r, [['en-US', 34], ['zh-CN', 30], ['en-GB', 7], ['de-DE', 6], ['ja-JP', 6], ['fr-FR', 5], ['zh-TW', 4], ['ko-KR', 4], ['es-ES', 4]]),
         version,
         stickiness: r() < 0.35 ? 0.03 : 0.25 + r() * 0.6,
+        // about half stop using it within a few weeks
+        until: r() < 0.5 ? age + Math.floor(r() * 30) : Infinity,
       }
       installs.push(inst)
       insertEvent.run(inst.id, 'install', day, inst.version, inst.os, inst.arch, inst.locale)
     }
     for (const inst of installs) {
-      if (r() > inst.stickiness * weekend) continue
+      if (age > inst.until || r() > inst.stickiness * weekend) continue
       if (inst.version < version && r() < 0.15) inst.version = version
       insertEvent.run(inst.id, 'active', day, inst.version, inst.os, inst.arch, inst.locale)
     }

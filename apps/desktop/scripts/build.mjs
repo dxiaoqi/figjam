@@ -93,11 +93,12 @@ const RESVG_TRIPLES = {
 }
 const resvgVersion = JSON.parse(fs.readFileSync(path.join(root, 'node_modules/@resvg/resvg-js/package.json'), 'utf8')).version
 
-function stageNative(platform, arch) {
-  const key = `${platform}-${arch}`
-  const pkg = `@resvg/resvg-js-${RESVG_TRIPLES[key]}`
-  const dest = path.join(out, 'native', key, 'node_modules/@resvg')
-  fs.rmSync(path.join(out, 'native', key), { recursive: true, force: true })
+// staged as build/native/<os>-<arch> (electron-builder's ${os}: mac | win | linux — the target, not the host)
+function stageNative(os, arch) {
+  const nodePlatform = { mac: 'darwin', win: 'win32', linux: 'linux' }[os]
+  const pkg = `@resvg/resvg-js-${RESVG_TRIPLES[`${nodePlatform}-${arch}`]}`
+  const dest = path.join(out, 'native', `${os}-${arch}`, 'node_modules/@resvg')
+  fs.rmSync(path.join(out, 'native', `${os}-${arch}`), { recursive: true, force: true })
   fs.mkdirSync(dest, { recursive: true })
   fs.cpSync(path.join(root, 'node_modules/@resvg/resvg-js'), path.join(dest, 'resvg-js'), { recursive: true, dereference: true })
   const local = path.join(root, 'node_modules', pkg)
@@ -116,8 +117,7 @@ function stageNative(platform, arch) {
   run('tar', ['xzf', tgz, '-C', target, '--strip-components=1'])
 }
 
-const nodePlatform = { mac: 'darwin', win: 'win32', linux: 'linux' }
-for (const p of platforms) for (const a of archsFor(p)) stageNative(nodePlatform[p], a)
+for (const p of platforms) for (const a of archsFor(p)) stageNative(p, a)
 
 // ---- package --------------------------------------------------------------------------------------
 const electronVersion = JSON.parse(fs.readFileSync(path.join(root, 'node_modules/electron/package.json'), 'utf8')).version

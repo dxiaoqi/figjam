@@ -18,7 +18,7 @@ export function disabledByEnv(env = process.env) {
 
 /** `en-US`, `zh-CN`, `de`: language and region only; anything else becomes `und`. */
 export function normalizeLocale(locale) {
-  const m = /^([a-z]{2,3})(?:[-_]([a-z]{2}|\d{3}))?/i.exec(String(locale ?? '').trim())
+  const m = /^([a-z]{2,3})(?:[-_]([a-z]{2}|\d{3})(?![a-z0-9]))?(?![a-z0-9])/i.exec(String(locale ?? '').trim())
   if (!m) return 'und'
   return m[2] ? `${m[1].toLowerCase()}-${m[2].toUpperCase()}` : m[1].toLowerCase()
 }

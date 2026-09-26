@@ -31,7 +31,7 @@ module.exports = {
     { from: '../../skills/builtin', to: 'skills' },
     { from: '../../skills/ai-figma-canvas', to: 'agent-skill/ai-figma-canvas' },
     // the resvg native module (PNG export) for the target platform, staged by scripts/build.mjs
-    { from: 'build/native/${platform}-${arch}/node_modules', to: 'node_modules' },
+    { from: 'build/native/${os}-${arch}/node_modules', to: 'node_modules' },
   ],
   fileAssociations: [{ ext: 'aifig', name: 'ai-figma board', role: 'Editor' }],
   // generic feed: electron-builder writes latest*.yml next to the installers; the app sets the real URL at runtime
