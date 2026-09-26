@@ -25,7 +25,7 @@ import { desktop } from '../lib/desktop'
 import { downloadDocument, downloadSnapshot } from '../lib/export'
 import { draftForPastedText, draftForTool, importImages, nextColor, shapeDefs } from './shapes'
 import { toast } from 'sonner'
-import { t, useT } from '../i18n'
+import { t, useT, type MessageKey } from '../i18n'
 
 const ME: Author = { kind: 'human', id: 'human:ui', name: 'You' }
 
@@ -56,6 +56,7 @@ function createEditor(doc: Editor['doc']) {
     gridSize: 8,
     toolKeys: { s: 'sticky', c: 'card', t: 'text' },
     lodStyle,
+    relationLabel: (r) => t(`relation.${r}` as MessageKey),
     createForTool: (tool) => draftForTool(tool),
     createForConnectorDrop: (from) => {
       const d = draftForTool('sticky')!

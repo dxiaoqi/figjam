@@ -90,7 +90,10 @@ function AgentRow({ agent, onChange }: { agent: AgentStatus; onChange: (a: Agent
       {!agent.installed && <p className="mt-2 pl-12 text-xs text-muted-foreground">{t('setup.notInstalledHint', { agent: name })}</p>}
       {agent.error && (
         <p className="mt-2 flex gap-1.5 pl-12 text-xs text-red-600 dark:text-red-400">
-          <CircleAlert className="mt-px size-3.5 shrink-0" /> {agent.error}
+          <CircleAlert className="mt-px size-3.5 shrink-0" />
+          <span className="min-w-0">
+            {t('setup.unreadable', { file })} <span className="break-all opacity-70">{agent.error}</span>
+          </span>
         </p>
       )}
       {confirming && (

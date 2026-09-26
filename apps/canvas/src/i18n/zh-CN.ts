@@ -230,6 +230,7 @@ export const zhCN: Messages = {
   'setup.cursor.name': 'Cursor',
   'setup.claude.where': '{file} 中的用户级 MCP 服务',
   'setup.cursor.where': '{file} 中的全局 MCP 服务',
+  'setup.unreadable': '无法读取 {file}，因此不会修改它。请修复该文件，或使用手动设置。',
   'setup.notInstalledHint': '请先安装 {agent}，或在“连接 Agent”的手动设置中复制配置。',
 
   'assistant.title': '内置助手',

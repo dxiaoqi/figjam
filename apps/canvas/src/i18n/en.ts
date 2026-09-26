@@ -251,6 +251,7 @@ export const en = {
   'setup.cursor.name': 'Cursor',
   'setup.claude.where': 'User MCP servers in {file}',
   'setup.cursor.where': 'Global MCP servers in {file}',
+  'setup.unreadable': 'We can’t read {file}, so we won’t change it. Fix the file or use Manual setup.',
   'setup.notInstalledHint': 'Install {agent} first, or copy the config from Manual setup in Connect agent.',
 
   // ---- assistant

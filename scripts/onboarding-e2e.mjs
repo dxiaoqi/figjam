@@ -177,6 +177,7 @@ const overflowX = (page, sel) => page.evaluate((sel) => [...document.querySelect
   // settings: switch to English live, persisted
   await page.click('[data-open-settings]')
   await page.waitForSelector('[data-settings-dialog]')
+  await page.waitForTimeout(400)
   await shot(page, 'settings-zh.png')
   await page.locator('[data-setting="language"] [data-option="en"]').click()
   await page.waitForTimeout(200)
@@ -224,6 +225,8 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   check(`[${sfx}] New board ▸ template creates and opens it`, boardsNow.length === before + 1 && !!created && created.blockCount > 10)
   await page.waitForTimeout(400)
   await shot(page, `template-research-${sfx}.png`)
+  const relText = await page.locator('.ae-connector-label.is-relation').first().textContent().catch(() => '')
+  check(`[${sfx}] connector relation labels are translated`, relText === (sfx === 'en' ? 'supports' : '支持'), relText)
   await ctx.close()
 }
 
@@ -276,11 +279,6 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   await page.waitForTimeout(1200)
   await shot(page, 'connect-agent-done-en.png')
   check('Connect agent never scrolls sideways (long config paths truncate)', await page.locator('[data-connect-dialog]').evaluate((el) => el.scrollLeft === 0 && el.scrollWidth <= el.clientWidth + 1))
-  // a broken config is reported, not overwritten
-  fs.writeFileSync(path.join(agentHome, '.claude.json'), '{ not json')
-  fs.mkdirSync(path.join(agentHome, '.claude'), { recursive: true })
-  const broken = await post('/claude/install')
-  check('an unreadable config is left alone', broken.ok === false && fs.readFileSync(path.join(agentHome, '.claude.json'), 'utf8') === '{ not json')
   if (page.clip) await page.clip(path.join(mediaDir, 'agent-setup-en.mp4'))
   await ctx.close()
 }
@@ -296,6 +294,14 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   await shot(page, 'connect-agent-zh-dark.png')
   check('[zh] Connect agent is translated, including agent status', ((await page.locator('[data-connect-dialog]').textContent()) ?? '').includes('一键设置') && ((await page.locator('[data-agent-setup="cursor"]').textContent()) ?? '').includes('已连接'))
   await ctx.close()
+}
+
+// a broken config is reported, not overwritten
+{
+  fs.writeFileSync(path.join(agentHome, '.claude.json'), '{ not json')
+  fs.mkdirSync(path.join(agentHome, '.claude'), { recursive: true })
+  const broken = await post('/claude/install')
+  check('an unreadable config is left alone', broken.ok === false && fs.readFileSync(path.join(agentHome, '.claude.json'), 'utf8') === '{ not json')
 }
 
 check('no console errors', !errors.length, errors.slice(0, 3).join(' | '))

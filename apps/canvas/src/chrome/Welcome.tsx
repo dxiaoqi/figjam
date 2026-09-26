@@ -58,7 +58,7 @@ function BoardArt({ theme }: { theme: ThemeMode }) {
   const t = useT()
   return (
     <div className="aifig-canvas relative h-full overflow-hidden" aria-hidden>
-      <div className="absolute top-8 left-1/2 h-[140px] w-[328px] -translate-x-[62%] rounded-xl border" style={{ background: theme === 'dark' ? '#1A1A1D' : '#F4F4F2' }}>
+      <div className="absolute top-8 left-1/2 h-[140px] w-[328px] -translate-x-1/2 rounded-xl border max-sm:scale-90 sm:-translate-x-[62%]" style={{ background: theme === 'dark' ? '#1A1A1D' : '#F4F4F2' }}>
         <div className="absolute -top-5 left-0 text-[10px] font-medium text-muted-foreground">{t('type.insight.plural')}</div>
         <Note theme={theme} c="yellow" className="top-4 left-4 size-[88px] rotate-[-2deg]">
           <Lines />
@@ -73,7 +73,7 @@ function BoardArt({ theme }: { theme: ThemeMode }) {
           <Lines w={[66, 48]} />
         </div>
       </div>
-      <div className="aifig-welcome-cursor absolute top-[118px] left-1/2 translate-x-[70px]">
+      <div className="aifig-welcome-cursor absolute top-[118px] left-1/2 translate-x-[70px] max-sm:hidden">
         <svg width="18" height="18" viewBox="0 0 22 22">
           <path d="M3 2.5 L18 9.5 L11 11.5 L8.2 18.5 Z" fill="#6E56CF" stroke="white" strokeWidth="1.6" strokeLinejoin="round" />
         </svg>
