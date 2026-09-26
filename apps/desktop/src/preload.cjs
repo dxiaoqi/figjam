@@ -1,6 +1,8 @@
 // Bridge between the canvas (renderer) and the desktop shell.
 const { contextBridge, ipcRenderer } = require('electron')
 
+const features = ipcRenderer.sendSync('aifig:features') || {}
+
 contextBridge.exposeInMainWorld('aifigDesktop', {
   platform: process.platform,
   // the core's access token (read by the shell from AIFIG_HOME); snippets never see it — they run in webviews
@@ -18,8 +20,13 @@ contextBridge.exposeInMainWorld('aifigDesktop', {
   setLocale(locale, pref) {
     ipcRenderer.send('locale', locale, pref)
   },
-  assistant: {
-    get: () => ipcRenderer.invoke('assistant:get'),
-    save: (settings) => ipcRenderer.invoke('assistant:save', settings),
-  },
+  // the built-in assistant is behind a build-time flag (off by default)
+  ...(features.assistant
+    ? {
+        assistant: {
+          get: () => ipcRenderer.invoke('assistant:get'),
+          save: (settings) => ipcRenderer.invoke('assistant:save', settings),
+        },
+      }
+    : {}),
 })

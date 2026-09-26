@@ -1350,6 +1350,17 @@ const aiMenu = async () => {
   return v
 }
 const cfg = (body) => fetch('http://127.0.0.1:47820/api/assistant/config', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) })
+if (process.env.AIFIG_FEATURE_ASSISTANT !== '1') {
+  // not shipped: behind a build-time flag that is off by default
+  const routes = await Promise.all(['/api/assistant/status', '/api/assistant/settings'].map((p) => fetch(`http://127.0.0.1:47820${p}`, { headers: authHeaders() }).then((r) => r.status)))
+  check('built-in assistant is off by default: no assistant routes on the core', routes.every((st) => st === 404), routes.join(', '))
+  check('…and no assistant commands on the context menu', !(await aiMenu()))
+  await page.locator('button[aria-haspopup="menu"]').first().click().catch(() => {})
+  await wait(250)
+  const menuText = await page.locator('[role="menu"]').innerText().catch(() => '')
+  await page.keyboard.press('Escape')
+  check('…nor in the board menu', /Activity/.test(menuText) && !/assistant|助手/i.test(menuText), menuText.replace(/\n/g, ' · ').slice(0, 160))
+} else {
 await cfg({ provider: null })
 await ed(() => window.dispatchEvent(new Event('aifig:assistant-changed')))
 await wait(300)
@@ -1387,6 +1398,7 @@ const boardsDir = path.join(homeOf(), 'boards')
 const boardFiles = fs.readdirSync(boardsDir).map((f) => fs.readFileSync(path.join(boardsDir, f)).toString('latin1')).join('')
 check('the API key never reaches board files', !boardFiles.includes('sk-test-DO-NOT-PERSIST'))
 await cfg({ provider: null })
+}
 
 // level of detail + 2,000-block performance
 const many = { blocks: Array.from({ length: 2000 }, (_, i) => ({ text: `Note ${i + 1}`, color: ['yellow', 'blue', 'green', 'pink', 'purple'][i % 5], size: 's' })), layout: 'grid', columns: 50, at: { x: 0, y: 6000 } }

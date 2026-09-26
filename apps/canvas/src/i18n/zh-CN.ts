@@ -534,7 +534,7 @@ export const zhCN: Messages = {
   'perm.expired': '该请求已过期',
   // ---- activity & permissions
   'activity.title': '活动与权限',
-  'activity.description': 'Agent、Skill 和内置助手对网络或密钥做过的所有操作，以及核心服务拒绝过的每个客户端。',
+  'activity.description': 'Agent 和 Skill 对网络或密钥做过的所有操作，以及核心服务拒绝过的每个客户端。',
   'activity.tab': '活动',
   'activity.grantsTab': '已记住的权限',
   'activity.filter.all': '全部',

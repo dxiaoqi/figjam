@@ -36,7 +36,7 @@ import {
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import type { Vec } from '@aifig/canvas-engine'
-import { COLORS, RELATIONS, type Relation, type RouteStyle } from '@aifig/shared'
+import { COLORS, FEATURES, RELATIONS, type Relation, type RouteStyle } from '@aifig/shared'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -259,7 +259,7 @@ export function ContextMenu() {
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             )}
-            {assistant.available && (
+            {FEATURES.assistant && assistant.available && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{t('menu.assistant')}</DropdownMenuLabel>

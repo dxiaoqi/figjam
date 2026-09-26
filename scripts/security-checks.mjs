@@ -214,7 +214,11 @@ check('the activity log is persisted as JSONL (0600) without the token', logFile
 const cliLog = spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'activity', '-c', 'network'], { env, encoding: 'utf8' })
 check('`aifig activity` shows the log', cliLog.status === 0 && cliLog.stdout.includes('fetch'), cliLog.stdout.split('\n')[0])
 
-// secrets through the assistant settings (browser path)
+// secrets through the assistant settings (browser path) — the built-in assistant is behind a build-time flag, off by default
+if (process.env.AIFIG_FEATURE_ASSISTANT !== '1') {
+  const st = await Promise.all(['/api/assistant/settings', '/api/assistant/status'].map((p) => fetch(`${base}${p}`, { headers: H }).then((r) => r.status)))
+  check('the built-in assistant is off by default: no settings or key routes, no assistant.json', st.every((x) => x === 404) && !fs.existsSync(path.join(home, 'assistant.json')), st.join(', '))
+} else {
 const saved = await (await fetch(`${base}/api/assistant/settings`, { method: 'POST', headers: H, body: JSON.stringify({ provider: 'anthropic', key: 'sk-ant-api03-NEVER-ON-DISK-123456', model: 'claude-x' }) })).json()
 const status = await (await fetch(`${base}/api/assistant/status`, { headers: H })).json()
 const onDisk = fs.readdirSync(home, { recursive: true }).filter((f) => fs.statSync(path.join(home, f)).isFile()).map((f) => fs.readFileSync(path.join(home, f)).toString('latin1')).join('\n')
@@ -223,6 +227,7 @@ check('the settings view never returns the key', !JSON.stringify(await (await fe
 check('with a non-persistent store, the save says it is session-only', saved.persisted === false && saved.store?.persistent === false)
 const secretLog = (await (await fetch(`${base}/api/activity?category=secret`, { headers: H })).json()).entries
 check('storing the key is in the activity log (by name)', secretLog.some((e) => e.action === 'store' && e.target === 'assistant.anthropic') && !JSON.stringify(secretLog).includes('NEVER-ON-DISK'))
+}
 
 // the bundled CLI / stdio MCP pick the token up by themselves
 const cliBoards = spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'boards'], { env, encoding: 'utf8' })

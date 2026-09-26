@@ -32,6 +32,8 @@ function printTokenLink(): Plugin {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), printTokenLink()],
+  // build-time feature flags (see packages/shared/src/features.ts)
+  define: { __AIFIG_FEATURES__: JSON.stringify({ assistant: process.env.AIFIG_FEATURE_ASSISTANT === '1' }) },
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, './src') },
   },

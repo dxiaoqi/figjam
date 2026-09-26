@@ -565,7 +565,7 @@ export const en = {
   'perm.expired': 'That request already expired',
   // ---- activity & permissions
   'activity.title': 'Activity & permissions',
-  'activity.description': 'Everything agents, skills and the assistant did with the network or secrets, and every client the core turned away.',
+  'activity.description': 'Everything agents and skills did with the network or secrets, and every client the core turned away.',
   'activity.tab': 'Activity',
   'activity.grantsTab': 'Remembered permissions',
   'activity.filter.all': 'All',

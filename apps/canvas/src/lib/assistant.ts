@@ -1,5 +1,6 @@
 import { t } from '../i18n'
 import { useEffect, useState } from 'react'
+import { FEATURES } from '@aifig/shared'
 import { toast } from 'sonner'
 import { apiFetch } from './auth'
 
@@ -16,6 +17,7 @@ const OFF: AssistantStatus = { available: false, provider: null, model: null, co
 export function useAssistant() {
   const [status, setStatus] = useState<AssistantStatus>(OFF)
   useEffect(() => {
+    if (!FEATURES.assistant) return
     const load = () =>
       apiFetch('/api/assistant/status')
         .then((r) => r.json())

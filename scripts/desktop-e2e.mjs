@@ -200,6 +200,14 @@ const forged = await win.evaluate(async (corePort) => {
 }, port)
 check('forged webviews (app URL, persistent or shared partition) are refused by the main process', Object.values(forged).every((v) => v === 'blocked'), JSON.stringify(forged))
 
+const assistantOn = process.env.AIFIG_FEATURE_ASSISTANT === '1'
+if (!assistantOn) {
+  // the built-in assistant is behind a build-time flag, off by default
+  const bridge = await win.evaluate(() => 'assistant' in window.aifigDesktop)
+  const menuItem = await app.evaluate(({ Menu }) => !!Menu.getApplicationMenu()?.getMenuItemById('assistant-settings'))
+  const route = (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders(env.AIFIG_HOME) })).status
+  check('the built-in assistant is off by default: no menu item, no keychain bridge, no core route', !bridge && !menuItem && route === 404, JSON.stringify({ bridge, menuItem, route }))
+} else {
 // assistant settings go through the keychain bridge (AIFIG_DESKTOP_KEYCHAIN=mock stands in for the OS keychain)
 const before2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders(env.AIFIG_HOME) })).json()
 const info = await win.evaluate(async () => {
@@ -211,6 +219,7 @@ check('assistant settings save via the keychain bridge and enable the assistant'
 const keySaved = await win.evaluate(() => window.aifigDesktop.assistant.save({ provider: 'anthropic', key: 'sk-ant-test-SECRET' }))
 const stored = fs.readFileSync(path.join(tmp, 'profile', 'assistant.bin'))
 check('with a keychain, API keys are persisted encrypted (never plain text)', keySaved.persisted && keySaved.storage === 'mock' && stored.subarray(0, 11).toString() === 'AIFIGMOCK1:' && !stored.toString('latin1').includes('SECRET'), JSON.stringify(keySaved))
+}
 await win.evaluate(() => window.dispatchEvent(new Event('aifig:connect')))
 await win.waitForTimeout(500)
 if (shotDir) await win.screenshot({ path: path.join(shotDir, 'desktop-connect.png') })
@@ -218,6 +227,7 @@ if (shotDir) await win.screenshot({ path: path.join(shotDir, 'desktop-connect.pn
 await app.close()
 
 // a machine without an OS keychain (or Linux basic_text): keys are kept for the session only, never written
+if (assistantOn) {
 app = await launch({ AIFIG_DESKTOP_KEYCHAIN: 'none' })
 const win2 = await app.firstWindow()
 await win2.waitForSelector('.ae-canvas', { timeout: 30000 })
@@ -229,6 +239,7 @@ const onDisk = fs.readFileSync(path.join(tmp, 'profile', 'assistant.bin'), 'lati
 const coreStatus = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders(env.AIFIG_HOME) })).json()
 check('without a keychain, the key is used for this session only and never written to disk', !noKc.r.persisted && noKc.r.storage === 'session' && noKc.get.encryption === 'session' && noKc.get.hasKey && coreStatus.available && !onDisk.includes('SESSION-ONLY'), JSON.stringify(noKc))
 await app.close()
+}
 try {
   fs.rmSync(tmp, { recursive: true, force: true })
 } catch {

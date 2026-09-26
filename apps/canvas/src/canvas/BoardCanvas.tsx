@@ -1,7 +1,7 @@
 import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { CanvasView, Editor } from '@aifig/canvas-engine'
-import { COLORS, SURFACES, type Author, type Block } from '@aifig/shared'
+import { COLORS, FEATURES, SURFACES, type Author, type Block } from '@aifig/shared'
 import { useBoard, useProviderState } from '../board-context'
 import { BoardMenu } from '../chrome/BoardMenu'
 import { ContextMenu } from '../chrome/ContextMenu'
@@ -159,7 +159,7 @@ export function BoardCanvas() {
         case 'toggle-minimap':
           return window.dispatchEvent(new Event('aifig:toggle-minimap'))
         case 'assistant-settings':
-          return window.dispatchEvent(new Event('aifig:assistant-settings'))
+          return FEATURES.assistant ? window.dispatchEvent(new Event('aifig:assistant-settings')) : undefined
         case 'activity':
           return window.dispatchEvent(new Event('aifig:activity'))
         case 'version-history':
@@ -198,7 +198,7 @@ export function BoardCanvas() {
           <ZoomControls />
           <ReviewPanel />
           <ContextMenu />
-          <AssistantSettings />
+          {FEATURES.assistant && <AssistantSettings />}
           <ActivityDialog />
           <PermissionPrompt />
           <SnippetDialog />
