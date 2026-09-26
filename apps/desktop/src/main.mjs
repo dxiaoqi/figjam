@@ -10,6 +10,7 @@ const repoRoot = path.resolve(here, '../../..')
 const packaged = app.isPackaged
 const cliPath = packaged ? path.join(process.resourcesPath, 'aifig.mjs') : path.join(repoRoot, 'bin', 'aifig.mjs')
 const uiDist = packaged ? path.join(process.resourcesPath, 'ui') : path.join(repoRoot, 'apps', 'canvas', 'dist')
+const builtinSkills = packaged ? path.join(process.resourcesPath, 'skills') : path.join(repoRoot, 'skills', 'builtin')
 const port = Number(process.env.AIFIG_CORE_PORT ?? 47821)
 const coreUrl = `http://127.0.0.1:${port}`
 const devUrl = process.env.AIFIG_DESKTOP_URL // e.g. the Vite dev server for hot reload
@@ -57,9 +58,10 @@ async function healthy() {
 
 function mcpEnv() {
   // agents launch the bundled CLI with Electron's own Node runtime
-  const env = { ELECTRON_RUN_AS_NODE: '1', AIFIG_BIN: cliPath }
+  const env = { ELECTRON_RUN_AS_NODE: '1', AIFIG_BIN: cliPath, AIFIG_BUILTIN_SKILLS: builtinSkills }
   return {
     AIFIG_BIN: cliPath,
+    AIFIG_BUILTIN_SKILLS: builtinSkills,
     AIFIG_MCP_COMMAND: process.execPath,
     AIFIG_MCP_ARGS: JSON.stringify([cliPath, 'mcp']),
     AIFIG_MCP_ENV: JSON.stringify(env),

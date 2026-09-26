@@ -388,6 +388,163 @@ program
   .description('call any Canvas API tool with a JSON argument object')
   .action((tool, jsonArg) => run(tool, jsonArg ? JSON.parse(jsonArg) : {}))
 
+// ---- skills -------------------------------------------------------------------
+
+const skill = program.command('skill').description('create, develop, install and enable skills (SKILL.md + canvas/blocks.json)')
+
+function printValidation(r: { name: string; errors: string[]; warnings: string[] }, ok: string) {
+  for (const w of r.warnings) console.log(`  ⚠ ${w}`)
+  if (r.errors.length) {
+    console.log(`✗ ${r.name}: ${r.errors.length} problem${r.errors.length === 1 ? '' : 's'}`)
+    for (const e of r.errors) console.log(`  • ${e}`)
+    return false
+  }
+  console.log(ok)
+  return true
+}
+
+skill
+  .command('new')
+  .description('scaffold a skill folder: SKILL.md + canvas/blocks.json with an example type, layout and prompt')
+  .argument('<name>', 'kebab-case, e.g. persona-kit')
+  .option('-d, --dir <dir>', 'parent folder', '.')
+  .option('--tools <tools>', 'comma-separated tools for an L1 skill, e.g. web.search')
+  .action(async (name: string, o) => {
+    const { writeSkillFolder, loadSkill } = await import('@aifig/core')
+    const path = await import('node:path')
+    const dir = path.resolve(o.dir, name)
+    if (fs.existsSync(dir) && fs.readdirSync(dir).length) {
+      console.error(`✗ ${dir} already exists and is not empty`)
+      process.exit(1)
+    }
+    const tools = o.tools ? String(o.tools).split(',').map((t: string) => t.trim()).filter(Boolean) : []
+    writeSkillFolder(dir, {
+      name,
+      description: `Describe what ${name} does and when an agent should use it (this is what agents read first).`,
+      capability: tools.length ? 'L1' : 'L0',
+      tools,
+      instructions: `# ${name}\n\nTell agents how to use your block types: what goes in each field, how to connect them, which layout to use.\n\n- \`${name}.item\` — one item per card. Fill \`status\` and \`owner\`.\n`,
+      blocks: {
+        types: {
+          item: {
+            label: 'Item',
+            plural: 'Items',
+            base: 'card',
+            color: 'blue',
+            icon: 'Tag',
+            description: 'An example type — rename it and change the fields.',
+            fields: [
+              { key: 'status', label: 'Status', kind: 'enum', options: ['todo', 'doing', 'done'], default: 'todo' },
+              { key: 'owner', label: 'Owner', kind: 'text' },
+            ],
+            template: { rows: ['status', 'owner'] },
+          },
+        },
+        relations: [],
+        layouts: [{ id: 'board', label: 'Status board', intent: 'cluster', field: 'status' }],
+        actions: [],
+        prompts: [{ id: 'start', label: 'Get started', text: `Create a few ${name}.item cards and apply the ${name}.board layout.` }],
+      },
+    })
+    const r = loadSkill(dir, 'dev')
+    printValidation(r, `✓ created ${dir}\n  next: aifig skill dev ${path.relative(process.cwd(), dir).startsWith('..') ? dir : path.relative(process.cwd(), dir) || '.'}   (live reload into the canvas)`)
+  })
+
+skill
+  .command('validate')
+  .description('check a skill folder without installing it')
+  .argument('[dir]', 'skill folder', '.')
+  .action(async (dir: string) => {
+    const { loadSkill } = await import('@aifig/core')
+    const r = loadSkill(dir, 'dev')
+    if (!printValidation(r, `✓ ${r.name} ${r.version} (${r.capability}) — ${r.canvas.types.length} type(s), ${r.canvas.layouts.length} layout(s), ${r.canvas.actions.length} action(s)`)) process.exit(1)
+  })
+
+skill
+  .command('dev')
+  .description('develop a skill: validate on every save and hot-reload it into boards that have it enabled')
+  .argument('[dir]', 'skill folder', '.')
+  .option('--enable', 'also enable it on the board (default: the board open in the canvas)')
+  .action(async (dir: string, o) => {
+    const path = await import('node:path')
+    const abs = path.resolve(dir)
+    let first = true
+    const reload = async () => {
+      const r = await callCore('load_dev_skill', { path: abs }, { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' })
+      if (!r.ok) return console.error(`✗ ${r.error}`)
+      const v = r.result as { name: string; version: string; errors: string[]; warnings: string[]; types: string[]; boardsUpdated: string[] }
+      const stamp = new Date().toLocaleTimeString()
+      const ok = printValidation(v, `✓ [${stamp}] ${v.name} ${v.version} — ${v.types.length} type(s)${v.boardsUpdated.length ? ` · reloaded on ${v.boardsUpdated.length} board(s)` : ''}`)
+      if (ok && first && o.enable) {
+        const e = await callCore('enable_skill', { board: program.opts().board, name: v.name }, { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' })
+        console.log(e.ok ? `✓ enabled ${v.name} on the board` : `✗ ${e.error}`)
+      }
+      first = false
+    }
+    await reload()
+    console.log(`  watching ${abs} — Ctrl-C to stop`)
+    let timer: ReturnType<typeof setTimeout> | null = null
+    fs.watch(abs, { recursive: true }, (_e, file) => {
+      if (file && /(^|\/)\.|~$|\.swp$/.test(String(file))) return
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(reload, 150)
+    })
+  })
+
+skill
+  .command('list')
+  .description('skills on this machine, and which are enabled on the board')
+  .action(() =>
+    run('list_skills', {}, (r) => {
+      for (const s of r.skills) {
+        const tools = s.tools.length ? ` · tools: ${s.tools.map((t: { name: string; available: boolean }) => `${t.name}${t.available ? '' : ' (not configured)'}`).join(', ')}` : ''
+        console.log(`${s.enabled ? '●' : '○'} ${s.name.padEnd(22)} ${s.version.padEnd(8)} ${s.capability} ${s.source.padEnd(8)} ${s.types.map((t: { id: string }) => t.id).join(', ')}${tools}${s.errors ? `  ✗ ${s.errors.length} problem(s)` : ''}`)
+      }
+    }),
+  )
+
+skill
+  .command('show')
+  .description("a skill's instructions, types, layouts and actions")
+  .argument('<name>')
+  .action((name: string) =>
+    run('get_skill', { name }, (r) => {
+      console.log(`${r.name} ${r.version} (${r.capability})\n${r.description}\n`)
+      console.log(r.instructions)
+      console.log(`\nTypes: ${r.types.map((t: { id: string; fields: { key: string }[] }) => `${t.id} [${t.fields.map((f) => f.key).join(', ')}]`).join('; ')}`)
+      if (r.layouts.length) console.log(`Layouts: ${r.layouts.map((l: { id: string }) => l.id).join(', ')}`)
+      if (r.actions.length) console.log(`Actions: ${r.actions.map((a: { id: string; tool: string }) => `${a.id} (${a.tool})`).join(', ')}`)
+    }),
+  )
+
+skill
+  .command('install')
+  .description('validate a skill folder and copy it into ~/.aifig/skills')
+  .argument('<dir>')
+  .action(async (dir: string) => {
+    const path = await import('node:path')
+    return run('install_skill', { path: path.resolve(dir) }, (r) => console.log(`✓ installed ${r.installed} ${r.version} → ${r.path}`))
+  })
+
+for (const verb of ['enable', 'disable'] as const) {
+  skill
+    .command(verb)
+    .description(`${verb} a skill on the board`)
+    .argument('<name>')
+    .action((name: string) => run(`${verb}_skill` as AnyToolName, { name }, (r) => console.log(`✓ ${verb}d ${name}${r.types?.length ? ` — types: ${r.types.join(', ')}` : ''}`)))
+}
+
+skill
+  .command('activity')
+  .description('skill activity log for the board (tool calls, permissions)')
+  .option('-s, --skill <name>')
+  .action((o) =>
+    run('list_activity', { skill: o.skill, limit: 50 }, (r) => {
+      for (const e of r.activity) console.log(`${new Date(e.at).toLocaleString()}  ${e.skill.padEnd(18)} ${e.kind.padEnd(10)} ${e.status.padEnd(8)} ${e.tool ?? ''} ${e.detail ?? ''}`)
+      if (r.grants.length) console.log(`\nAllowed: ${r.grants.map((g: { skill: string; tool: string }) => `${g.skill} → ${g.tool}`).join(', ')}`)
+    }),
+  )
+
 program.parseAsync(process.argv, { from: 'node' }).catch((e) => {
   console.error(`✗ ${(e as Error).message}`)
   process.exit(1)

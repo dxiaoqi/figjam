@@ -19,6 +19,9 @@ import { CommentLayer } from './CommentLayer'
 import { HeldNotice } from './HeldNotice'
 import { ReviewGhosts } from './ReviewGhosts'
 import { SnippetDialog } from '../chrome/SnippetDialog'
+import { SkillsPanel } from '../chrome/SkillsPanel'
+import { PermissionPrompt, SaveTypeDialog } from '../chrome/SkillPrompts'
+import { bindBoardSkills } from './type-registry'
 import { FieldsPopover, TypeFilterBar, TypePalette, useRelationSuggestions } from './types-ui'
 import { EditorContext } from './editor-context'
 import { desktop } from '../lib/desktop'
@@ -78,6 +81,7 @@ export function BoardCanvas() {
   const { synced } = useProviderState()
   const [editor, setEditor] = useState<Editor | null>(null)
   useRelationSuggestions(editor)
+  useEffect(() => bindBoardSkills(provider.doc), [provider])
 
   useEffect(() => {
     if (!synced) return
@@ -183,6 +187,9 @@ export function BoardCanvas() {
           <ContextMenu />
           <AssistantSettings />
           <SnippetDialog />
+          <SkillsPanel />
+          <PermissionPrompt />
+          <SaveTypeDialog />
           <StatusBanner />
         </EditorContext.Provider>
       ) : (

@@ -9,6 +9,7 @@ import * as syncProtocol from 'y-protocols/sync'
 import type { ClientMessage, ServerMessage } from '@aifig/shared'
 import { CORE_PORT, SNIPPET_PORT, snippetOrigin, type CallRequest } from '@aifig/shared'
 import { startSnippetHost } from './snippet-host'
+import { zipFolder } from './zip'
 import { randomUUID } from 'node:crypto'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
@@ -168,6 +169,14 @@ export async function startCore(port = CORE_PORT) {
         const body = JSON.parse((await readBody(req)) || '{}')
         core.presence.leave(String(body.id ?? ''))
         return json(res, 200, { ok: true })
+      }
+      const skillZip = url.pathname.match(/^\/api\/skills\/([a-z0-9-]+)\/export\.zip$/)
+      if (skillZip) {
+        const s = core.skills.get(skillZip[1])
+        if (!s?.path) return json(res, 404, { error: `No skill folder for "${skillZip[1]}"` })
+        const zip = zipFolder(s.path, s.name)
+        res.writeHead(200, { 'content-type': 'application/zip', 'content-disposition': `attachment; filename="${s.name}.zip"`, 'content-length': zip.length })
+        return res.end(zip)
       }
       const exp = url.pathname.match(/^\/api\/boards\/([^/]+)\/export\.(json|md)$/)
       if (exp) {

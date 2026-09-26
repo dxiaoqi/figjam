@@ -23,6 +23,7 @@ import {
   PanelTop,
   MessageSquarePlus,
   Pencil,
+  Puzzle,
   Play,
   RotateCcw,
   Scissors,
@@ -35,7 +36,7 @@ import {
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import type { Vec } from '@aifig/canvas-engine'
-import { BLOCK_TYPE_IDS, BLOCK_TYPES, COLORS, RELATIONS, type Relation, type RouteStyle } from '@aifig/shared'
+import { COLORS, RELATIONS, type Relation, type RouteStyle } from '@aifig/shared'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -53,7 +54,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useBoard, useBoardTitle } from '../board-context'
 import { useEditor } from '../canvas/editor-context'
-import { autoType, isTypeable, setBlocksType, TYPE_ICONS, useAutoType } from '../canvas/types-ui'
+import { useBoardSkills, useTypes } from '../canvas/type-registry'
+import { autoType, isTypeable, setBlocksType, typeIcon, useAutoType } from '../canvas/types-ui'
+import { runSkillAction } from '../lib/skills'
+import { S } from '../lib/strings'
 import { callCore } from '../lib/core'
 import { copySnapshot, downloadDocument, downloadSnapshot } from '../lib/export'
 import { runAssistant, useAssistant } from '../lib/assistant'
@@ -73,6 +77,8 @@ export function ContextMenu() {
   const [menu, setMenu] = useState<MenuState | null>(null)
   const assistant = useAssistant()
   const autoTypeOn = useAutoType()
+  const types = useTypes()
+  const skillsOn = useBoardSkills()
 
   useEffect(() => {
     editor.options.onContextMenu = ({ screen, page }) => setMenu({ screen, page })
@@ -103,6 +109,9 @@ export function ContextMenu() {
   const blocks = editor.selectedBlocks()
   const connectors = [...editor.selection].map((id) => editor.connector(id)).filter(Boolean)
   const ids = blocks.map((b) => b.id)
+  const skillActions = skillsOn.flatMap((sk) =>
+    sk.canvas.actions.filter((a) => blocks.length > 0 && blocks.every((b) => !a.appliesTo || (b.type && a.appliesTo.includes(b.type)))).map((action) => ({ skill: sk.name, action })),
+  )
   const sameParent = blocks.length > 1 && blocks.every((b) => (b.parent ?? null) === (blocks[0].parent ?? null))
   const close = () => setMenu(null)
   const run = (fn: () => void) => () => {
@@ -190,24 +199,62 @@ export function ContextMenu() {
                 <DropdownMenuSubTrigger data-set-as>
                   <Tags /> Set as…
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-56" data-ui>
-                  {BLOCK_TYPE_IDS.map((t) => {
-                    const Icon = TYPE_ICONS[t]
-                    const all = blocks.filter(isTypeable).every((b) => b.type === t)
+                <DropdownMenuSubContent className="max-h-[70vh] w-60 overflow-y-auto" data-ui>
+                  {[undefined, ...skillsOn.map((sk) => sk.name)].map((group) => {
+                    const defs = Object.values(types).filter((d) => d.skill === group)
+                    if (!defs.length) return null
                     return (
-                      <DropdownMenuItem key={t} data-set-type={t} onSelect={run(() => setBlocksType(editor, ids, t))}>
-                        <Icon style={{ color: COLORS[BLOCK_TYPES[t].color].light.accent }} /> {BLOCK_TYPES[t].label}
-                        {all ? <Check className="ml-auto size-3.5" /> : <DropdownMenuShortcut>{BLOCK_TYPES[t].prefixes[0]}</DropdownMenuShortcut>}
-                      </DropdownMenuItem>
+                      <div key={group ?? 'builtin'}>
+                        {group && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">{group}</DropdownMenuLabel>
+                          </>
+                        )}
+                        {defs.map((d) => {
+                          const Icon = typeIcon(d.id, types)
+                          const all = blocks.filter(isTypeable).every((b) => b.type === d.id)
+                          return (
+                            <DropdownMenuItem key={d.id} data-set-type={d.id} onSelect={run(() => setBlocksType(editor, ids, d.id))}>
+                              <Icon style={{ color: COLORS[d.color].light.accent }} /> {d.label}
+                              {all ? <Check className="ml-auto size-3.5" /> : d.prefixes[0] && !d.skill ? <DropdownMenuShortcut>{d.prefixes[0]}</DropdownMenuShortcut> : null}
+                            </DropdownMenuItem>
+                          )
+                        })}
+                      </div>
                     )
                   })}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem data-set-type="none" disabled={!blocks.some((b) => b.type)} onSelect={run(() => setBlocksType(editor, ids, null))}>
                     <Tags className="opacity-40" /> Plain (keeps fields hidden)
                   </DropdownMenuItem>
+                  {blocks.length === 1 && isTypeable(blocks[0]) && (
+                    <DropdownMenuItem data-save-type onSelect={run(() => window.dispatchEvent(new CustomEvent('aifig:save-type', { detail: ids[0] })))}>
+                      <Puzzle /> {S.skills.saveAsType}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuCheckboxItem checked={autoTypeOn} onCheckedChange={(v) => autoType.set(!!v)} onSelect={(e) => e.preventDefault()} data-auto-type>
                     Detect from prefix (?, !, “…)
                   </DropdownMenuCheckboxItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            )}
+            {skillActions.length > 0 && (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger data-skill-actions>
+                  <Puzzle /> Skill actions
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-64" data-ui>
+                  {skillActions.map(({ skill, action }) => (
+                    <DropdownMenuItem key={`${skill}.${action.id}`} data-skill-action={`${skill}.${action.id}`} onSelect={run(() => runSkillAction(boardId, skill, action.id, ids))}>
+                      <span className="flex min-w-0 flex-col">
+                        <span>{action.label}</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {skill} · {action.tool}
+                        </span>
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             )}

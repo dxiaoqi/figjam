@@ -3,7 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { customAlphabet } from 'nanoid'
 import * as Y from 'yjs'
-import type { Asset, Block, BoardSummary, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
+import { skillTypeRegistry } from '@aifig/shared'
+import type { ActivityEntry, Asset, Block, BoardSkill, BoardSummary, ChangeSet, Connector, PermissionRequest, Rect, SkillGrant, Thread, TypeRegistry } from '@aifig/shared'
 
 export const newId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 10)
 
@@ -24,6 +25,17 @@ export class Board {
   readonly changeSets = this.doc.getMap<ChangeSet>('changeSets')
   readonly assets = this.doc.getMap<Asset>('assets')
   readonly threads = this.doc.getMap<Thread>('threads')
+  /** Skills enabled on this board (snapshots, so types render without the skill folder). */
+  readonly skills = this.doc.getMap<BoardSkill>('skills')
+  /** Audit log of skill activity: tool calls, permission decisions, enable/disable. */
+  readonly activity = this.doc.getArray<ActivityEntry>('activity')
+  readonly permissionRequests = this.doc.getMap<PermissionRequest>('permissionRequests')
+  readonly skillGrants = this.doc.getMap<SkillGrant>('skillGrants')
+
+  /** Built-in types plus the types of the skills enabled on this board. */
+  types(): TypeRegistry {
+    return skillTypeRegistry(this.skills.values())
+  }
   private saveTimer: NodeJS.Timeout | null = null
   deleted = false
   /** A user-chosen .aifig file (Open / Save As) that every save is mirrored to. */
