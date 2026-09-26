@@ -2,6 +2,7 @@ import { edgePoint, intersects, useCamera, useEditorVersion } from '@aifig/canva
 import type { Block, ChangeSet, Connector } from '@aifig/shared'
 import { useChangeSets } from '../board-context'
 import { useEditor } from './editor-context'
+import { t } from '../i18n'
 
 const snippet = (b: Block) => {
   const t = (b.kind === 'card' || b.kind === 'frame' ? b.title || b.text : b.text).replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim()
@@ -112,7 +113,7 @@ export function ReviewGhosts() {
           >
             {s.width > 60 && s.height > 28 && (
               <div className="p-1.5" style={{ fontSize: Math.max(10, Math.min(14, 13 * z)) }}>
-                <span className="rounded bg-red-500/90 px-1 py-px text-[10px] font-semibold text-white">Removed · {cs.author.name}</span>
+                <span className="rounded bg-red-500/90 px-1 py-px text-[10px] font-semibold text-white">{t('review.ghostRemoved', { name: cs.author.name })}</span>
                 {s.height > 48 && <div className="mt-1 line-clamp-3 leading-snug text-red-700/80 line-through dark:text-red-300/80">{snippet(b)}</div>}
               </div>
             )}

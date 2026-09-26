@@ -4,6 +4,7 @@ import { Minimap, useCamera } from '@aifig/canvas-engine'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useEditorState } from '../canvas/editor-context'
+import { useT } from '../i18n'
 
 function IconButton({ label, kbd, onClick, disabled, children }: { label: string; kbd?: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
   return (
@@ -29,6 +30,7 @@ function IconButton({ label, kbd, onClick, disabled, children }: { label: string
 export function ZoomControls() {
   const editor = useEditorState()
   const cam = useCamera(editor)
+  const t = useT()
   const [showMap, setShowMap] = useState(() => localStorage.getItem('aifig:minimap') !== 'off')
   const toggleMap = () => {
     localStorage.setItem('aifig:minimap', showMap ? 'off' : 'on')
@@ -51,15 +53,15 @@ export function ZoomControls() {
       )}
       <div className="flex items-center gap-1">
       <div className="chrome flex items-center rounded-xl p-1">
-        <IconButton label="Undo" kbd="⌘Z" onClick={() => editor.undo()} disabled={!editor.undoManager.canUndo()}>
+        <IconButton label={t('zoom.undo')} kbd="⌘Z" onClick={() => editor.undo()} disabled={!editor.undoManager.canUndo()}>
           <Undo2 className="size-4" strokeWidth={1.75} />
         </IconButton>
-        <IconButton label="Redo" kbd="⇧⌘Z" onClick={() => editor.redo()} disabled={!editor.undoManager.canRedo()}>
+        <IconButton label={t('zoom.redo')} kbd="⇧⌘Z" onClick={() => editor.redo()} disabled={!editor.undoManager.canRedo()}>
           <Redo2 className="size-4" strokeWidth={1.75} />
         </IconButton>
       </div>
       <div className="chrome flex items-center rounded-xl p-1">
-        <IconButton label="Zoom out" kbd="⌘−" onClick={() => editor.zoomOut()}>
+        <IconButton label={t('zoom.out')} kbd="⌘−" onClick={() => editor.zoomOut()}>
           <Minus className="size-4" strokeWidth={1.75} />
         </IconButton>
         <Tooltip>
@@ -68,16 +70,16 @@ export function ZoomControls() {
               {Math.round(cam.z * 100)}%
             </button>
           </TooltipTrigger>
-          <TooltipContent side="top">Reset to 100%</TooltipContent>
+          <TooltipContent side="top">{t('zoom.reset')}</TooltipContent>
         </Tooltip>
-        <IconButton label="Zoom in" kbd="⌘+" onClick={() => editor.zoomIn()}>
+        <IconButton label={t('zoom.in')} kbd="⌘+" onClick={() => editor.zoomIn()}>
           <Plus className="size-4" strokeWidth={1.75} />
         </IconButton>
-        <IconButton label="Zoom to fit" kbd="⇧1" onClick={() => editor.zoomToFit()}>
+        <IconButton label={t('zoom.fit')} kbd="⇧1" onClick={() => editor.zoomToFit()}>
           <Maximize className="size-3.5" strokeWidth={1.75} />
         </IconButton>
         <div className="mx-0.5 h-5 w-px bg-border" />
-        <IconButton label={showMap ? 'Hide minimap' : 'Show minimap'} onClick={toggleMap}>
+        <IconButton label={t(showMap ? 'zoom.hideMap' : 'zoom.showMap')} onClick={toggleMap}>
           <MapIcon className={cn('size-4', showMap && 'text-foreground')} strokeWidth={1.75} />
         </IconButton>
       </div>

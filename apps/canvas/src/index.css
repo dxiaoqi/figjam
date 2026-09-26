@@ -685,3 +685,52 @@ html[data-comment-mode] .aifig-canvas [data-comment-popover] textarea {
   height: auto;
   min-height: 1.45em;
 }
+
+/* ---------- welcome ---------- */
+
+@keyframes aifig-welcome-cursor {
+  0%, 100% { transform: translate(70px, 0); }
+  50% { transform: translate(52px, -44px); }
+}
+@keyframes aifig-welcome-suggest {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@keyframes aifig-welcome-link {
+  to { background-position: 24px 0; }
+}
+.aifig-welcome-cursor {
+  animation: aifig-welcome-cursor 3.2s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+.aifig-welcome-suggest {
+  animation: aifig-welcome-suggest 3.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aifig-welcome-cursor,
+  .aifig-welcome-suggest {
+    animation: none;
+  }
+}
+
+/* ---------- CJK typography ----------
+ * Chinese UI text: system CJK faces first for Han glyphs (Inter still sets Latin and digits), a little more
+ * line-height, and no negative tracking (tight tracking crowds Han characters). */
+:root:lang(zh-CN) {
+  --font-sans: "Inter Variable", "Inter", "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", "WenQuanYi Micro Hei", system-ui, sans-serif;
+}
+:lang(zh-CN) body {
+  line-height: 1.6;
+}
+:lang(zh-CN) .tracking-tight,
+:lang(zh-CN) .tracking-wide {
+  letter-spacing: 0;
+}
+:lang(zh-CN) .leading-snug {
+  line-height: 1.5;
+}
+:lang(zh-CN) .leading-relaxed {
+  line-height: 1.7;
+}
+:lang(zh-CN) .uppercase {
+  text-transform: none;
+}

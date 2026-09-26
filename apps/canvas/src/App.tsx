@@ -1,10 +1,10 @@
 import { Loader2, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import type { BoardSummary } from '@aifig/shared'
+import type { BoardSummary, TemplateId } from '@aifig/shared'
 import { BoardContext, type ThemeMode } from './board-context'
 import { BoardCanvas } from './canvas/BoardCanvas'
 import { Logo } from './chrome/BoardMenu'
@@ -13,6 +13,10 @@ import { UNAUTHORIZED } from './lib/auth'
 import { callCore, fetchBoards, fetchHealth, Unauthorized, type Health } from './lib/core'
 import { desktop } from './lib/desktop'
 import { CoreProvider } from './sync/provider'
+import { getLocale, subscribeLocale, t, tn, useLocale, useT, type LocalePref } from './i18n'
+import { NewBoardDialog, openNewBoard } from './chrome/NewBoardDialog'
+import { openSettings, SettingsDialog } from './chrome/SettingsDialog'
+import { shouldShowWelcome, Welcome } from './chrome/Welcome'
 
 type ThemePref = 'system' | ThemeMode
 
@@ -31,21 +35,19 @@ function pickBoard(boards: BoardSummary[], active: string | null) {
 }
 
 function CoreOffline({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
+  useT()
   return (
     <div className="flex h-full items-center justify-center bg-background p-6">
       <div className="w-[440px] max-w-full rounded-3xl border bg-card p-8 shadow-sm">
         <Logo className="mb-5 size-9" />
-        <h1 className="text-lg font-semibold tracking-tight">Can’t reach the ai-figma core</h1>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          The canvas is a window onto a small local process that owns your boards. Start it from the project folder, and this page will connect on
-          its own.
-        </p>
+        <h1 className="text-lg font-semibold tracking-tight">{t('offline.title')}</h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{t('offline.body')}</p>
         <pre className="mt-4 rounded-lg border bg-muted/60 p-3 font-mono text-[12px]">npm run core</pre>
         <p className="mt-2 text-xs text-muted-foreground">
-          Or run everything at once with <code className="font-mono">npm run dev</code>.
+          {tn('offline.orAll', { cmd: <code className="font-mono">npm run dev</code> })}
         </p>
         <Button variant="outline" size="sm" className="mt-5 gap-1.5" onClick={onRetry} disabled={retrying}>
-          {retrying ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />} Try again
+          {retrying ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />} {t('offline.retry')}
         </Button>
       </div>
     </div>
@@ -53,6 +55,7 @@ function CoreOffline({ retrying, onRetry }: { retrying: boolean; onRetry: () => 
 }
 
 export default function App() {
+  useT()
   const [pref, setPref] = useState<ThemePref>(initialPref)
   const [system, setSystem] = useState<ThemeMode>(systemTheme)
   const theme: ThemeMode = pref === 'system' ? system : pref
@@ -63,6 +66,16 @@ export default function App() {
   const [locked, setLocked] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [provider, setProvider] = useState<CoreProvider | null>(null)
+  const [welcome, setWelcome] = useState(shouldShowWelcome)
+  const { pref: localePref, setPref: setLocalePref } = useLocale()
+
+  // the desktop shell mirrors the language in its native menus
+  useEffect(() => {
+    if (!desktop?.setLocale) return
+    const report = () => desktop!.setLocale!(getLocale(), localePref)
+    report()
+    return subscribeLocale(report)
+  }, [localePref])
 
   const setTheme = useCallback((t: ThemePref) => {
     setPref(t)
@@ -154,31 +167,33 @@ export default function App() {
     if (!desktop) return
     return desktop.onMenu((action, payload) => {
       if (action === 'theme') setTheme(payload as ThemePref)
+      else if (action === 'locale') setLocalePref(payload as LocalePref)
+      else if (action === 'settings') openSettings()
       else if (action === 'os-theme') setSystem(payload ? 'dark' : 'light')
       else if (action === 'open-board') {
         refreshBoards().then(() => setBoardId(String(payload)))
-      } else if (action === 'new-board') createBoardRef.current()
+      } else if (action === 'new-board') openNewBoard()
       else if (action === 'connect-agent') window.dispatchEvent(new Event('aifig:connect'))
     })
-  }, [setTheme, refreshBoards])
+  }, [setTheme, refreshBoards, setLocalePref])
   useEffect(() => {
     const title = boards?.find((b) => b.id === boardId)?.title ?? ''
     document.title = title ? `${title} — ai-figma` : 'ai-figma'
     desktop?.reportState({ boardId, title })
   }, [boardId, boards])
 
-  const createBoardRef = useRef<() => void>(() => {})
-  const createBoard = useCallback(async () => {
-    try {
-      const r = await callCore<{ board: BoardSummary }>('create_board', { title: 'Untitled board' })
-      await refreshBoards()
-      setBoardId(r.board.id)
-    } catch (e) {
-      toast.error((e as Error).message)
-    }
-  }, [refreshBoards])
-
-  createBoardRef.current = createBoard
+  const createBoard = useCallback(
+    async (opts: { title?: string; template?: TemplateId } = {}) => {
+      try {
+        const r = await callCore<{ board: BoardSummary }>('create_board', { title: opts.title ?? (opts.template ? undefined : t('board.untitled')), template: opts.template, language: getLocale() })
+        await refreshBoards()
+        setBoardId(r.board.id)
+      } catch (e) {
+        toast.error((e as Error).message)
+      }
+    },
+    [refreshBoards],
+  )
 
   let body
   if (locked) body = <TokenGate onDone={load} />
@@ -186,7 +201,7 @@ export default function App() {
   else if (!boards || !provider || !boardId || provider.boardId !== boardId)
     body = (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        <Loader2 className="mr-2 size-4 animate-spin" /> Starting ai-figma…
+        <Loader2 className="mr-2 size-4 animate-spin" /> {t('app.starting')}
       </div>
     )
   else
@@ -199,6 +214,9 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={400}>
       {body}
+      <NewBoardDialog theme={theme} onCreate={createBoard} />
+      <SettingsDialog themePref={pref} setTheme={setTheme} onShowWelcome={() => setWelcome(true)} />
+      {welcome && !offline && <Welcome theme={theme} onClose={() => setWelcome(false)} />}
       <Toaster theme={theme} position="bottom-center" offset={96} />
     </TooltipProvider>
   )

@@ -15,9 +15,17 @@ import {
   type FieldValue,
 } from '@aifig/shared'
 import { cn } from '@/lib/utils'
+import { en as LABEL_KEYS } from '../i18n/en'
 import { useBoard } from '../board-context'
 import { useCommentPrefs } from './comment-prefs'
 import { useEditor } from './editor-context'
+import { getLocale, t, useT, type MessageKey } from '../i18n'
+
+export const typeLabel = (id: BlockTypeId) => t(`type.${id}.label`)
+export const typePlural = (id: BlockTypeId) => t(`type.${id}.plural`)
+const fieldLabel = (key: string, fallback: string) => (`field.${key}` in LABEL_KEYS ? t(`field.${key}` as MessageKey) : fallback)
+const optionLabel = (o: string) => (`option.${o}` in LABEL_KEYS ? t(`option.${o}` as MessageKey) : o)
+const fieldPlaceholder = (key: string, fallback?: string) => (`field.placeholder.${key}` in LABEL_KEYS ? t(`field.placeholder.${key}` as MessageKey) : fallback)
 
 export const TYPE_ICONS: Record<BlockTypeId, LucideIcon> = {
   insight: Sparkles,
@@ -103,7 +111,7 @@ export function TypeHeader({ block }: { block: Block }) {
   return (
     <div className="aifig-type-header" data-type-header={block.type}>
       <Icon className="size-3.5" strokeWidth={2.25} />
-      {def.label}
+      {typeLabel(def.id)}
     </div>
   )
 }
@@ -132,12 +140,12 @@ export function TypeFooter({ block, editor }: { block: Block; editor: Editor }) 
             setField(editor, block, 'done', !f.done)
           }}
           className={cn('flex size-4 items-center justify-center rounded-[4px] border border-current/40', f.done && 'border-transparent bg-current/80')}
-          aria-label={f.done ? 'Mark not done' : 'Mark done'}
+          aria-label={t(f.done ? 'types.markNotDone' : 'types.markDone')}
         >
           {f.done && <Check className="size-3 text-[var(--fade-bg)]" strokeWidth={3} />}
         </button>
         <button data-ui onPointerDown={stop} onClick={open} className={cn('truncate', !f.owner && 'opacity-50')}>
-          {f.owner ? `@${f.owner}` : 'Add owner'}
+          {f.owner ? `@${f.owner}` : t('types.addOwner')}
         </button>
       </>
     )
@@ -145,15 +153,15 @@ export function TypeFooter({ block, editor }: { block: Block; editor: Editor }) 
     body = (
       <button data-ui onPointerDown={stop} onClick={open} className="flex items-center gap-1.5 truncate">
         <span className={cn('size-2 shrink-0 rounded-full', STATUS_DOT[String(f.status)] ?? 'bg-stone-400')} />
-        <span className="capitalize">{String(f.status)}</span>
-        <span className="opacity-60">· {String(f.confidence)}</span>
+        <span className="capitalize">{optionLabel(String(f.status))}</span>
+        <span className="opacity-60">· {optionLabel(String(f.confidence))}</span>
       </button>
     )
   } else {
     const parts = [f.interviewee, f.source].filter(Boolean)
     body = (
       <button data-ui onPointerDown={stop} onClick={open} className={cn('truncate', !parts.length && 'opacity-50')}>
-        {parts.length ? `— ${parts.join(', ')}` : 'Add who & source'}
+        {parts.length ? `— ${parts.join(', ')}` : t('types.addWho')}
       </button>
     )
   }
@@ -171,6 +179,7 @@ export function TypeFilterBar() {
   useEditorVersion(editor)
   const f = useTypeFilter()
   const { mode: commentMode } = useCommentPrefs()
+  useT()
   const blocks = editor.blocks().filter(isTypeable)
   const counts = useMemo(() => Object.fromEntries(BLOCK_TYPE_IDS.map((t) => [t, blocks.filter((b) => b.type === t).length])), [blocks])
   const present = BLOCK_TYPE_IDS.filter((t) => counts[t])
@@ -195,7 +204,7 @@ export function TypeFilterBar() {
               className={cn('flex h-7 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium transition-colors', on ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-accent hover:text-foreground')}
             >
               <Icon className="size-3.5" style={on ? undefined : { color: COLORS[BLOCK_TYPES[t].color].light.accent }} />
-              {BLOCK_TYPES[t].plural}
+              {typePlural(t)}
               <span className="tabular-nums opacity-60">{counts[t]}</span>
             </button>
           )
@@ -208,7 +217,7 @@ export function TypeFilterBar() {
               const val: FieldValue = fd.kind === 'boolean' ? opt === 'true' : opt
               const on = f.where[fd.key] === val
               const n = blocks.filter((b) => b.type === f.type && typeFields(b)[fd.key] === val).length
-              const label = fd.kind === 'boolean' ? (val ? fd.label : `Not ${fd.label.toLowerCase()}`) : opt
+              const label = fd.kind === 'boolean' ? (val ? fieldLabel(fd.key, fd.label) : t('types.not', { label: fieldLabel(fd.key, fd.label).toLowerCase() })) : optionLabel(opt)
               return (
                 <button
                   key={`${fd.key}:${opt}`}
@@ -232,12 +241,12 @@ export function TypeFilterBar() {
       {def && (
         <div className="chrome flex items-center gap-1 rounded-xl py-1 pr-1 pl-2.5 text-[12px] text-muted-foreground">
           <span data-filter-count>
-            {matching.length} of {blocks.length}
+            {t('types.ofTotal', { n: matching.length, total: blocks.length })}
           </span>
           <button onClick={() => editor.select(matching.map((b) => b.id))} className="h-7 rounded-lg px-2 font-medium text-foreground hover:bg-accent">
-            Select
+            {t('types.select')}
           </button>
-          <button onClick={() => typeFilter.set({ type: null, where: {} })} className="flex size-7 items-center justify-center rounded-lg hover:bg-accent" aria-label="Clear filter">
+          <button onClick={() => typeFilter.set({ type: null, where: {} })} className="flex size-7 items-center justify-center rounded-lg hover:bg-accent" aria-label={t('types.clearFilter')}>
             <X className="size-3.5" />
           </button>
         </div>
@@ -300,12 +309,12 @@ export function FieldsPopover() {
           const Icon = TYPE_ICONS[b.type!]
           return <Icon className="size-3.5" />
         })()}
-        {def.label}
+        {typeLabel(def.id)}
       </div>
       <div className="flex flex-col gap-2.5">
         {def.fields.map((fd) => (
           <label key={fd.key} className="flex flex-col gap-1">
-            <span className="text-muted-foreground">{fd.label}</span>
+            <span className="text-muted-foreground">{fieldLabel(fd.key, fd.label)}</span>
             {fd.kind === 'enum' ? (
               <div className="flex gap-1">
                 {fd.options.map((o) => (
@@ -315,19 +324,19 @@ export function FieldsPopover() {
                     onClick={() => setField(editor, b, fd.key, o)}
                     className={cn('h-7 flex-1 rounded-md px-1.5 capitalize transition-colors', f[fd.key] === o ? 'bg-foreground text-background' : 'bg-muted/70 hover:bg-accent')}
                   >
-                    {o}
+                    {optionLabel(o)}
                   </button>
                 ))}
               </div>
             ) : fd.kind === 'boolean' ? (
               <button onClick={() => setField(editor, b, fd.key, !f[fd.key])} className={cn('h-7 rounded-md px-2 text-left', f[fd.key] ? 'bg-foreground text-background' : 'bg-muted/70')}>
-                {f[fd.key] ? 'Yes' : 'No'}
+                {t(f[fd.key] ? 'common.yes' : 'common.no')}
               </button>
             ) : (
               <input
                 data-field-input={fd.key}
                 defaultValue={String(f[fd.key] ?? '')}
-                placeholder={fd.placeholder}
+                placeholder={fieldPlaceholder(fd.key, fd.placeholder)}
                 maxLength={120}
                 onChange={(e) => setField(editor, b, fd.key, e.target.value)}
                 onKeyDown={(e) => {
@@ -360,12 +369,14 @@ export function TypePalette() {
   const ref = useRef<HTMLDivElement>(null)
   const close = useMemo(() => () => setSt(null), [])
   useOutside(ref, close, !!st)
+  useT()
+  const locale = getLocale()
 
   const options: { id: BlockTypeId | null; label: string }[] = useMemo(() => {
-    const all = [...BLOCK_TYPE_IDS.map((t) => ({ id: t as BlockTypeId | null, label: BLOCK_TYPES[t].label })), { id: null, label: 'Plain (no type)' }]
+    const all = [...BLOCK_TYPE_IDS.map((ty) => ({ id: ty as BlockTypeId | null, label: typeLabel(ty), en: BLOCK_TYPES[ty].label })), { id: null, label: t('types.plainNone'), en: 'Plain' }]
     const q = st?.query.toLowerCase() ?? ''
-    return all.filter((o) => !q || o.label.toLowerCase().startsWith(q) || (o.id ?? 'plain').startsWith(q))
-  }, [st?.query])
+    return all.filter((o) => !q || o.label.toLowerCase().startsWith(q) || o.en.toLowerCase().startsWith(q) || (o.id ?? 'plain').startsWith(q))
+  }, [st?.query, locale])
 
   const choose = (o: { id: BlockTypeId | null }) => {
     if (!st) return
@@ -435,7 +446,7 @@ export function TypePalette() {
   return (
     <div ref={ref} data-ui data-type-palette className="chrome pointer-events-auto absolute z-[320] w-[220px] rounded-xl p-1 text-[13px] animate-in fade-in zoom-in-95 duration-150" style={at}>
       <div className="px-2 pt-1 pb-1.5 text-[11px] text-muted-foreground">
-        Set as{st.query ? ` · “${st.query}”` : '…'}
+        {t('types.setAs')}{st.query ? ` · “${st.query}”` : '…'}
       </div>
       {options.map((o, i) => {
         const Icon = o.id ? TYPE_ICONS[o.id] : null
@@ -453,7 +464,7 @@ export function TypePalette() {
           </button>
         )
       })}
-      {!options.length && <div className="px-2 py-2 text-xs text-muted-foreground">No type matches</div>}
+      {!options.length && <div className="px-2 py-2 text-xs text-muted-foreground">{t('types.noMatch')}</div>}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import { Command } from 'commander'
 import { callCore } from './client'
-import type { AnyToolName, CallerInfo } from '@aifig/shared'
+import { TEMPLATE_IDS, type AnyToolName, type CallerInfo } from '@aifig/shared'
 
 const program = new Command()
 program
@@ -67,9 +67,22 @@ program
   )
 
 program
-  .command('new-board <title>')
-  .description('create a board')
-  .action((title) => run('create_board', { title }, (r) => console.log(`✓ created ${r.board.id} "${r.board.title}"`)))
+  .command('new-board [title]')
+  .description('create a board, e.g. aifig new-board --template research-synthesis --lang zh-CN')
+  .option('-t, --template <id>', `start from a template: ${TEMPLATE_IDS.join(' | ')}`)
+  .option('-l, --lang <language>', 'template language: en | zh-CN')
+  .action((title, opts) =>
+    run('create_board', { title, template: opts.template, language: opts.lang }, (r) => console.log(`✓ created ${r.board.id} "${r.board.title}"${r.template ? ` from ${r.template} (${r.board.blockCount} blocks)` : ''}`)),
+  )
+
+program
+  .command('templates')
+  .description('list board templates')
+  .action(() =>
+    run('list_templates', {}, (r) => {
+      for (const t of r.templates) console.log(`${t.id.padEnd(22)} ${t.title} — ${t.description}`)
+    }),
+  )
 
 program
   .command('read')

@@ -57,6 +57,7 @@ import { autoType, isTypeable, setBlocksType, TYPE_ICONS, useAutoType } from '..
 import { callCore } from '../lib/core'
 import { copySnapshot, downloadDocument, downloadSnapshot } from '../lib/export'
 import { runAssistant, useAssistant } from '../lib/assistant'
+import { useT } from '../i18n'
 
 interface MenuState {
   screen: Vec
@@ -73,6 +74,7 @@ export function ContextMenu() {
   const [menu, setMenu] = useState<MenuState | null>(null)
   const assistant = useAssistant()
   const autoTypeOn = useAutoType()
+  const t = useT()
 
   useEffect(() => {
     editor.options.onContextMenu = ({ screen, page }) => setMenu({ screen, page })
@@ -133,7 +135,7 @@ export function ContextMenu() {
   const tidy = async () => {
     try {
       await callCore('arrange', { board: boardId, ids, layout: 'grid' })
-      toast.success('Tidied into a grid')
+      toast.success(t('menu.tidiedGrid'))
     } catch (e) {
       toast.error((e as Error).message)
     }
@@ -151,62 +153,62 @@ export function ContextMenu() {
             {blocks.length === 1 && blocks[0].kind === 'web' && (
               <>
                 <DropdownMenuItem onSelect={run(() => editor.startEditing(ids[0]))} data-web-run>
-                  <Play /> {blocks[0].web?.mode === 'url' ? 'Open here' : 'Run'}
+                  <Play /> {t(blocks[0].web?.mode === 'url' ? 'menu.openHere' : 'menu.run')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => window.dispatchEvent(new CustomEvent('aifig:snippet-dialog', { detail: { id: ids[0] } })))} data-web-edit>
-                  <Code2 /> {blocks[0].web?.mode === 'url' ? 'Change URL…' : 'Edit source…'}
+                  <Code2 /> {t(blocks[0].web?.mode === 'url' ? 'menu.changeUrl' : 'menu.editSource')}
                 </DropdownMenuItem>
                 {blocks[0].web?.mode === 'url' && blocks[0].web.url && (
                   <DropdownMenuItem onSelect={run(() => window.open(blocks[0].web!.url, '_blank', 'noopener,noreferrer'))}>
-                    <ExternalLink /> Open in browser
+                    <ExternalLink /> {t('menu.openBrowser')}
                   </DropdownMenuItem>
                 )}
               </>
             )}
             {blocks.length === 1 && blocks[0].kind !== 'web' && (
               <DropdownMenuItem onSelect={run(() => editor.startEditing(ids[0]))}>
-                <Pencil /> Edit <DropdownMenuShortcut>↵</DropdownMenuShortcut>
+                <Pencil /> {t('menu.edit')} <DropdownMenuShortcut>↵</DropdownMenuShortcut>
               </DropdownMenuItem>
             )}
             {blocks.length === 1 && (
               <DropdownMenuItem onSelect={run(() => window.dispatchEvent(new CustomEvent('aifig:comment', { detail: ids[0] })))}>
-                <MessageSquarePlus /> Comment <DropdownMenuShortcut>M</DropdownMenuShortcut>
+                <MessageSquarePlus /> {t('menu.comment')} <DropdownMenuShortcut>M</DropdownMenuShortcut>
               </DropdownMenuItem>
             )}
             <DropdownMenuItem onSelect={run(() => copy(true))}>
-              <Scissors /> Cut <DropdownMenuShortcut>{mod}X</DropdownMenuShortcut>
+              <Scissors /> {t('menu.cut')} <DropdownMenuShortcut>{mod}X</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={run(() => copy())}>
-              <Copy /> Copy <DropdownMenuShortcut>{mod}C</DropdownMenuShortcut>
+              <Copy /> {t('menu.copy')} <DropdownMenuShortcut>{mod}C</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={run(paste)}>
-              <Clipboard /> Paste <DropdownMenuShortcut>{mod}V</DropdownMenuShortcut>
+              <Clipboard /> {t('menu.paste')} <DropdownMenuShortcut>{mod}V</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={run(() => editor.duplicate())}>
-              <CopyPlus /> Duplicate <DropdownMenuShortcut>{mod}D</DropdownMenuShortcut>
+              <CopyPlus /> {t('menu.duplicate')} <DropdownMenuShortcut>{mod}D</DropdownMenuShortcut>
             </DropdownMenuItem>
             {blocks.some(isTypeable) && (
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger data-set-as>
-                  <Tags /> Set as…
+                  <Tags /> {t('menu.setAs')}
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="w-56" data-ui>
-                  {BLOCK_TYPE_IDS.map((t) => {
-                    const Icon = TYPE_ICONS[t]
-                    const all = blocks.filter(isTypeable).every((b) => b.type === t)
+                  {BLOCK_TYPE_IDS.map((ty) => {
+                    const Icon = TYPE_ICONS[ty]
+                    const all = blocks.filter(isTypeable).every((b) => b.type === ty)
                     return (
-                      <DropdownMenuItem key={t} data-set-type={t} onSelect={run(() => setBlocksType(editor, ids, t))}>
-                        <Icon style={{ color: COLORS[BLOCK_TYPES[t].color].light.accent }} /> {BLOCK_TYPES[t].label}
-                        {all ? <Check className="ml-auto size-3.5" /> : <DropdownMenuShortcut>{BLOCK_TYPES[t].prefixes[0]}</DropdownMenuShortcut>}
+                      <DropdownMenuItem key={ty} data-set-type={ty} onSelect={run(() => setBlocksType(editor, ids, ty))}>
+                        <Icon style={{ color: COLORS[BLOCK_TYPES[ty].color].light.accent }} /> {t(`type.${ty}.label`)}
+                        {all ? <Check className="ml-auto size-3.5" /> : <DropdownMenuShortcut>{BLOCK_TYPES[ty].prefixes[0]}</DropdownMenuShortcut>}
                       </DropdownMenuItem>
                     )
                   })}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem data-set-type="none" disabled={!blocks.some((b) => b.type)} onSelect={run(() => setBlocksType(editor, ids, null))}>
-                    <Tags className="opacity-40" /> Plain (keeps fields hidden)
+                    <Tags className="opacity-40" /> {t('menu.plainKeep')}
                   </DropdownMenuItem>
                   <DropdownMenuCheckboxItem checked={autoTypeOn} onCheckedChange={(v) => autoType.set(!!v)} onSelect={(e) => e.preventDefault()} data-auto-type>
-                    Detect from prefix (?, !, “…)
+                    {t('menu.detectPrefix')}
                   </DropdownMenuCheckboxItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
@@ -214,113 +216,113 @@ export function ContextMenu() {
             {assistant.available && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Assistant</DropdownMenuLabel>
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{t('menu.assistant')}</DropdownMenuLabel>
                 <DropdownMenuItem onSelect={run(() => runAssistant(boardId, 'extract', ids))}>
-                  <Sparkles /> Extract ideas
+                  <Sparkles /> {t('menu.extract')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => runAssistant(boardId, 'cluster', ids))} disabled={blocks.filter((b) => b.kind !== 'frame').length < 3}>
-                  <Sparkles /> Cluster into themes
+                  <Sparkles /> {t('menu.cluster')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => runAssistant(boardId, 'tidy', ids))}>
-                  <Sparkles /> Tidy up
+                  <Sparkles /> {t('menu.tidyUp')}
                 </DropdownMenuItem>
               </>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
-                <ArrowUpToLine /> Arrange
+                <ArrowUpToLine /> {t('menu.arrange')}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-52" data-ui>
                 <DropdownMenuItem onSelect={run(() => editor.bringToFront())}>
-                  <ArrowUpToLine /> Bring to front
+                  <ArrowUpToLine /> {t('menu.front')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => editor.sendToBack())}>
-                  <ArrowDownToLine /> Send to back
+                  <ArrowDownToLine /> {t('menu.back')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={run(() => editor.groupIntoFrame())} disabled={blocks.every((b) => b.kind === 'frame')}>
-                  <Frame /> Group into frame <DropdownMenuShortcut>{mod}G</DropdownMenuShortcut>
+                  <Frame /> {t('menu.group')} <DropdownMenuShortcut>{mod}G</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(tidy)} disabled={!sameParent}>
-                  <LayoutGrid /> Tidy into grid
+                  <LayoutGrid /> {t('menu.tidyGrid')}
                 </DropdownMenuItem>
                 {blocks.some((b) => b.rotation) && (
                   <DropdownMenuItem onSelect={run(() => editor.updateBlocks(blocks.filter((b) => b.rotation).map((b) => ({ id: b.id, patch: { rotation: 0 } }))))}>
-                    <RotateCcw /> Reset rotation
+                    <RotateCcw /> {t('menu.resetRotation')}
                   </DropdownMenuItem>
                 )}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger disabled={blocks.length < 2}>
-                <AlignStartVertical /> Align &amp; distribute
+                <AlignStartVertical /> {t('menu.align')}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-52" data-ui>
                 <DropdownMenuItem onSelect={run(() => editor.align('left'))}>
-                  <AlignStartVertical /> Align left
+                  <AlignStartVertical /> {t('menu.alignLeft')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => editor.align('center'))}>
-                  <AlignCenterVertical /> Align center
+                  <AlignCenterVertical /> {t('menu.alignCenter')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => editor.align('right'))}>
-                  <AlignEndVertical /> Align right
+                  <AlignEndVertical /> {t('menu.alignRight')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={run(() => editor.align('top'))}>
-                  <AlignStartHorizontal /> Align top
+                  <AlignStartHorizontal /> {t('menu.alignTop')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => editor.align('middle'))}>
-                  <AlignCenterHorizontal /> Align middle
+                  <AlignCenterHorizontal /> {t('menu.alignMiddle')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => editor.align('bottom'))}>
-                  <AlignEndHorizontal /> Align bottom
+                  <AlignEndHorizontal /> {t('menu.alignBottom')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={run(() => editor.distribute('x'))} disabled={blocks.length < 3}>
-                  <AlignHorizontalDistributeCenter /> Distribute horizontally
+                  <AlignHorizontalDistributeCenter /> {t('menu.distributeH')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => editor.distribute('y'))} disabled={blocks.length < 3}>
-                  <AlignVerticalDistributeCenter /> Distribute vertically
+                  <AlignVerticalDistributeCenter /> {t('menu.distributeV')}
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
-                <Image /> Export selection
+                <Image /> {t('menu.exportSelection')}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-52" data-ui>
                 <DropdownMenuItem onSelect={run(() => copySnapshot(boardId, { ids, theme }))}>
-                  Copy as PNG <DropdownMenuShortcut>⇧{mod}C</DropdownMenuShortcut>
+                  {t('menu.copyPng')} <DropdownMenuShortcut>⇧{mod}C</DropdownMenuShortcut>
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={run(() => downloadSnapshot(boardId, title, 'png', { ids, theme }))}>Export PNG</DropdownMenuItem>
-                <DropdownMenuItem onSelect={run(() => downloadSnapshot(boardId, title, 'svg', { ids, theme }))}>Export SVG</DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(() => downloadSnapshot(boardId, title, 'png', { ids, theme }))}>{t('menu.exportPng')}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(() => downloadSnapshot(boardId, title, 'svg', { ids, theme }))}>{t('menu.exportSvg')}</DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={run(() => editor.deleteSelection())}>
-              <Trash2 /> Delete <DropdownMenuShortcut>⌫</DropdownMenuShortcut>
+              <Trash2 /> {t('menu.delete')} <DropdownMenuShortcut>⌫</DropdownMenuShortcut>
             </DropdownMenuItem>
           </>
         )}
         {!blocks.length && connectors.length > 0 && (
           <>
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Connector</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{t('menu.connector')}</DropdownMenuLabel>
             {connectors.length === 1 && (
               <DropdownMenuItem onSelect={run(() => editor.startEditing(connectors[0]!.id))}>
-                <Pencil /> Edit label <DropdownMenuShortcut>↵</DropdownMenuShortcut>
+                <Pencil /> {t('menu.editLabel')} <DropdownMenuShortcut>↵</DropdownMenuShortcut>
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Routing</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{t('menu.routing')}</DropdownMenuLabel>
             {connectors.some((c) => c!.waypoints?.length) && (
               <DropdownMenuItem onSelect={run(() => connectors.forEach((c) => c!.waypoints?.length && editor.setWaypoints(c!.id, [])))}>
-                <RotateCcw /> Remove bends (auto-route)
+                <RotateCcw /> {t('menu.removeBends')}
               </DropdownMenuItem>
             )}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger data-relation-menu>
-                <Tags /> Relation{connectors.length === 1 && connectors[0]!.relation ? ` · ${connectors[0]!.relation}` : ''}
+                <Tags /> {t('menu.relation')}{connectors.length === 1 && connectors[0]!.relation ? ` · ${t(`relation.${connectors[0]!.relation}`)}` : ''}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-44" data-ui>
                 <DropdownMenuRadioGroup
@@ -334,60 +336,60 @@ export function ContextMenu() {
                 >
                   {RELATIONS.map((r) => (
                     <DropdownMenuRadioItem key={r} value={r} data-relation={r}>
-                      {r}
+                      {t(`relation.${r}`)}
                     </DropdownMenuRadioItem>
                   ))}
-                  <DropdownMenuRadioItem value="none">none</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="none">{t('relation.none')}</DropdownMenuRadioItem>
                 </DropdownMenuRadioGroup>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuRadioGroup value={route} onValueChange={(v) => (editor.setRoute(connectors.map((c) => c!.id), v as RouteStyle), close())}>
-              <DropdownMenuRadioItem value="curved">Curved</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="elbow">Elbow</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="straight">Straight</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="curved">{t('menu.curved')}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="elbow">{t('menu.elbow')}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="straight">{t('menu.straight')}</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={run(() => editor.deleteSelection())}>
-              <Trash2 /> Delete <DropdownMenuShortcut>⌫</DropdownMenuShortcut>
+              <Trash2 /> {t('menu.delete')} <DropdownMenuShortcut>⌫</DropdownMenuShortcut>
             </DropdownMenuItem>
           </>
         )}
         {!blocks.length && !connectors.length && (
           <>
             <DropdownMenuItem onSelect={run(paste)}>
-              <Clipboard /> Paste here <DropdownMenuShortcut>{mod}V</DropdownMenuShortcut>
+              <Clipboard /> {t('menu.pasteHere')} <DropdownMenuShortcut>{mod}V</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={run(() => addHere('sticky'))}>
-              <StickyNote /> Add sticky <DropdownMenuShortcut>S</DropdownMenuShortcut>
+              <StickyNote /> {t('menu.addSticky')} <DropdownMenuShortcut>S</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={run(() => addHere('card'))}>
-              <PanelTop /> Add card <DropdownMenuShortcut>C</DropdownMenuShortcut>
+              <PanelTop /> {t('menu.addCard')} <DropdownMenuShortcut>C</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={run(() => addHere('text'))}>
-              <Type /> Add heading <DropdownMenuShortcut>T</DropdownMenuShortcut>
+              <Type /> {t('menu.addHeading')} <DropdownMenuShortcut>T</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={run(() => editor.selectAll())}>
-              <MousePointerSquareDashed /> Select all <DropdownMenuShortcut>{mod}A</DropdownMenuShortcut>
+              <MousePointerSquareDashed /> {t('menu.selectAll')} <DropdownMenuShortcut>{mod}A</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={run(() => editor.zoomToFit())}>
-              <Maximize /> Zoom to fit <DropdownMenuShortcut>⇧1</DropdownMenuShortcut>
+              <Maximize /> {t('zoom.fit')} <DropdownMenuShortcut>⇧1</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
-                <Image /> Export board
+                <Image /> {t('menu.exportBoard')}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-52" data-ui>
                 <DropdownMenuItem onSelect={run(() => copySnapshot(boardId, { theme }))}>
-                  Copy as PNG <DropdownMenuShortcut>⇧{mod}C</DropdownMenuShortcut>
+                  {t('menu.copyPng')} <DropdownMenuShortcut>⇧{mod}C</DropdownMenuShortcut>
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={run(() => downloadSnapshot(boardId, title, 'png', { theme }))}>Export PNG</DropdownMenuItem>
-                <DropdownMenuItem onSelect={run(() => downloadSnapshot(boardId, title, 'svg', { theme }))}>Export SVG</DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(() => downloadSnapshot(boardId, title, 'png', { theme }))}>{t('menu.exportPng')}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(() => downloadSnapshot(boardId, title, 'svg', { theme }))}>{t('menu.exportSvg')}</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={run(() => downloadDocument(boardId, 'md'))}>Export Markdown</DropdownMenuItem>
-                <DropdownMenuItem onSelect={run(() => downloadDocument(boardId, 'json'))}>Export JSON</DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(() => downloadDocument(boardId, 'md'))}>{t('menu.exportMd')}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(() => downloadDocument(boardId, 'json'))}>{t('menu.exportJson')}</DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
           </>

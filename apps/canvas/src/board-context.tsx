@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react'
 import type * as Y from 'yjs'
-import type { AgentPresence, Block, BoardSummary, ChangeSet } from '@aifig/shared'
+import type { AgentPresence, Block, BoardSummary, ChangeSet, TemplateId } from '@aifig/shared'
 import type { Health } from './lib/core'
 import type { CoreProvider } from './sync/provider'
 
@@ -14,7 +14,7 @@ export interface BoardContextValue {
   theme: ThemeMode
   setTheme: (t: ThemeMode | 'system') => void
   switchBoard: (id: string) => void
-  createBoard: () => void
+  createBoard: (opts?: { title?: string; template?: TemplateId }) => Promise<void>
   refreshBoards: () => void
 }
 

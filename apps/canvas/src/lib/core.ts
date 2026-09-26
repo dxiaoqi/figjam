@@ -51,7 +51,7 @@ export async function fetchBoards(): Promise<{ boards: BoardSummary[]; active: s
 
 const q = (s: string) => (/[\s"']/.test(s) ? JSON.stringify(s) : s)
 
-export function mcpSnippets(health: Health | null) {
+export function mcpSnippets(health: Health | null, example: [string, string, string] = ['First idea', 'Second idea', 'Ideas']) {
   const bin = health?.bin ?? '/path/to/ai-figma/bin/aifig.mjs'
   const launch = health?.mcp ?? { command: 'node', args: [bin, 'mcp'] }
   const env = launch.env ?? {}
@@ -65,7 +65,7 @@ export function mcpSnippets(health: Health | null) {
     cursor: JSON.stringify({ mcpServers: { 'ai-figma': { command: launch.command, args: launch.args, ...(Object.keys(env).length ? { env } : {}) } } }, null, 2),
     claudeHttp: `claude mcp add --transport http ai-figma ${url} --header ${q(`Authorization: Bearer ${token}`)}`,
     cursorHttp: JSON.stringify({ mcpServers: { 'ai-figma': { url, headers } } }, null, 2),
-    cli: `${cliRun} add "First idea" "Second idea" --frame "Ideas"`,
+    cli: `${cliRun} add "${example[0]}" "${example[1]}" --frame "${example[2]}"`,
     url,
   }
 }

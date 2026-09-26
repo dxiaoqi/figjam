@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, safeStorage, session, shell } from 'electron'
+import { LOCALES, systemLocale, translator } from './i18n.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '../../..')
@@ -42,6 +43,11 @@ if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox')
 let coreProcess = null
 let win = null
 let state = { boardId: null, title: '' }
+// until the canvas reports its choice: saved preference, else the OS language
+let locale = null
+let localePref = 'system'
+const osLocale = () => systemLocale(app.getPreferredSystemLanguages?.() ?? [app.getLocale()])
+const tr = (key) => translator(locale ?? (localePref !== 'system' ? localePref : osLocale()))(key)
 
 // ---- prefs & recent files ---------------------------------------------------
 
@@ -216,7 +222,7 @@ ipcMain.on('aifig:token', (e) => {
 
 async function openFile(file) {
   if (!file) {
-    const r = await dialog.showOpenDialog(win, { title: 'Open board', filters: [{ name: 'ai-figma board', extensions: ['aifig'] }], properties: ['openFile'] })
+    const r = await dialog.showOpenDialog(win, { title: tr('openBoard'), filters: [{ name: tr('boardFile'), extensions: ['aifig'] }], properties: ['openFile'] })
     if (r.canceled || !r.filePaths[0]) return
     file = r.filePaths[0]
   }
@@ -225,23 +231,23 @@ async function openFile(file) {
     addRecent(file)
     win?.webContents.send('menu', 'open-board', res.board.id)
   } catch (e) {
-    dialog.showErrorBox('Couldn’t open the board', String(e.message ?? e))
+    dialog.showErrorBox(tr('openFailed'), String(e.message ?? e))
   }
 }
 
 async function saveAs() {
   if (!state.boardId) return
   const r = await dialog.showSaveDialog(win, {
-    title: 'Save board as',
-    defaultPath: path.join(app.getPath('documents'), `${(state.title || 'Board').replace(/[\\/:*?"<>|]+/g, '-')}.aifig`),
-    filters: [{ name: 'ai-figma board', extensions: ['aifig'] }],
+    title: tr('saveBoardAs'),
+    defaultPath: path.join(app.getPath('documents'), `${(state.title || tr('board')).replace(/[\\/:*?"<>|]+/g, '-')}.aifig`),
+    filters: [{ name: tr('boardFile'), extensions: ['aifig'] }],
   })
   if (r.canceled || !r.filePath) return
   try {
     await call('save_file', { board: state.boardId, path: r.filePath })
     addRecent(r.filePath)
   } catch (e) {
-    dialog.showErrorBox('Couldn’t save the board', String(e.message ?? e))
+    dialog.showErrorBox(tr('saveFailed'), String(e.message ?? e))
   }
 }
 
@@ -258,6 +264,18 @@ function setTheme(theme) {
   buildMenu()
 }
 
+function setLocalePref(pref) {
+  win?.webContents.send('menu', 'locale', pref)
+}
+
+ipcMain.on('locale', (_e, next, pref) => {
+  if (next === locale && pref === localePref) return
+  locale = next
+  localePref = pref
+  writePrefs({ ...readPrefs(), locale: pref })
+  buildMenu()
+})
+
 function buildMenu() {
   const prefs = readPrefs()
   const recent = (prefs.recent ?? []).filter((f) => fs.existsSync(f))
@@ -265,20 +283,23 @@ function buildMenu() {
   const template = [
     ...(isMac ? [{ role: 'appMenu' }] : []),
     {
-      label: 'File',
+      id: 'file',
+      label: tr('file'),
       submenu: [
-        { label: 'New Board', accelerator: 'CmdOrCtrl+N', click: send('new-board') },
-        { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: () => openFile() },
+        { id: 'new-board', label: tr('newBoard'), accelerator: 'CmdOrCtrl+N', click: send('new-board') },
+        { id: 'open', label: tr('open'), accelerator: 'CmdOrCtrl+O', click: () => openFile() },
         {
-          label: 'Open Recent',
+          id: 'open-recent',
+          label: tr('openRecent'),
           submenu: recent.length
-            ? [...recent.map((f) => ({ label: path.basename(f, '.aifig'), sublabel: f, click: () => openFile(f) })), { type: 'separator' }, { label: 'Clear Recent', click: () => (writePrefs({ ...readPrefs(), recent: [] }), app.clearRecentDocuments(), buildMenu()) }]
-            : [{ label: 'No recent boards', enabled: false }],
+            ? [...recent.map((f) => ({ label: path.basename(f, '.aifig'), sublabel: f, click: () => openFile(f) })), { type: 'separator' }, { label: tr('clearRecent'), click: () => (writePrefs({ ...readPrefs(), recent: [] }), app.clearRecentDocuments(), buildMenu()) }]
+            : [{ label: tr('noRecent'), enabled: false }],
         },
         { type: 'separator' },
-        { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => saveAs() },
+        { id: 'save-as', label: tr('saveAs'), accelerator: 'CmdOrCtrl+Shift+S', click: () => saveAs() },
         {
-          label: 'Export',
+          id: 'export',
+          label: tr('export'),
           submenu: [
             { label: 'PNG…', click: send('export', 'png') },
             { label: 'SVG…', click: send('export', 'svg') },
@@ -287,38 +308,47 @@ function buildMenu() {
           ],
         },
         { type: 'separator' },
-        { label: 'Assistant Settings…', click: send('assistant-settings') },
-        { label: 'Activity & Permissions…', click: send('activity') },
+        { id: 'settings', label: tr('settings'), accelerator: 'CmdOrCtrl+,', click: send('settings') },
+        { id: 'assistant-settings', label: tr('assistantSettings'), click: send('assistant-settings') },
+        { id: 'activity', label: tr('activity'), click: send('activity') },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' },
       ],
     },
     {
-      label: 'Edit',
+      id: 'edit',
+      label: tr('edit'),
       submenu: [
-        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: send('undo') },
-        { label: 'Redo', accelerator: 'Shift+CmdOrCtrl+Z', click: send('redo') },
+        { label: tr('undo'), accelerator: 'CmdOrCtrl+Z', click: send('undo') },
+        { label: tr('redo'), accelerator: 'Shift+CmdOrCtrl+Z', click: send('redo') },
         { type: 'separator' },
         { role: 'cut' },
         { role: 'copy' },
         { role: 'paste' },
-        { label: 'Duplicate', accelerator: 'CmdOrCtrl+D', click: send('duplicate') },
-        { label: 'Select All', accelerator: 'CmdOrCtrl+A', click: send('select-all') },
+        { label: tr('duplicate'), accelerator: 'CmdOrCtrl+D', click: send('duplicate') },
+        { label: tr('selectAll'), accelerator: 'CmdOrCtrl+A', click: send('select-all') },
       ],
     },
     {
-      label: 'View',
+      id: 'view',
+      label: tr('view'),
       submenu: [
-        { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: send('zoom-in') },
-        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: send('zoom-out') },
-        { label: 'Zoom to 100%', accelerator: 'CmdOrCtrl+0', click: send('zoom-100') },
-        { label: 'Zoom to Fit', accelerator: 'Shift+1', click: send('zoom-fit') },
+        { label: tr('zoomIn'), accelerator: 'CmdOrCtrl+=', click: send('zoom-in') },
+        { label: tr('zoomOut'), accelerator: 'CmdOrCtrl+-', click: send('zoom-out') },
+        { label: tr('zoom100'), accelerator: 'CmdOrCtrl+0', click: send('zoom-100') },
+        { label: tr('zoomFit'), accelerator: 'Shift+1', click: send('zoom-fit') },
         { type: 'separator' },
-        { label: 'Comment Mode', accelerator: 'M', registerAccelerator: false, click: send('toggle-comments') },
-        { label: 'Toggle Minimap', click: send('toggle-minimap') },
+        { id: 'comment-mode', label: tr('commentMode'), accelerator: 'M', registerAccelerator: false, click: send('toggle-comments') },
+        { label: tr('toggleMinimap'), click: send('toggle-minimap') },
         {
-          label: 'Appearance',
-          submenu: ['system', 'light', 'dark'].map((t) => ({ label: t === 'system' ? 'Match System' : t[0].toUpperCase() + t.slice(1), type: 'radio', checked: (prefs.theme ?? 'system') === t, click: () => setTheme(t) })),
+          id: 'appearance',
+          label: tr('appearance'),
+          submenu: ['system', 'light', 'dark'].map((t) => ({ label: tr(t === 'system' ? 'matchSystem' : t), type: 'radio', checked: (prefs.theme ?? 'system') === t, click: () => setTheme(t) })),
+        },
+        {
+          id: 'language',
+          label: tr('language'),
+          submenu: [{ id: 'system', label: tr('matchSystem') }, ...LOCALES].map((l) => ({ id: `language-${l.id}`, label: l.label, type: 'radio', checked: localePref === l.id, click: () => setLocalePref(l.id) })),
         },
         { type: 'separator' },
         { role: 'reload' },
@@ -326,12 +356,13 @@ function buildMenu() {
         { role: 'togglefullscreen' },
       ],
     },
-    { role: 'windowMenu' },
+    { role: 'windowMenu', label: tr('window') },
     {
       role: 'help',
+      label: tr('help'),
       submenu: [
-        { label: 'Connect an Agent…', click: send('connect-agent') },
-        { label: 'Open Boards Folder', click: async () => shell.openPath((await healthy())?.home ?? app.getPath('home')) },
+        { id: 'connect-agent', label: tr('connectAgent'), click: send('connect-agent') },
+        { label: tr('openBoardsFolder'), click: async () => shell.openPath((await healthy())?.home ?? app.getPath('home')) },
       ],
     },
   ]
@@ -459,6 +490,7 @@ app.on('web-contents-created', (_e, contents) => {
 async function createWindow() {
   const prefs = readPrefs()
   nativeTheme.themeSource = prefs.theme ?? 'system'
+  localePref = prefs.locale ?? 'system'
   win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -483,7 +515,7 @@ async function createWindow() {
     win.webContents.send('menu', 'theme', prefs.theme ?? 'system')
     win.webContents.send('menu', 'os-theme', nativeTheme.shouldUseDarkColors)
   } catch (e) {
-    dialog.showErrorBox('ai-figma couldn’t start', String(e.message ?? e))
+    dialog.showErrorBox(tr('startFailed'), String(e.message ?? e))
   }
   const fileArg = process.argv.find((a) => a.endsWith('.aifig'))
   if (fileArg) openFile(path.resolve(fileArg))

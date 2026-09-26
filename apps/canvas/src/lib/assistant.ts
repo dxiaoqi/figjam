@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { apiFetch } from './auth'
@@ -31,15 +32,15 @@ export function useAssistant() {
   return status
 }
 
-const LABEL = { extract: 'Extracting ideas', cluster: 'Clustering into themes', tidy: 'Tidying' } as const
+const LABEL = { extract: 'assistant.extracting', cluster: 'assistant.clustering', tidy: 'assistant.tidying' } as const
 
 export async function runAssistant(board: string, command: 'extract' | 'cluster' | 'tidy', ids: string[]) {
-  const id = toast.loading(`${LABEL[command]}…`)
+  const id = toast.loading(`${t(LABEL[command])}…`)
   try {
     const r = await apiFetch('/api/assistant/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ board, command, ids }) })
     const body = await r.json()
     if (!body.ok) throw new Error(body.error)
-    toast.success(command === 'tidy' ? 'Tidied' : 'The assistant’s suggestion is ready to review', { id })
+    toast.success(t(command === 'tidy' ? 'assistant.tidied' : 'assistant.ready'), { id })
   } catch (e) {
     toast.error((e as Error).message, { id })
   }

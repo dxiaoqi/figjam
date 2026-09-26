@@ -7,12 +7,13 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { apiFetch } from '../lib/auth'
 import { desktop } from '../lib/desktop'
+import { t, useT } from '../i18n'
 
 const PROVIDERS = [
-  { id: null, label: 'Off', hint: 'Everything works without a model — use your own agents over MCP.' },
-  { id: 'anthropic', label: 'Anthropic', hint: 'Claude models with your own API key.' },
-  { id: 'openai', label: 'OpenAI-compatible', hint: 'OpenAI, OpenRouter, Ollama, LM Studio… any /chat/completions endpoint.' },
-  { id: 'mock', label: 'Demo (offline)', hint: 'A deterministic stand-in, handy for trying the commands and for tests.' },
+  { id: null, label: 'assistant.off', hint: 'assistant.offHint' },
+  { id: 'anthropic', label: 'assistant.anthropic', hint: 'assistant.anthropicHint' },
+  { id: 'openai', label: 'assistant.openai', hint: 'assistant.openaiHint' },
+  { id: 'mock', label: 'assistant.mock', hint: 'assistant.mockHint' },
 ] as const
 
 /**
@@ -29,6 +30,7 @@ export function AssistantSettings() {
   const [hasKey, setHasKey] = useState(false)
   const [encryption, setEncryption] = useState('')
   const [saving, setSaving] = useState(false)
+  useT()
 
   useEffect(() => {
     const show = async () => {
@@ -67,7 +69,7 @@ export function AssistantSettings() {
         if (!r.ok) throw new Error(r.error)
       }
       window.dispatchEvent(new Event('aifig:assistant-changed'))
-      toast.success(provider ? 'Assistant is on — find it on the right-click menu' : 'Assistant turned off')
+      toast.success(t(provider ? 'assistant.on' : 'assistant.turnedOff'))
       setOpen(false)
     } catch (e) {
       toast.error((e as Error).message)
@@ -82,9 +84,9 @@ export function AssistantSettings() {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="size-4" /> Built-in assistant
+            <Sparkles className="size-4" /> {t('assistant.title')}
           </DialogTitle>
-          <DialogDescription>Optional selection commands — extract ideas, cluster into themes, tidy. Its edits arrive as change sets you review, like any agent.</DialogDescription>
+          <DialogDescription>{t('assistant.description')}</DialogDescription>
         </DialogHeader>
         {
           <div className="space-y-4">
@@ -95,24 +97,22 @@ export function AssistantSettings() {
                   onClick={() => setProvider(p.id)}
                   className={cn('rounded-xl border p-3 text-left transition-colors hover:bg-accent/50', provider === p.id && 'border-primary ring-1 ring-primary')}
                 >
-                  <div className="text-sm font-medium">{p.label}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">{p.hint}</div>
+                  <div className="text-sm font-medium">{t(p.label)}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{t(p.hint)}</div>
                 </button>
               ))}
             </div>
             {needsKey && (
               <div className="space-y-2">
-                <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={hasKey ? 'Key saved — paste a new one to replace it' : 'API key'} autoComplete="off" />
+                <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={t(hasKey ? 'assistant.keySaved' : 'assistant.apiKey')} autoComplete="off" />
                 <div className="grid grid-cols-2 gap-2">
-                  <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder={provider === 'anthropic' ? 'Model (claude-3-5-haiku-latest)' : 'Model (gpt-4o-mini)'} />
-                  {provider === 'openai' && <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="Base URL (optional)" />}
+                  <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder={t('assistant.model', { example: provider === 'anthropic' ? 'claude-3-5-haiku-latest' : 'gpt-4o-mini' })} />
+                  {provider === 'openai' && <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={t('assistant.baseUrl')} />}
                 </div>
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <KeyRound className="size-3.5" />
                   <span data-key-storage={encryption === 'session' || encryption === 'unavailable' ? 'session' : 'os'}>
-                    {encryption === 'session' || encryption === 'unavailable'
-                      ? 'No OS keychain here, so the key is kept for this session only — you’ll enter it again after a restart. It is never written to disk.'
-                      : 'Stored encrypted in your OS keychain. Never written to board files.'}
+                    {encryption === 'session' || encryption === 'unavailable' ? t('assistant.noKeychain') : t('assistant.keychain')}
                   </span>
                 </p>
               </div>
@@ -121,10 +121,10 @@ export function AssistantSettings() {
         }
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={save} disabled={saving || (needsKey && !key && !hasKey)}>
-            Save
+            {t('common.save')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -21,6 +21,7 @@ import { aifigHome, type Board } from './board'
 import { PermissionBroker } from './permissions'
 import { auditedStore, openSecretStore } from './secrets'
 import { installFlushOnExit } from './safety'
+import { detectAgents, installAgent, isAgentId, testAgent } from './agent-setup'
 
 const MSG_SYNC = 0
 
@@ -261,6 +262,28 @@ export async function startCore(port = CORE_PORT) {
           return json(res, 200, { ok: true, result: await assistant.run(body.board, body.command, body.ids ?? []) })
         } catch (e) {
           return json(res, 200, { ok: false, error: (e as Error).message })
+        }
+      }
+      // One-click agent setup writes to files outside ~/.aifig, so only the canvas itself may ask: same-machine
+      // Host, a loopback Origin (or none, for the CLI), and never from another site.
+      const setup = url.pathname.match(/^\/api\/agents(?:\/(\w+)\/(install|test))?$/)
+      if (setup) {
+        const origin = req.headers.origin
+        const host = req.headers.host ?? ''
+        const local = /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(host) && (!origin || /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) && req.headers['sec-fetch-site'] !== 'cross-site'
+        const reply = (status: number, body: unknown) => {
+          res.writeHead(status, { 'content-type': 'application/json' })
+          res.end(JSON.stringify(body))
+        }
+        if (!local) return reply(403, { ok: false, error: 'Agent setup is only available from the ai-figma app on this machine.' })
+        if (!setup[1] && req.method === 'GET') return reply(200, { ok: true, agents: detectAgents(mcpLaunch), launch: mcpLaunch })
+        if (!setup[1] || req.method !== 'POST' || !isAgentId(setup[1])) return reply(404, { ok: false, error: 'Not found' })
+        if (!/application\/json/.test(req.headers['content-type'] ?? '')) return reply(415, { ok: false, error: 'Expected JSON' })
+        try {
+          if (setup[2] === 'install') return reply(200, { ok: true, ...installAgent(setup[1], mcpLaunch) })
+          return reply(200, await testAgent(setup[1]))
+        } catch (e) {
+          return reply(200, { ok: false, error: (e as Error).message })
         }
       }
       if (url.pathname === '/api/agent/leave' && req.method === 'POST') {

@@ -71,6 +71,8 @@ export interface EditorOptions {
   onFiles?: (files: File[], at: Vec) => void
   /** Extra single-key tool shortcuts, e.g. { s: 'sticky' }. */
   toolKeys?: Record<string, string>
+  /** Display text for a connector's relation (e.g. translated); defaults to the relation id. */
+  relationLabel?: (relation: string) => string
 }
 
 export type HandleId = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se'
@@ -535,11 +537,15 @@ export class Editor {
     return base.length ? base : null
   }
 
+  relationText(relation: string) {
+    return this.options.relationLabel?.(relation) ?? relation
+  }
+
   /** Where a connector's label sits: along the route, clear of blocks. */
   labelPosition(c: Connector): Vec | null {
     const route = this.connectorRoute(c)
     if (!route) return null
-    const text = c.label || c.relation
+    const text = c.label || (c.relation ? this.relationText(c.relation) : '')
     if (!text) return route.mid
     const { w, h } = estimateLabelSize(text)
     const area = union(route.points.map((p) => box(p.x, p.y, 0, 0)))!

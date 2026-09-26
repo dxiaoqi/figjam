@@ -117,7 +117,7 @@ function ConnectorLabels({ editor, connectors }: { editor: Editor; connectors: C
         if (!m) return null
         return (
           <div key={c.id} className={`ae-connector-label ${relationOnly && !editing ? 'is-relation' : ''}`} style={{ transform: `translate(${m.x}px, ${m.y}px) translate(-50%, -50%)` }} data-connector-id={c.id} data-relation={c.relation}>
-            {editing ? <LabelInput editor={editor} connector={c} /> : (c.label || c.relation)}
+            {editing ? <LabelInput editor={editor} connector={c} /> : (c.label || editor.relationText(c.relation!))}
           </div>
         )
       })}

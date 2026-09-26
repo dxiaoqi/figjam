@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { useBoard } from '../board-context'
 import { isUnread, lastActivity, markSeen, ME_ID, setCommentPrefs, useCommentPrefs, useSeen } from './comment-prefs'
 import { useEditor } from './editor-context'
+import { ago as agoT, t, t as tr, useT } from '../i18n'
 
 const ME: Author = { kind: 'human', id: ME_ID, name: 'You', color: '#1C1917' }
 
@@ -26,13 +27,7 @@ function useThreads() {
   return { threads, map }
 }
 
-function ago(ts: number) {
-  const s = Math.max(0, (Date.now() - ts) / 1000)
-  if (s < 45) return 'just now'
-  if (s < 3600) return `${Math.round(s / 60)}m`
-  if (s < 86400) return `${Math.round(s / 3600)}h`
-  return `${Math.round(s / 86400)}d`
-}
+const ago = (ts: number) => agoT(ts, Date.now(), 'short')
 
 function Avatar({ author, className, style }: { author: Author; className?: string; style?: CSSProperties }) {
   const mine = author.id === ME_ID
@@ -64,6 +59,7 @@ export function CommentLayer() {
   const { threads, map } = useThreads()
   const { mode, showResolved } = useCommentPrefs()
   const seen = useSeen(boardId)
+  useT()
   const [openId, setOpenId] = useState<string | null>(null)
   const [compose, setCompose] = useState<Compose | null>(null)
   const [hoverId, setHoverId] = useState<string | null>(null)
@@ -151,7 +147,7 @@ export function CommentLayer() {
       const page = editor.screenToPage({ x: e.clientX - rect.left, y: e.clientY - rect.top })
       const b = editor.hitTest(page) ?? editor.hitTest(page, { frames: true })
       if (!b) {
-        toast('Comments attach to blocks', { description: 'Click a sticky, card, heading or frame to leave one.', id: 'comment-hint' })
+        toast(tr('comments.attachTitle'), { description: tr('comments.attachHint'), id: 'comment-hint' })
         return
       }
       const r = editor.pageRect(b.id)!
@@ -248,43 +244,43 @@ export function CommentLayer() {
 
   return (
     <div ref={layerRef} className="pointer-events-none absolute inset-0 z-[160]" data-comment-layer data-mode={mode || undefined}>
-      {shown.map((t) => {
-        const p = anchorPoint(t.target, t.anchor)
+      {shown.map((th) => {
+        const p = anchorPoint(th.target, th.anchor)
         if (!p) return null
-        const unread = isUnread(t, seen)
-        const isOpen = t.id === openId
-        const count = t.replies.length + 1
+        const unread = isUnread(th, seen)
+        const isOpen = th.id === openId
+        const count = th.replies.length + 1
         if (tiny && !isOpen && !unread) {
           return (
             <button
-              key={t.id}
+              key={th.id}
               data-ui
-              data-thread={t.id}
-              data-resolved={t.resolved || undefined}
-              onClick={() => openThread(t.id)}
-              className={cn('pointer-events-auto absolute size-2.5 rounded-full ring-2 ring-background', t.resolved ? 'bg-muted-foreground/50' : 'bg-foreground/70')}
+              data-thread={th.id}
+              data-resolved={th.resolved || undefined}
+              onClick={() => openThread(th.id)}
+              className={cn('pointer-events-auto absolute size-2.5 rounded-full ring-2 ring-background', th.resolved ? 'bg-muted-foreground/50' : 'bg-foreground/70')}
               style={{ left: p.x - 5, top: p.y - 5 }}
-              aria-label={`Comment by ${t.author.name}`}
+              aria-label={t('comments.by', { name: th.author.name })}
             />
           )
         }
         return (
           <button
-            key={t.id}
+            key={th.id}
             data-ui
-            data-thread={t.id}
+            data-thread={th.id}
             data-unread={unread || undefined}
-            data-resolved={t.resolved || undefined}
-            onClick={() => (isOpen ? close() : openThread(t.id))}
-            onPointerEnter={() => setHoverId(t.id)}
-            onPointerLeave={() => setHoverId((h) => (h === t.id ? null : h))}
+            data-resolved={th.resolved || undefined}
+            onClick={() => (isOpen ? close() : openThread(th.id))}
+            onPointerEnter={() => setHoverId(th.id)}
+            onPointerLeave={() => setHoverId((h) => (h === th.id ? null : h))}
             className={cn(
               'group pointer-events-auto absolute origin-bottom-left transition-[transform,opacity] duration-150 ease-out hover:scale-110',
               !mode && !isOpen && !unread && 'opacity-80 hover:opacity-100',
               isOpen && 'scale-110',
             )}
             style={{ left: p.x, top: p.y - size, width: size, height: size }}
-            aria-label={`${t.resolved ? 'Resolved comment' : 'Comment'} by ${t.author.name}, ${count} message${count > 1 ? 's' : ''}${unread ? ', unread' : ''}`}
+            aria-label={t('comments.pinLabel', { kind: t(th.resolved ? 'comments.kindResolved' : 'comments.kindOpen'), name: th.author.name, count, unread: unread ? t('comments.unreadSuffix') : '' })}
           >
             <span
               className={cn(
@@ -293,12 +289,12 @@ export function CommentLayer() {
                 mode && !isOpen && 'p-[3px] shadow-[0_4px_14px_rgb(0_0_0/0.24)]',
               )}
             >
-              {t.resolved ? (
+              {th.resolved ? (
                 <span className="flex size-full items-center justify-center rounded-full bg-muted text-muted-foreground">
                   <Check className="size-[55%]" strokeWidth={2.5} />
                 </span>
               ) : (
-                <Avatar author={t.author} className="size-full" style={{ fontSize: Math.max(9, size * 0.42) }} />
+                <Avatar author={th.author} className="size-full" style={{ fontSize: Math.max(9, size * 0.42) }} />
               )}
             </span>
             {unread && <span data-unread-dot className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-sky-500 ring-2 ring-background" />}
@@ -329,13 +325,13 @@ export function CommentLayer() {
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className="font-medium text-foreground">{hover.author.name}</span>
             <span>· {ago(hover.createdAt)}</span>
-            {hover.resolved && <span>· Resolved</span>}
+            {hover.resolved && <span>· {t('comments.resolved')}</span>}
           </div>
           <div className="mt-0.5 line-clamp-2 leading-snug">{hover.text}</div>
           {hover.replies.length > 0 && (
             <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
-              <MessageCircle className="size-3" /> {hover.replies.length} {hover.replies.length === 1 ? 'reply' : 'replies'}
-              {isUnread(hover, seen) && <span className="ml-1 font-medium text-sky-600 dark:text-sky-400">· New</span>}
+              <MessageCircle className="size-3" /> {t('comments.replies', { count: hover.replies.length })}
+              {isUnread(hover, seen) && <span className="ml-1 font-medium text-sky-600 dark:text-sky-400">· {t('comments.new')}</span>}
             </div>
           )}
         </div>
@@ -351,20 +347,20 @@ export function CommentLayer() {
         >
           <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
             <div className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-              {open ? (open.resolved ? 'Resolved · ' : '') : 'New comment · '}
+              {open ? (open.resolved ? t('comments.resolvedPrefix') : '') : t('comments.newPrefix')}
               <span className="text-foreground/80">{targetLabel(open?.target ?? compose!.target)}</span>
             </div>
             {open && (
               <button
                 onClick={() => setResolved(open, !open.resolved)}
                 className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label={open.resolved ? 'Reopen' : 'Resolve'}
+                aria-label={t(open.resolved ? 'comments.reopen' : 'comments.resolve')}
               >
                 {open.resolved ? <RotateCcw className="size-3" /> : <Check className="size-3" />}
-                {open.resolved ? 'Reopen' : 'Resolve'}
+                {t(open.resolved ? 'comments.reopen' : 'comments.resolve')}
               </button>
             )}
-            <button onClick={close} className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Close comment">
+            <button onClick={close} className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t('comments.close')}>
               <X className="size-3.5" />
             </button>
           </div>
@@ -398,11 +394,11 @@ export function CommentLayer() {
                 e.stopPropagation()
               }}
               rows={1}
-              placeholder={open ? 'Reply…' : 'Add a comment — agents read these'}
+              placeholder={t(open ? 'comments.reply' : 'comments.add')}
               className="max-h-28 min-h-8 flex-1 resize-none rounded-lg bg-muted/70 px-2.5 py-1.5 text-[13px] outline-none placeholder:text-muted-foreground/80"
               data-comment-input
             />
-            <button onClick={submit} disabled={!draft.trim()} className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity disabled:opacity-40" aria-label="Send comment">
+            <button onClick={submit} disabled={!draft.trim()} className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity disabled:opacity-40" aria-label={t('comments.send')}>
               <SendHorizonal className="size-3.5" />
             </button>
           </div>
@@ -413,9 +409,9 @@ export function CommentLayer() {
         <>
           <div data-comment-ui className="pointer-events-auto absolute top-3 left-1/2 hidden -translate-x-1/2 items-center gap-2 rounded-full bg-foreground py-1.5 pr-1.5 pl-3 text-[12px] text-background shadow-lg animate-in fade-in slide-in-from-top-1 duration-200 md:flex">
             <MessageCircle className="size-3.5" />
-            Click a block to comment
+            {t('comments.clickBlock')}
             <button onClick={() => (close(), setCommentPrefs({ mode: false }))} className="rounded-full bg-background/15 px-2 py-0.5 text-[11px] font-medium hover:bg-background/25">
-              Done <kbd className="ml-0.5 font-mono opacity-70">Esc</kbd>
+              {t('common.done')} <kbd className="ml-0.5 font-mono opacity-70">Esc</kbd>
             </button>
           </div>
           <CommentSidebar
@@ -466,18 +462,18 @@ function CommentSidebar({
     >
       <div className="flex items-center gap-2 px-3.5 pt-3 pb-2">
         <div className="flex-1 text-[13px] font-semibold">
-          Comments <span className="ml-0.5 font-normal text-muted-foreground tabular-nums">{openCount}</span>
+          {t('comments.title')} <span className="ml-0.5 font-normal text-muted-foreground tabular-nums">{openCount}</span>
         </div>
-        <button onClick={() => setCommentPrefs({ mode: false })} className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Close comments">
+        <button onClick={() => setCommentPrefs({ mode: false })} className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t('comments.closeAll')}>
           <X className="size-3.5" />
         </button>
       </div>
       <label className="flex cursor-pointer items-center justify-between px-3.5 pb-2 text-[12px] text-muted-foreground">
-        Show resolved
+        {t('comments.showResolved')}
         <button
           role="switch"
           aria-checked={showResolved}
-          aria-label="Show resolved"
+          aria-label={t('comments.showResolved')}
           data-show-resolved
           onClick={() => setCommentPrefs({ showResolved: !showResolved })}
           className={cn('relative h-[18px] w-8 rounded-full transition-colors', showResolved ? 'bg-primary' : 'bg-muted-foreground/30')}
@@ -490,32 +486,32 @@ function CommentSidebar({
         {list.length === 0 ? (
           <div className="px-3 py-6 text-center text-[12px] leading-relaxed text-muted-foreground">
             <MessageCircle className="mx-auto mb-2 size-5 opacity-60" />
-            {threads.length ? 'All caught up — no open comments.' : 'No comments yet.'}
+            {t(threads.length ? 'comments.allCaughtUp' : 'comments.none')}
             <br />
-            Click any block to start a thread. Agents read and reply over MCP.
+            {t('comments.startHint')}
           </div>
         ) : (
-          list.map((t) => {
-            const unread = isUnread(t, seen)
-            const last = t.replies.at(-1)
+          list.map((th) => {
+            const unread = isUnread(th, seen)
+            const last = th.replies.at(-1)
             return (
               <button
-                key={t.id}
-                data-sidebar-thread={t.id}
-                onClick={() => onOpen(t)}
-                className={cn('flex w-full gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-accent', openId === t.id && 'bg-accent', t.resolved && 'opacity-60')}
+                key={th.id}
+                data-sidebar-thread={th.id}
+                onClick={() => onOpen(th)}
+                className={cn('flex w-full gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-accent', openId === th.id && 'bg-accent', th.resolved && 'opacity-60')}
               >
-                <Avatar author={t.author} className="mt-0.5 size-6 text-[10px]" />
+                <Avatar author={th.author} className="mt-0.5 size-6 text-[10px]" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 text-[11px]">
-                    <span className="truncate font-medium">{t.author.name}</span>
-                    <span className="shrink-0 text-muted-foreground">{ago(lastActivity(t))}</span>
-                    {t.resolved && <Check className="size-3 shrink-0 text-muted-foreground" />}
+                    <span className="truncate font-medium">{th.author.name}</span>
+                    <span className="shrink-0 text-muted-foreground">{ago(lastActivity(th))}</span>
+                    {th.resolved && <Check className="size-3 shrink-0 text-muted-foreground" />}
                     {unread && <span className="ml-auto size-2 shrink-0 rounded-full bg-sky-500" />}
                   </div>
-                  <div className="line-clamp-2 text-[12.5px] leading-snug">{t.text}</div>
+                  <div className="line-clamp-2 text-[12.5px] leading-snug">{th.text}</div>
                   <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                    {t.replies.length > 0 ? `${t.replies.length} ${t.replies.length === 1 ? 'reply' : 'replies'} · ${last!.author.name}: ${last!.text}` : `on ${label(t.target)}`}
+                    {th.replies.length > 0 ? `${t('comments.replies', { count: th.replies.length })} · ${last!.author.name}: ${last!.text}` : t('comments.on', { target: label(th.target) })}
                   </div>
                 </div>
               </button>
