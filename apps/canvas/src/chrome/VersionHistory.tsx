@@ -35,12 +35,10 @@ function groupByDay(versions: VersionInfo[]) {
 function Preview({ boardId, version, theme }: { boardId: string; version: VersionInfo; theme: 'light' | 'dark' }) {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   const src = versionPreviewUrl(boardId, version.id, theme)
-  useEffect(() => setState('loading'), [src])
   return (
     <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl border bg-[var(--canvas)]" data-version-preview>
       {state !== 'error' && (
         <img
-          key={src}
           src={src}
           alt={`Board as of ${versionLabel(version)}`}
           onLoad={() => setState('ready')}
@@ -249,7 +247,7 @@ export function VersionHistory() {
           <section className="flex min-h-0 flex-1 flex-col gap-3 p-4">
             {current ? (
               <>
-                <Preview boardId={boardId} version={current} theme={theme} />
+                <Preview key={`${current.id}:${theme}`} boardId={boardId} version={current} theme={theme} />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">{versionLabel(current)}</div>

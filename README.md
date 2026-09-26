@@ -44,9 +44,37 @@ and shortcuts (New Board ⌘N, Open… ⌘O, Open Recent, Save As… ⇧⌘S, Ex
 minimap, Appearance), opens `.aifig` files from anywhere (Save As keeps the chosen file in sync), follows the OS
 light/dark setting, and its **Connect agent** dialog points agents at the bundled CLI/MCP.
 
-Boards live in `~/.aifig/boards/<id>.aifig` (Yjs state) with a readable `<id>.json` next to it. Override the
+Boards live in `~/.aifig/boards/<id>.aifig` (checksummed Yjs state, see below) with a readable `<id>.json` next to it. Override the
 location with `AIFIG_HOME`, and ports with `AIFIG_CORE_PORT` / `AIFIG_UI_PORT`. `~/.aifig/state.json` remembers the
 board last active in the canvas, which is the default for tools called without `board` (agents should pass it anyway).
+
+### Your data is safe
+
+- **Autosave** is atomic (temp file, fsync, rename) and coalesced: a burst of edits is written once, at most 2 s after
+  the first unsaved edit. Ctrl-C, SIGTERM (quitting the desktop app), SIGHUP and crashes flush unsaved edits first;
+  `kill -9` or a power cut can lose at most that last 2 s window, never corrupt the file.
+- **Version history** (board menu › *Version history…*, or the history button): a version is kept from just before
+  any large edit (5+ items removed, or 25+ changed at once), every 10 minutes while a board changes, when a board is
+  opened with unversioned edits, and before every restore or agent undo. Name a checkpoint any time. Versions are
+  previewed read-only; restoring checkpoints the current state first and ⌘Z undoes it. Retention keeps the newest 20
+  automatic versions, then one per hour for 48 hours, then one per day for 30 days; named checkpoints stay until you
+  delete them. History lives in `~/.aifig/history/<board>/`.
+- **File format.** `.aifig` files carry a header with a schema version (currently `1.0`) and a SHA-256 checksum of the
+  Yjs document. Older files are migrated forward on open (the original is kept in the backups); files from a newer
+  *major* version are refused with a message saying to update, and are left untouched.
+- **Corruption recovery.** If a board file is truncated or fails its checksum, the core keeps the damaged file aside
+  (`backups/damaged/`), loads the newest copy that verifies (Save As mirror, version or backup) and shows a banner saying
+  what happened. If there's no good copy it says so — it never silently starts an empty board.
+- **Backups.** Rolling copies of every board (10 per board, at most hourly, plus one on each start and a last one when a
+  board is deleted) in `~/.aifig/backups`, or wherever `AIFIG_BACKUP_DIR` / `~/.aifig/config.json` point:
+
+  ```json
+  { "backups": { "dir": "~/Dropbox/aifig-backups", "keep": 20, "intervalMinutes": 30 },
+    "versions": { "keepRecent": 30, "hourlyForHours": 72, "dailyForDays": 60, "intervalMinutes": 10 } }
+  ```
+
+  *Open backup folder* is in the board menu and in Version history; `aifig backups --open` from a terminal. Backups are
+  plain `.aifig` files — open one with **Open…** to look inside.
 
 **Sandboxed launchers** (agent IDEs or tools that can't write to your home folder or use the GPU): if the core fails
 with `EACCES` or the desktop window stays white, point every writable location somewhere the sandbox allows:
@@ -113,6 +141,7 @@ use the canvas well. Copy it into `~/.claude/skills/` (or your agent's skills fo
 | Types | `list_types`, `set_type` (promote / demote with `none` / update fields), `query_blocks` (by type and field); `create_blocks` accepts `type` + `fields`, `connect` accepts `relation`, `tidy` accepts `by: "type" \| "matrix"` |
 | Web snippets | `create_snippet` (https URL embed, or inline `html` / `css` / `js`), `update_snippet` — both through review |
 | Export | `export_board` (Markdown document or JSON structure) |
+| Versions | `list_versions`, `create_version` (named checkpoint), `restore_version` (checkpoints the current state first; from an agent it's a change set to review) |
 
 Also exposed: resource `aifig://design/tokens` and prompt `layout-best-practices`.
 
@@ -145,6 +174,10 @@ aifig query --type hypothesis --status unverified
 aifig tidy --frame "Synthesis" --by matrix --field status
 aifig snippet --url https://www.figma.com/proto/…  # or --html @demo.html --css @demo.css --js @demo.js
 aifig snippet-update <id> --js @demo.js
+aifig versions                                     # version history (auto snapshots, checkpoints, pre-restore states)
+aifig checkpoint "Before clustering"               # named checkpoint
+aifig --human restore <versionId>                  # restore now (without --human it goes through review)
+aifig backups [--open]                             # print / open the backup folder
 aifig call <tool> '<json args>'                    # anything in the Canvas API
 ```
 
@@ -299,6 +332,8 @@ MCP, a person reviewing item by item and commenting, and the agent reading the c
 npm run typecheck                                     # every workspace
 npm run test:e2e                                      # canvas engine + app, real pointer/keyboard input (84 checks)
 npm run test:aesthetics                               # agent-output aesthetics vs baselines (update: test:aesthetics:update)
+npm run test:api                                      # Canvas API regressions
+npm run test:data-safety                              # format, migrations, retention, kill -9 / SIGTERM, recovery, versions over MCP + CLI
 node scripts/desktop-e2e.mjs                          # Electron app (window, menus, files, theme, bundled MCP, keychain)
 node scripts/mcp-http-smoke.mjs                       # MCP over local HTTP
 node scripts/mcp-smoke.mjs                            # MCP over stdio
