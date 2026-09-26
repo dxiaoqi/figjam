@@ -28,7 +28,8 @@
     "test:api": "node scripts/api-regressions.mjs",
     "test:aesthetics": "node scripts/aesthetics.mjs",
     "test:aesthetics:update": "node scripts/aesthetics.mjs --update",
-    "test:e2e": "node scripts/engine-e2e.mjs"
+    "test:e2e": "node scripts/engine-e2e.mjs",
+    "test:data-safety": "node --import tsx --test tests/data-safety/*.test.ts && node scripts/data-safety.mjs"
   },
   "dependencies": {
     "tsx": "^4.23.15"

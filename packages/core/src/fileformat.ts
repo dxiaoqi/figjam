@@ -124,6 +124,9 @@ export interface DecodedFile {
 export function decodeContainer(data: Uint8Array, file?: string, supported: SchemaVersion = CURRENT_SCHEMA): DecodedFile {
   if (!isContainer(data)) {
     if (!data.byteLength) throw new CorruptFileError('file is empty', file)
+    if (data.byteLength < MAGIC.byteLength && MAGIC.subarray(0, data.byteLength).equals(Buffer.from(data))) {
+      throw new CorruptFileError('file is truncated (cut inside the header)', file)
+    }
     return { schema: LEGACY_SCHEMA, header: null, payload: data }
   }
   const { header, offset } = readHeader(data, file)
