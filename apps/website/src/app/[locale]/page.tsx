@@ -81,7 +81,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
           </ul>
         </Container>
         <Container className="pb-16 sm:pb-28">
-          <Reveal delay={200}>
+          <div>
             <figure>
               <WindowFrame title={boardTitle} className="mx-auto max-w-5xl">
                 <ProductVideo
@@ -97,7 +97,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
                 <span className="font-medium text-foreground/80">{t.common.realRecording}</span> · {h.hero.caption}
               </figcaption>
             </figure>
-          </Reveal>
+          </div>
         </Container>
       </section>
 
@@ -334,7 +334,7 @@ function HeroStickies({ a, b }: { a: string; b: string }) {
         <svg width="16" height="18" viewBox="0 0 16 18">
           <path d="M1 1l13 6.5-5.6 1.6L6 15z" fill="var(--tk-agent-0)" stroke="white" strokeWidth="1.4" strokeLinejoin="round" />
         </svg>
-        <span className="mt-3 ml-0.5 rounded-full px-2 py-[3px] text-[11px] font-medium text-white" style={{ background: 'var(--tk-agent-0)' }}>
+        <span className="mt-3 ml-0.5 rounded-full px-2 py-[3px] text-[11px] font-medium text-white" style={{ background: 'var(--agent-label)' }}>
           Claude Code
         </span>
       </div>

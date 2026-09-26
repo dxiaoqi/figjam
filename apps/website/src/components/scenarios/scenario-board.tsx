@@ -65,7 +65,7 @@ export function ScenarioBoard({
                             <svg width="14" height="16" viewBox="0 0 16 18">
                               <path d="M1 1l13 6.5-5.6 1.6L6 15z" fill="var(--tk-agent-0)" stroke="white" strokeWidth="1.4" strokeLinejoin="round" />
                             </svg>
-                            <span className="mt-2.5 rounded-full px-1.5 py-[2px] text-[10px] font-medium whitespace-nowrap text-white" style={{ background: 'var(--tk-agent-0)' }}>
+                            <span className="mt-2.5 rounded-full px-1.5 py-[2px] text-[10px] font-medium whitespace-nowrap text-white" style={{ background: 'var(--agent-label)' }}>
                               Claude Code
                             </span>
                           </span>

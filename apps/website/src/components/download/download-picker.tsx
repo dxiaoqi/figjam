@@ -53,14 +53,18 @@ function archLabel(t: T, f: Pick<ReleaseFile, 'platform' | 'arch'>) {
   return f.arch === 'arm64' ? t.arch.arm64 : t.arch.x64
 }
 
+/** Only a manifest on another host can change after the build; a path in ./public was read at build time. */
+const liveManifest = /^https?:\/\//.test(site.releaseManifestUrl)
+
 export function DownloadPicker({ initial, t, common }: { initial: Release | null; t: T; common: Common }) {
   const [release, setRelease] = useState<Release | null>(initial)
-  const [loading, setLoading] = useState(!initial)
+  const [loading, setLoading] = useState(!initial && liveManifest)
   const [failed, setFailed] = useState(false)
   const [detected, setDetected] = useState<Detected | null>(null)
 
   useEffect(() => {
     detect().then(setDetected)
+    if (!liveManifest) return
     let live = true
     fetch(site.releaseManifestUrl, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
