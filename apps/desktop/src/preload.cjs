@@ -3,6 +3,10 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('aifigDesktop', {
   platform: process.platform,
+  // the core's access token (read by the shell from AIFIG_HOME); snippets never see it — they run in webviews
+  // with their own preload
+  token: ipcRenderer.sendSync('aifig:token') || undefined,
+  snippetWebviews: true,
   onMenu(cb) {
     const listener = (_e, action, payload) => cb(action, payload)
     ipcRenderer.on('menu', listener)

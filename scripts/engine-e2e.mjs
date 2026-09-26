@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
+import { authHeaders, tokenFor } from './lib/core-auth.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const outDir = process.argv[2]
@@ -20,7 +21,7 @@ page.on('pageerror', (e) => !/boom at runtime/.test(e.message) && errors.push(e.
 // the snippet sandbox logs every blocked escape attempt; those are expected
 page.on('console', (m) => m.type() === 'error' && !m.location().url?.startsWith('http://localhost:47822') && !/sandboxed|allow-top-navigation|allow-popups|Content Security Policy|Permissions policy violation|boom at runtime/.test(m.text()) && errors.push(m.text()))
 const cdp = await page.context().newCDPSession(page)
-await page.goto(`${base}/?board=${board}`)
+await page.goto(`${base}/?board=${board}#token=${tokenFor()}`)
 await page.waitForTimeout(2000)
 
 let failures = 0
@@ -37,6 +38,7 @@ const screenOf = (id) => ed((id) => {
 }, id)
 const wait = (ms = 250) => page.waitForTimeout(ms)
 const shot = async (name) => outDir && (await page.screenshot({ path: path.join(outDir, name) }))
+const shot2 = async (p, name) => outDir && (await p.screenshot({ path: path.join(outDir, name) }))
 
 // 1. double-click → sticky, type, Tab → next sticky
 await page.mouse.dblclick(400, 300)
@@ -386,8 +388,8 @@ check('minimap click moves the camera', !!mm && (cam0.x !== cam1.x || cam0.y !==
 
 // export / copy-as-image endpoints (rendered by the core)
 const exp = await ed(async ({ board, ids }) => {
-  const png = await fetch(`/api/boards/${board}/snapshot.png?ids=${ids.join(',')}`)
-  const svg = await fetch(`/api/boards/${board}/snapshot.svg?ids=${ids.join(',')}`)
+  const png = await fetch(`/api/boards/${board}/snapshot.png?ids=${ids.join(',')}`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })
+  const svg = await fetch(`/api/boards/${board}/snapshot.svg?ids=${ids.join(',')}`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })
   const text = await svg.text()
   return { png: png.headers.get('content-type'), size: (await png.arrayBuffer()).byteLength, svg: svg.headers.get('content-type'), hasPath: text.includes('<path') }
 }, { board, ids: [obst.a, obst.b, obst.c] })
@@ -529,7 +531,7 @@ await wait(100)
 check('rotated blocks hit-test by their real shape', !(await ed((id) => window.editor.selection.has(id), fm.target)))
 cli('--board', board, 'update', fm.target, '--rotate', '30', '--human')
 await wait(200)
-const svgRot = await ed(async ({ board, id }) => (await (await fetch(`/api/boards/${board}/snapshot.svg?ids=${id}`)).text()).includes('rotate(30'), { board, id: fm.target })
+const svgRot = await ed(async ({ board, id }) => (await (await fetch(`/api/boards/${board}/snapshot.svg?ids=${id}`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })).text()).includes('rotate(30'), { board, id: fm.target })
 check('CLI rotation applies and export renders it', (await ed((id) => window.editor.block(id).rotation, fm.target)) === 30 && svgRot)
 
 // touch long-press opens the context menu
@@ -618,7 +620,7 @@ check('agent Markdown renders links and code', (await page.locator(`[data-block-
 
 // images: CLI add, paste, drop, aspect-locked resize, export
 fs.writeFileSync('/tmp/aifig-e2e.png', Buffer.from(await ed(async ({ board, id }) => {
-  const b = await (await fetch(`/api/boards/${board}/snapshot.png?ids=${id}`)).arrayBuffer()
+  const b = await (await fetch(`/api/boards/${board}/snapshot.png?ids=${id}`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })).arrayBuffer()
   return [...new Uint8Array(b)]
 }, { board, id: lab.a })))
 const imgRes = JSON.parse(cli('--json', '--board', board, 'image', '/tmp/aifig-e2e.png', '--width', '240', '--human'))
@@ -652,7 +654,7 @@ const pasted = await ed(async (id) => {
   return window.editor.blocks().filter((b) => b.kind === 'image').length - before
 }, imgId)
 check('pasting and dropping image files creates image blocks', pasted === 2, `+${pasted}`)
-const svgImg = await ed(async ({ board, id }) => (await (await fetch(`/api/boards/${board}/snapshot.svg?ids=${id}`)).text()).includes('<image'), { board, id: imgId })
+const svgImg = await ed(async ({ board, id }) => (await (await fetch(`/api/boards/${board}/snapshot.svg?ids=${id}`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })).text()).includes('<image'), { board, id: imgId })
 check('images are included in export', svgImg)
 
 // ---- review UX v1: item-by-item review with the keyboard, undo by author (also after accepting) ----
@@ -697,7 +699,7 @@ const undoState = await ed((ids) => [window.editor.block(ids[0])?.text ?? null, 
 check('undo by author reverts accepted work but keeps later human edits', undoState[0] === 'I changed this' && undoState[1] === false, JSON.stringify(undoState))
 
 // history: one bulk undo per agent, however many sessions it ran; same display name on different clients is disambiguated
-const callAs = (caller, tool, args) => fetch(`${base}/api/call`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tool, args, caller }) }).then((r) => r.json())
+const callAs = (caller, tool, args) => fetch(`${base}/api/call`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ tool, args, caller }) }).then((r) => r.json())
 const sessions = [['opencode', 101], ['opencode', 102], ['opencode', 103], ['zed', 7]]
 const sessionIds = []
 for (const [client, pid] of sessions) {
@@ -877,7 +879,7 @@ const [stS, hdS] = await ed((ids) => ids.map((id) => window.editor.block(id)).ma
 const stickyToggle = await blockEl(longSticky).locator('[data-more-toggle]').count()
 check('long stickies grow taller (up to 1.75×) and never clip silently', stS.h > stS.w && stS.h <= Math.ceil(stS.w * 1.75 / 8) * 8 && (stS.contentH <= stS.h + 4 || stickyToggle === 1), JSON.stringify({ stS, stickyToggle }))
 check('long headings grow to fit their wrapped text', hdS.contentH != null && hdS.h >= hdS.contentH, JSON.stringify(hdS))
-const svgLong = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.svg?ids=${longId}`).then((r) => r.text())
+const svgLong = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.svg?ids=${longId}`, { headers: authHeaders() }).then((r) => r.text())
 check('exports collapse long cards the same way (fade + “Show more”)', svgLong.includes('Show more'), svgLong.length)
 
 // review: before/after diffs, a ghost where a moved block was, ghosts for removed blocks
@@ -1132,10 +1134,43 @@ const mustBlock = ['parentDocument', 'parentStorage', 'parentEditor', 'ownStorag
 check('sandbox: no access to the app, its storage or cookies', ['parentDocument', 'parentStorage', 'parentEditor', 'ownStorage', 'cookie'].every((k) => escRes[k] === 'blocked'), JSON.stringify(escRes))
 check('sandbox: no network (fetch, XHR, WebSocket, images, scripts, frames) by default', ['fetchCore', 'fetchInternet', 'xhr', 'websocket', 'image', 'externalScript', 'nestedFrame'].every((k) => escRes[k] === 'blocked'), JSON.stringify(escRes))
 check('sandbox: no popups or top navigation', escRes.popup === 'blocked' && page.url() === pageUrl, `${escRes.popup} ${escRes.topNavigation} ${page.url()}`)
+check('sandbox: no Node, desktop bridge, access token or LAN from a snippet', ['node', 'desktopBridge', 'token', 'fetchLan'].every((k) => escRes[k] === 'blocked'), JSON.stringify({ node: escRes.node, desktopBridge: escRes.desktopBridge, token: escRes.token, fetchLan: escRes.fetchLan }))
 check('bridge: state is size-limited; neighbor and network permissions are denied in v1', escRes.oversizeState === 'blocked' && escRes.neighbors === 'denied' && escRes.network === 'denied' && mustBlock.every((k) => k in escRes), JSON.stringify(escRes))
 await page.keyboard.press('Escape')
 await ed(() => window.editor.stopEditing())
 await wait(300)
+
+// access token, permission prompt, activity log
+check('the #token link signs the canvas in and is removed from the address bar', !page.url().includes('token=') && (await ed(() => localStorage.getItem('aifig:token'))) === tokenFor())
+const agentCaller = { id: `e2e-agent:${Date.now()}`, name: 'Claude Code', client: 'claude-code', kind: 'agent' }
+const asked = callAs(agentCaller, 'add_image', { board, url: 'https://example.com/pic.png' })
+const promptEl = page.locator('[data-permission-prompt]')
+await promptEl.waitFor({ timeout: 5000 }).catch(() => {})
+const promptText = (await promptEl.textContent().catch(() => '')) ?? ''
+await shot('permission-prompt.png')
+check('an agent fetching a URL shows one permission prompt with who, what and where', promptText.includes('Claude Code') && promptText.includes('example.com') && promptText.includes('add_image'), promptText.slice(0, 120))
+await page.locator('[data-permission-deny]').click().catch(() => {})
+const askedRes = await asked
+await promptEl.waitFor({ state: 'detached', timeout: 3000 }).catch(() => {})
+check('Deny in the prompt reaches the agent as a clear refusal', !askedRes.ok && askedRes.error.includes('declined') && (await promptEl.count()) === 0, askedRes.error)
+await ed(() => window.dispatchEvent(new Event('aifig:activity')))
+await page.locator('[data-activity-dialog]').waitFor({ timeout: 3000 }).catch(() => {})
+await wait(300)
+await shot('activity-log.png')
+check('Activity lists the network decision', (await page.locator('[data-activity-entry="network"]').count()) > 0 && ((await page.locator('[data-activity-dialog]').textContent()) ?? '').includes('example.com'))
+await page.keyboard.press('Escape')
+await wait(200)
+const stranger = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+const gp = await stranger.newPage()
+await gp.goto(`${base}/?board=${board}`)
+await gp.locator('[data-token-gate]').waitFor({ timeout: 8000 }).catch(() => {})
+const gated = (await gp.locator('[data-token-gate]').count()) === 1 && (await gp.locator('.ae-canvas').count()) === 0
+await shot2(gp, 'token-gate.png')
+await gp.getByLabel('Access token').fill(tokenFor())
+await gp.getByRole('button', { name: 'Connect' }).click()
+await gp.locator('.ae-canvas').waitFor({ timeout: 8000 }).catch(() => {})
+check('a browser without the token sees the sign-in screen, and pasting the token opens the board', gated && (await gp.locator('.ae-canvas').count()) === 1)
+await stranger.close()
 
 // watchdog: an endless loop is stopped and the canvas stays responsive
 const loop = JSON.parse(cli('--json', '--board', board, '--human', 'snippet', '--title', 'Busy loop', '--html', '<p>spinning up…</p>', '--js', 'setTimeout(() => { for (;;) {} }, 600)', '--at', '20800,12000')).id
@@ -1176,7 +1211,7 @@ await page.keyboard.press('Escape')
 await wait(300)
 const mdSnip = cli('--board', board, 'export', '--format', 'md')
 const jsonSnip = JSON.parse(cli('--board', board, 'export', '--format', 'json'))
-const svgSnip = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.svg?ids=${snip}`).then((r) => r.text())
+const svgSnip = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.svg?ids=${snip}`, { headers: authHeaders() }).then((r) => r.text())
 check('exports keep the source (MD/JSON) and a screenshot (PNG/SVG)', mdSnip.includes('### 🌐 Counter') && mdSnip.includes('```js') && jsonSnip.blocks.find((b) => b.id === snip)?.web?.js?.includes('aifig.setState') && svgSnip.includes('<image'), mdSnip.length)
 
 // MCP report 2026-09-25: top-level await, syntax precheck, runtime error overlay, update summary, titles, watch link
@@ -1228,7 +1263,7 @@ const aiMenu = async () => {
   await wait(150)
   return v
 }
-const cfg = (body) => fetch('http://127.0.0.1:47820/api/assistant/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+const cfg = (body) => fetch('http://127.0.0.1:47820/api/assistant/config', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) })
 await cfg({ provider: null })
 await ed(() => window.dispatchEvent(new Event('aifig:assistant-changed')))
 await wait(300)

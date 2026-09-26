@@ -3,9 +3,24 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readToken } from '@aifig/core/auth'
 import { CORE_PORT, type AnyToolName, type CallResponse, type CallerInfo } from '@aifig/shared'
 
-const base = () => process.env.AIFIG_CORE_URL ?? `http://127.0.0.1:${CORE_PORT}`
+export const base = () => process.env.AIFIG_CORE_URL ?? `http://127.0.0.1:${CORE_PORT}`
+
+/** Headers for the core: the per-install access token from AIFIG_HOME (or AIFIG_TOKEN). */
+export function authHeaders(): Record<string, string> {
+  const t = readToken()
+  return t ? { authorization: `Bearer ${t}` } : {}
+}
+
+/** Authenticated request to the core; a 401 gets an actionable message instead of a JSON parse error. */
+export async function coreFetch(pathname: string, init: RequestInit = {}) {
+  await ensureCore()
+  const r = await fetch(`${base()}${pathname}`, { ...init, headers: { 'content-type': 'application/json', ...authHeaders(), ...(init.headers as Record<string, string>) } })
+  if (r.status === 401) throw new Error(`The ai-figma core rejected the access token. Make sure AIFIG_HOME (${process.env.AIFIG_HOME ?? '~/.aifig'}) matches the running core, or set AIFIG_TOKEN.`)
+  return r
+}
 
 async function healthy() {
   try {
@@ -42,20 +57,19 @@ export function ensureCore(): Promise<void> {
 }
 
 export async function callCore(tool: AnyToolName, args: Record<string, unknown>, caller: CallerInfo): Promise<CallResponse> {
-  await ensureCore()
-  const r = await fetch(`${base()}/api/call`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ tool, args, caller }),
-  })
-  return (await r.json()) as CallResponse
+  try {
+    const r = await coreFetch('/api/call', { method: 'POST', body: JSON.stringify({ tool, args, caller }) })
+    return (await r.json()) as CallResponse
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
 }
 
 export async function leave(callerId: string) {
   try {
     await fetch(`${base()}/api/agent/leave`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ id: callerId }),
       signal: AbortSignal.timeout(500),
     })

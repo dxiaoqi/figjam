@@ -184,6 +184,7 @@ export interface AgentPresence {
 export type ServerMessage =
   | { type: 'presence'; agents: AgentPresence[] }
   | { type: 'board-deleted'; boardId: string }
+  | import('./security').SecurityServerMessage
 
 export type ClientMessage =
   | { type: 'viewport'; bounds: Rect; focused?: boolean }

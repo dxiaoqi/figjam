@@ -374,7 +374,8 @@
 }
 .aifig-web-frame,
 .aifig-web-capture {
-  display: block;
+  /* flex rather than block so the desktop's <webview> (inline-flex by default) fills the block too */
+  display: flex;
   width: 100%;
   height: 100%;
   border: 0;

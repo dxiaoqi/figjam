@@ -44,8 +44,9 @@ program
   .option('-p, --port <port>', 'port', (v) => Number(v))
   .action(async (opts) => {
     const { startCore } = await import('@aifig/core')
+    const { tokenPath: tokenPathFor } = await import('@aifig/core/auth')
     const { port } = await startCore(opts.port)
-    console.log(`ai-figma core listening on http://127.0.0.1:${port}`)
+    console.log(`ai-figma core listening on http://127.0.0.1:${port} — open the canvas with \`aifig open\` (API, MCP and sync require the access token in ${tokenPathFor()})`)
   })
 
 program
@@ -382,6 +383,70 @@ for (const action of ['accept', 'reject'] as const) {
       console.log(`✓ ${action}ed ${(r.result as any).reviewed.length} change set(s)`)
     })
 }
+
+program
+  .command('token')
+  .description('print the local access token (for MCP-over-HTTP configs); --rotate replaces it')
+  .option('--rotate', 'generate a new token; clients reading AIFIG_HOME pick it up, pasted configs must be updated')
+  .action(async (o) => {
+    const { loadOrCreateToken, rotateToken, tokenPath } = await import('@aifig/core/auth')
+    const t = o.rotate ? rotateToken() : loadOrCreateToken()
+    if (o.rotate) console.error(`✓ rotated ${tokenPath()} — reconnect HTTP MCP clients and reopen browser tabs with \`aifig open\``)
+    console.log(t)
+  })
+
+program
+  .command('open')
+  .description('open the canvas in your browser, signed in with the access token')
+  .option('--dev', 'open the Vite dev server (npm run dev) instead of the core')
+  .option('--print', 'print the link instead of opening it')
+  .action(async (o) => {
+    const { ensureCore, base } = await import('./client')
+    await ensureCore()
+    const { loadOrCreateToken } = await import('@aifig/core/auth')
+    const origin = o.dev ? `http://127.0.0.1:${process.env.AIFIG_UI_PORT ?? 47820}` : base()
+    const link = `${origin}/#token=${loadOrCreateToken()}`
+    if (o.print) return console.log(link)
+    const { spawn } = await import('node:child_process')
+    const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
+    spawn(cmd, [link], { stdio: 'ignore', detached: true }).on('error', () => console.log(link)).unref()
+  })
+
+program
+  .command('permissions [action] [subject] [capability] [target]')
+  .description('list grants and pending requests; `allow agent:<client> network <host|*>`; `revoke agent:<client> [capability] [target]`')
+  .action(async (action, subject, capability, target) => {
+    const { coreFetch } = await import('./client')
+    const actor = { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' }
+    if (action === 'allow' || action === 'revoke') {
+      const r = (await (await coreFetch(`/api/permissions/${action === 'allow' ? 'grant' : 'revoke'}`, { method: 'POST', body: JSON.stringify({ subject, capability, target, actor }) })).json()) as any
+      if (!r.ok) {
+        console.error(`✗ ${r.error}`)
+        process.exit(1)
+      }
+      console.log(action === 'allow' ? `✓ ${subject} may use ${capability} for ${target}` : `✓ removed ${r.removed} grant(s)`)
+      return
+    }
+    const r = (await (await coreFetch('/api/permissions')).json()) as any
+    if (program.opts().json) return console.log(JSON.stringify(r, null, 2))
+    if (!r.grants.length) console.log('No grants. Agents are asked in the canvas before they touch the network or secrets.')
+    for (const g of r.grants) console.log(`${g.subject.padEnd(24)} ${g.capability.padEnd(8)} ${g.target}`)
+    for (const p of r.pending) console.log(`pending: ${p.actor.name} wants ${p.capability} for ${p.target} (${p.reason})`)
+  })
+
+program
+  .command('activity')
+  .description('recent network, secret, permission and auth events')
+  .option('-n, --limit <n>', 'how many', (v) => Number(v), 30)
+  .option('-c, --category <category>', 'network | secret | permission | auth')
+  .action(async (o) => {
+    const { coreFetch } = await import('./client')
+    const q = new URLSearchParams({ limit: String(o.limit), ...(o.category ? { category: o.category } : {}) })
+    const { entries } = (await (await coreFetch(`/api/activity?${q}`)).json()) as any
+    if (program.opts().json) return console.log(JSON.stringify(entries, null, 2))
+    if (!entries.length) console.log('No activity yet.')
+    for (const e of entries) console.log(`${new Date(e.at).toISOString().slice(0, 19).replace('T', ' ')}  ${e.category.padEnd(10)} ${e.outcome.padEnd(7)} ${e.actor.name}: ${e.action}${e.target ? ` ${e.target}` : ''}${e.via ? ` (${e.via})` : ''}${e.detail ? ` — ${e.detail}` : ''}`)
+  })
 
 program
   .command('call <tool> [json]')

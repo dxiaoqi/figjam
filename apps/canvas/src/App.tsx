@@ -8,7 +8,9 @@ import type { BoardSummary } from '@aifig/shared'
 import { BoardContext, type ThemeMode } from './board-context'
 import { BoardCanvas } from './canvas/BoardCanvas'
 import { Logo } from './chrome/BoardMenu'
-import { callCore, fetchBoards, fetchHealth, type Health } from './lib/core'
+import { TokenGate } from './chrome/TokenGate'
+import { UNAUTHORIZED } from './lib/auth'
+import { callCore, fetchBoards, fetchHealth, Unauthorized, type Health } from './lib/core'
 import { desktop } from './lib/desktop'
 import { CoreProvider } from './sync/provider'
 
@@ -58,6 +60,7 @@ export default function App() {
   const [boards, setBoards] = useState<BoardSummary[] | null>(null)
   const [boardId, setBoardId] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
+  const [locked, setLocked] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [provider, setProvider] = useState<CoreProvider | null>(null)
 
@@ -86,9 +89,11 @@ export default function App() {
       setHealth(h)
       setBoards(b.boards)
       setOffline(false)
+      setLocked(false)
       setBoardId((cur) => (cur && b.boards.some((x) => x.id === cur) ? cur : pickBoard(b.boards, b.active)))
-    } catch {
-      setOffline(true)
+    } catch (e) {
+      if (e instanceof Unauthorized) setLocked(true)
+      else setOffline(true)
     } finally {
       setRetrying(false)
     }
@@ -99,13 +104,19 @@ export default function App() {
   }, [load])
 
   useEffect(() => {
+    const on = () => setLocked(true)
+    window.addEventListener(UNAUTHORIZED, on)
+    return () => window.removeEventListener(UNAUTHORIZED, on)
+  }, [])
+
+  useEffect(() => {
     if (!offline) return
     const t = setInterval(load, 3000)
     return () => clearInterval(t)
   }, [offline, load])
 
   useEffect(() => {
-    if (!boardId) return
+    if (!boardId || locked) return
     const p = new CoreProvider(boardId)
     setProvider(p)
     localStorage.setItem('aifig:board', boardId)
@@ -116,7 +127,7 @@ export default function App() {
       p.destroy()
       setProvider(null)
     }
-  }, [boardId])
+  }, [boardId, locked])
 
   // keep board list fresh (counts, titles, boards created by agents)
   useEffect(() => {
@@ -170,7 +181,8 @@ export default function App() {
   createBoardRef.current = createBoard
 
   let body
-  if (offline && !provider) body = <CoreOffline retrying={retrying} onRetry={load} />
+  if (locked) body = <TokenGate onDone={load} />
+  else if (offline && !provider) body = <CoreOffline retrying={retrying} onRetry={load} />
   else if (!boards || !provider || !boardId || provider.boardId !== boardId)
     body = (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

@@ -3,8 +3,12 @@ import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import * as Y from 'yjs'
 import type { AgentPresence, ClientMessage, Rect, ServerMessage } from '@aifig/shared'
+import { wsProtocols } from '../lib/auth'
 
 const MSG_SYNC = 0
+
+/** Permission prompts and activity entries, re-broadcast as a window event for the chrome that shows them. */
+export const SECURITY_EVENT = 'aifig:security'
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'offline'
 
@@ -37,7 +41,7 @@ export class CoreProvider {
   private connect() {
     if (this.destroyed) return
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${location.host}/sync/${encodeURIComponent(this.boardId)}`)
+    const ws = new WebSocket(`${proto}://${location.host}/sync/${encodeURIComponent(this.boardId)}`, wsProtocols())
     ws.binaryType = 'arraybuffer'
     this.ws = ws
     ws.onopen = () => {
@@ -55,6 +59,8 @@ export class CoreProvider {
         if (msg.type === 'presence') {
           this.agents = msg.agents
           this.emit()
+        } else if (msg.type === 'permission' || msg.type === 'permission-settled' || msg.type === 'activity') {
+          window.dispatchEvent(new CustomEvent(SECURITY_EVENT, { detail: msg }))
         }
         return
       }

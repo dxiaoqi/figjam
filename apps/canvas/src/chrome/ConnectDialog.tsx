@@ -63,6 +63,7 @@ export function ConnectDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           <TabsContent value="http" className="space-y-2 pt-2">
             <p className="text-sm text-muted-foreground">
               While ai-figma is running, agents can also connect over local HTTP (Streamable HTTP) at <code className="font-mono">{s.url}</code> — no process to launch.
+              The config carries this install’s access token: keep it out of shared or committed files (rotate with <code className="font-mono">aifig token --rotate</code>).
             </p>
             <CopyBlock label="Claude Code HTTP command" text={s.claudeHttp} />
             <CopyBlock label="Cursor HTTP config" text={s.cursorHttp} />
