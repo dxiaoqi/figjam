@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { chromium, _electron as electron } from 'playwright-core'
+import { authedFetch, authHeaders, withToken } from './auth.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')).map(([k, v]) => [k, v ?? true]))
@@ -78,7 +79,7 @@ async function startCore(homeDir, port) {
   const t0 = performance.now()
   const proc = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'core', '--port', String(port)], { env: { ...process.env, AIFIG_HOME: homeDir, AIFIG_CORE_PORT: String(port) }, stdio: 'ignore' })
   for (let i = 0; i < 600; i++) {
-    if (await fetch(`http://127.0.0.1:${port}/api/health`).then((r) => r.ok, () => false)) break
+    if (await authedFetch(`http://127.0.0.1:${port}/api/health`, {}, homeDir).then((r) => r.ok, () => false)) break
     await sleep(5)
   }
   return { proc, port, base: `http://127.0.0.1:${port}`, ms: performance.now() - t0 }
@@ -138,7 +139,7 @@ if (want('web') || want('frames')) {
     const cold = []
     for (let i = 0; i < (quick ? 2 : 4); i++) {
       const { ctx, page } = await newPage()
-      await page.goto(`${core.base}/?board=${fx[200].id}`)
+      await page.goto(withToken(`${core.base}/?board=${fx[200].id}`, home))
       cold.push(await waitReady(page))
       await ctx.close()
     }
@@ -149,7 +150,7 @@ if (want('web') || want('frames')) {
       const times = []
       for (let i = 0; i < (quick ? 2 : 3); i++) {
         const { ctx, page } = await newPage()
-        await page.goto(`${core.base}/?board=${fx[n].id}&perf`)
+        await page.goto(withToken(`${core.base}/?board=${fx[n].id}&perf`, home))
         times.push(await waitReady(page, n))
         if (n === 10000 && i === 0) {
           const cdp = await ctx.newCDPSession(page)
@@ -172,7 +173,7 @@ if (want('web') || want('frames')) {
     const { ctx, page } = await newPage()
     const cdp = await ctx.newCDPSession(page)
     await cdp.send('Performance.enable')
-    await page.goto(`${core.base}/?board=${fx[10000].id}&perf`)
+    await page.goto(withToken(`${core.base}/?board=${fx[10000].id}&perf`, home))
     await waitReady(page, 10000)
     await page.waitForTimeout(2500)
     const taskMs = async () => (await cdp.send('Performance.getMetrics')).metrics.find((m) => m.name === 'TaskDuration').value * 1000
@@ -316,7 +317,7 @@ if (want('web') || want('frames')) {
 if (want('mcp')) {
   const core = await startCore(home, nextPort())
   const client = new Client({ name: 'aifig-bench', version: '1.0.0' })
-  await client.connect(new StreamableHTTPClientTransport(new URL(`${core.base}/mcp`)))
+  await client.connect(new StreamableHTTPClientTransport(new URL(`${core.base}/mcp`), { requestInit: { headers: authHeaders(home) } }))
   const call = async (name, args) => {
     const t0 = performance.now()
     const r = await client.callTool({ name, arguments: args })
@@ -355,16 +356,21 @@ if (want('mcp')) {
     let done = false
     const snap = call('render_snapshot', { board, format: 'png' }).finally(() => (done = true))
     const pings = []
+    let peak = 0
     while (!done) {
+      peak = Math.max(peak, rssMB(core.proc.pid) ?? 0)
       const p0 = performance.now()
-      await fetch(`${core.base}/api/health`)
+      await authedFetch(`${core.base}/api/health`, {}, home)
       pings.push(performance.now() - p0)
       await sleep(25)
     }
     await snap
     M['mcp.renderSnapshotPng.board10k.ms'] = round(performance.now() - t0)
     M['mcp.coreResponsiveDuringSnapshot.maxMs'] = round(Math.max(...pings))
+    M['memory.coreRssMB.peakDuringPng10k'] = peak
   }
+  // steady state once the raster worker has idled out
+  await sleep(12000)
   M['memory.coreRssMB.afterMcp'] = rssMB(core.proc.pid)
   log('get_board', M['mcp.getBoard.board10k.ms'], 'ms · lint', M['mcp.lintLayout.board10k.ms'], 'ms · snapshot svg', M['mcp.renderSnapshotSvg.board10k.ms'], 'ms')
   await client.close()

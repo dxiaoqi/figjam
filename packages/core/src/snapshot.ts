@@ -24,6 +24,10 @@ function textLines(lines: string[], x: number, y: number, fs: number, fill: stri
 
 /** Text smaller than this on the PNG is drawn as bars, like the canvas far-zoom view (unreadable anyway, and shaping thousands of runs is slow). */
 const MIN_TEXT_PX = 4
+const MAX_PNG_PIXELS = 16_000_000
+/** Blocks / connectors rendered between yields to the event loop, so live sync keeps flowing during big snapshots. */
+const YIELD_EVERY = 400
+const yieldToLoop = () => new Promise<void>((r) => setImmediate(r))
 
 /** Replace `<text>` runs that would render below MIN_TEXT_PX with rounded bars of about the same size and color. */
 export function greekText(svg: string, zoom: number) {
@@ -59,18 +63,18 @@ function collapsedFade(b: Block, r: Rect, bg: string, ink: string) {
 }
 
 /** Type header ("✦ INSIGHT") at the top of a typed block; returns the svg and the height it takes. */
-function typeHeader(b: Block, x: number, y: number, ink: string) {
+function typeHeader(b: Block, x: number, y: number, ink: string, opacity = 0.78) {
   if (!b.type) return { svg: '', h: 0 }
   const d = BLOCK_TYPES[b.type]
   const done = b.type === 'todo' && typeFields(b).done
-  return { svg: `<text x="${x}" y="${y + 11}" font-size="11" font-weight="650" letter-spacing="0.4" fill="${ink}" opacity="0.72">${done ? '☑' : esc(d.glyph)}  ${esc(d.label.toUpperCase())}</text>`, h: 22 }
+  return { svg: `<text x="${x}" y="${y + 11}" font-size="11" font-weight="650" letter-spacing="0.4" fill="${ink}" opacity="${opacity}">${done ? '☑' : esc(d.glyph)}  ${esc(d.label.toUpperCase())}</text>`, h: 22 }
 }
 
 /** Collapsed field summary at the bottom of a typed block. */
 function typeFooter(b: Block, r: Rect, ink: string) {
   const sum = b.type ? fieldSummary(b) : ''
   if (!sum) return ''
-  return `<text x="${r.x + SPACING.blockPadding}" y="${r.y + r.h - 14}" font-size="11.5" font-weight="550" fill="${ink}" opacity="0.66">${esc(sum)}</text>`
+  return `<text x="${r.x + SPACING.blockPadding}" y="${r.y + r.h - 14}" font-size="11.5" font-weight="550" fill="${ink}" opacity="0.78">${esc(sum)}</text>`
 }
 
 export async function renderSnapshot(
@@ -109,7 +113,9 @@ export async function renderSnapshot(
     return `<rect x="${r.x - 4}" y="${r.y - 4}" width="${r.w + 8}" height="${r.h + 8}" rx="${radius + 3}" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="5 4"/>`
   }
 
+  let step = 0
   for (const b of sorted) {
+    if (++step % YIELD_EVERY === 0) await yieldToLoop()
     const r = rects.get(b.id)!
     const c = COLORS[b.color]?.[theme] ?? COLORS.gray[theme]
     const pad = SPACING.blockPadding
@@ -160,10 +166,10 @@ export async function renderSnapshot(
       parts.push(`<clipPath id="clip-${b.id}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.card}"/></clipPath>`)
       parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${CARD_ACCENT}" fill="${c.accent}" clip-path="url(#clip-${b.id})"/>`)
       let y = r.y + pad + CARD_ACCENT
-      const head = typeHeader(b, r.x + pad, y - 2, c.accent)
+      const head = typeHeader(b, r.x + pad, y - 2, theme === 'light' ? c.ink : c.accent, 1)
       parts.push(head.svg)
       y += head.h
-      parts.push(typeFooter(b, r, surf.muted))
+      parts.push(typeFooter(b, r, surf.ink))
       const inner = r.w - pad * 2
       if (b.title) {
         const tl = wrapText(b.title, inner, CARD_TITLE_SIZE, true)
@@ -201,7 +207,8 @@ export async function renderSnapshot(
       .filter((id) => !skip.includes(id))
       .sort((p, q) => rank.get(p)! - rank.get(q)!)
       .map((id) => grid.get(id)!)
-  for (const c of board.connectors.values()) {
+  for (const c of [...board.connectors.values()]) {
+    if (++step % YIELD_EVERY === 0) await yieldToLoop()
     const fr = c.from ? rects.get(c.from) : null
     const tr = c.to ? rects.get(c.to) : null
     if ((c.from && !fr) || (c.to && !tr)) continue
@@ -236,7 +243,8 @@ export async function renderSnapshot(
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="${vx} ${vy} ${W} ${H}" font-family="${esc(FONT)}"><defs>${markers}</defs>${parts.join('')}</svg>`
   if (opts.format === 'svg') return { svg, png: null, width: W, height: H }
-  const zoom = Math.max(0.25, Math.min(2, 2400 / Math.max(W, H)))
+  // giant boards: cap the raster size (an image agents can use, and bounded memory in the core)
+  const zoom = Math.min(Math.max(0.25, Math.min(2, 2400 / Math.max(W, H))), Math.sqrt(MAX_PNG_PIXELS / (W * H)))
   const raster = greekText(svg, zoom)
   const png = await rasterize(raster, {
     fitTo: { mode: 'zoom', value: zoom },
@@ -262,6 +270,8 @@ parentPort.on('message', ({ id, svg, opts }) => {
 })`
 
 let worker: Worker | null | undefined
+let idleTimer: ReturnType<typeof setTimeout> | undefined
+const WORKER_IDLE_MS = 10_000
 let seq = 0
 const jobs = new Map<number, { resolve: (b: Buffer) => void; reject: (e: Error) => void }>()
 
@@ -273,7 +283,16 @@ function rasterWorker(): Worker | null {
     w.on('message', (m: { id: number; png?: Uint8Array; error?: string }) => {
       const job = jobs.get(m.id)
       jobs.delete(m.id)
-      if (!jobs.size) w.unref()
+      if (!jobs.size) {
+        w.unref()
+        // big rasters leave hundreds of MB resident in the worker; give it back when idle
+        idleTimer = setTimeout(() => {
+          if (jobs.size || worker !== w) return
+          worker = undefined
+          void w.terminate()
+        }, WORKER_IDLE_MS)
+        idleTimer.unref()
+      }
       if (m.error || !m.png) job?.reject(new Error(m.error ?? 'Rasterizing failed'))
       else job?.resolve(Buffer.from(m.png.buffer, m.png.byteOffset, m.png.byteLength))
     })
@@ -296,6 +315,7 @@ async function rasterize(svg: string, opts: ResvgOptions): Promise<Buffer> {
     const id = ++seq
     return new Promise<Buffer>((resolve, reject) => {
       jobs.set(id, { resolve, reject })
+      clearTimeout(idleTimer)
       w.ref()
       w.postMessage({ id, svg, opts })
     })

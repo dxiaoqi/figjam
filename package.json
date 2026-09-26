@@ -29,7 +29,8 @@
     "test:aesthetics": "node scripts/aesthetics.mjs",
     "test:aesthetics:update": "node scripts/aesthetics.mjs --update",
     "test:e2e": "node scripts/engine-e2e.mjs",
-    "bench": "node scripts/bench/run.mjs"
+    "bench": "node scripts/bench/run.mjs",
+    "test:contrast": "tsx scripts/contrast.ts"
   },
   "dependencies": {
     "tsx": "^4.23.15"

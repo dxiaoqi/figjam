@@ -1,7 +1,9 @@
 // CPU-profile one interaction on a board and print the hottest functions (self time).
 // usage: node scripts/bench/profile.mjs <app-url> <board-id> <scenario: open|pan|zoom|select|drag|hover> [top=30]
-// Point it at the Vite dev server (`npm run dev`) for readable function names.
+// Point it at the Vite dev server (`npm run dev`) for readable function names; run with the core's AIFIG_HOME
+// (or AIFIG_TOKEN) set so the page gets the access token on cores that require one.
 import { chromium } from 'playwright-core'
+import { withToken } from './auth.mjs'
 
 const [base, board, scenario = 'select', top = '30'] = process.argv.slice(2)
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH ?? '/usr/local/bin/google-chrome', args: ['--no-sandbox'] })
@@ -11,7 +13,7 @@ const cdp = await page.context().newCDPSession(page)
 await cdp.send('Profiler.enable')
 await cdp.send('Profiler.setSamplingInterval', { interval: 200 })
 if (scenario === 'open') await cdp.send('Profiler.start')
-await page.goto(`${base}/?board=${board}&perf`)
+await page.goto(withToken(`${base}/?board=${board}&perf`))
 await page.waitForFunction(() => window.editor && window.editor.blocks().length > 0, null, { timeout: 120000 })
 await page.waitForTimeout(scenario === 'open' ? 1500 : 3000)
 const ed = (fn, a) => page.evaluate(fn, a)

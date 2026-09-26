@@ -210,7 +210,7 @@ function drawLod(editor: Editor, canvas: HTMLCanvasElement, host: HTMLElement, c
 function paintLod(editor: Editor, ctx: CanvasRenderingContext2D, area: Box, z: number, host: HTMLElement) {
   const vp = expand(area, 40 / z)
   const css = getComputedStyle(host)
-  const connectorColor = css.getPropertyValue('--ae-connector').trim() || '#a8a29e'
+  const connectorColor = css.getPropertyValue('--ae-connector').trim() || '#908b88'
   const style: LodStyleFn = editor.options.lodStyle ?? (() => ({ fill: '#e7e5e4' }))
   const editing = editor.editingId
   for (const b of editor.blocksIn(vp)) {
@@ -241,7 +241,7 @@ function paintLod(editor: Editor, ctx: CanvasRenderingContext2D, area: Box, z: n
       ctx.fillRect(r.x, r.y, r.w, Math.min(4, r.h))
     }
     if (b.kind === 'text') {
-      ctx.fillStyle = s.accent ?? '#78716c'
+      ctx.fillStyle = s.accent ?? '#756e69'
       const lines = Math.max(1, Math.round(r.h / 24))
       for (let i = 0; i < lines; i++) ctx.fillRect(r.x, r.y + i * (r.h / lines) + r.h / lines / 4, r.w * (i === lines - 1 ? 0.6 : 0.9), r.h / lines / 2)
     }
