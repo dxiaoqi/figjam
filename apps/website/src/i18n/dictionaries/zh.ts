@@ -200,7 +200,7 @@ export default function zh(s: Site): Dict {
           { os: 'Linux', body: '给 AppImage 加上可执行权限（chmod +x）后运行。' },
         ],
       },
-      shotAlt: '带原生菜单的桌面端，旁边是浏览器里打开的同一块画板',
+      shotAlt: '首次启动时的新画板：工具快捷键、三个模板与「连接 Agent」',
     },
     docs: {
       eyebrow: '文档',

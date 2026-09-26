@@ -228,7 +228,7 @@ export default function en(s: Site) {
           { os: 'Linux', body: 'Make the AppImage executable (chmod +x) and run it.' },
         ],
       },
-      shotAlt: 'The desktop app with native menus next to a browser running the same board',
+      shotAlt: 'A new board on first launch: tool keys, three templates and Connect an agent',
     },
     docs: {
       eyebrow: 'Docs',

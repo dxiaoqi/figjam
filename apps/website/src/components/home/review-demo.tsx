@@ -150,7 +150,7 @@ export function ReviewDemo({ t }: { t: Dict['home']['presence']['demo'] }) {
           style={{ background: AGENT }}
         >
           {t.agent}
-          <span className="opacity-80">· {t.status}</span>
+          <span className="hidden opacity-80 sm:inline">· {t.status}</span>
         </span>
       </div>
 

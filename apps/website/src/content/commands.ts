@@ -26,28 +26,28 @@ export const commands = {
   ].join('\n'),
   skillTree: `competitor-kit/\n  SKILL.md              # name, description, metadata.aifig\n  canvas/blocks.json    # block types, relations, layouts, actions, prompts\n  canvas/prompts/*.md   # prompt templates`,
   skillMd: `---\nname: competitor-kit\ndescription: Map competitors on the board as cards with pricing\n  and positioning, then compare them as a positioning matrix.\nmetadata:\n  aifig:\n    version: 1.0.0\n    canvas: canvas/blocks.json\n    capability: L1\n    permissions:\n      tools: [fetch.fetch]\n---\n\n# Competitor Kit\n\n- \`competitor-kit.competitor\` (card) — one per product.\n  Fields: segment, positioning, price, url.`,
-  blocksJson: JSON.stringify(
-    {
-      version: 1,
-      types: {
-        competitor: {
-          label: 'Competitor',
-          base: 'card',
-          color: 'blue',
-          icon: 'Building2',
-          fields: [
-            { key: 'segment', label: 'Segment', kind: 'text' },
-            { key: 'positioning', label: 'Positioning', kind: 'enum', options: ['budget', 'mainstream', 'premium'] },
-            { key: 'price', label: 'Price', kind: 'number', unit: '$/seat/mo' },
-          ],
-          template: { rows: ['segment', 'positioning', 'price'] },
-        },
-      },
-      layouts: [{ id: 'positioning-matrix', label: 'Positioning matrix', intent: 'matrix', types: ['competitor'], rows: 'segment', cols: 'positioning' }],
-    },
-    null,
-    2,
-  ),
+  blocksJson: `{
+  "version": 1,
+  "types": {
+    "competitor": {
+      "label": "Competitor",
+      "base": "card",
+      "color": "blue",
+      "icon": "Building2",
+      "fields": [
+        { "key": "segment", "label": "Segment", "kind": "text" },
+        { "key": "positioning", "label": "Positioning", "kind": "enum",
+          "options": ["budget", "mainstream", "premium"] },
+        { "key": "price", "label": "Price", "kind": "number", "unit": "$/seat/mo" }
+      ],
+      "template": { "rows": ["segment", "positioning", "price"] }
+    }
+  },
+  "layouts": [
+    { "id": "positioning-matrix", "intent": "matrix",
+      "types": ["competitor"], "rows": "segment", "cols": "positioning" }
+  ]
+}`,
   skillCli: [
     `${cli} skill new persona-kit            # scaffold SKILL.md + canvas/blocks.json`,
     `${cli} skill dev ./persona-kit --enable # validate on save, hot-reload into boards`,

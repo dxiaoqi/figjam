@@ -88,7 +88,7 @@ export default async function DownloadPage({ params }: { params: Promise<{ local
             </div>
           </Reveal>
           <Reveal delay={100}>
-            <FramedShot name={locale === 'zh' ? 'desktop-zh' : 'desktop-app'} alt={d.shotAlt} bare />
+            <FramedShot name={locale === 'zh' ? 'empty-board-zh' : 'empty-board-en'} alt={d.shotAlt} title={site.name} />
           </Reveal>
         </Container>
       </section>
@@ -127,7 +127,7 @@ export default async function DownloadPage({ params }: { params: Promise<{ local
             ))}
             <Reveal as="li" className="pl-11 text-[14px] text-muted-foreground">
               {d.source.browserNote}{' '}
-              <a href={site.repoUrl} className="underline decoration-border underline-offset-4 hover:text-foreground" target="_blank" rel="noreferrer">
+              <a href={site.repoUrl} className="whitespace-nowrap underline decoration-border underline-offset-4 hover:text-foreground" target="_blank" rel="noreferrer">
                 {t.footer.source} ↗
               </a>
             </Reveal>

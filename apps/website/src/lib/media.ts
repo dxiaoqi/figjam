@@ -1,14 +1,13 @@
 /** Product screenshots in public/media (WebP), with intrinsic sizes to avoid layout shift. */
 export const shots = {
-  'agent-drafting': [1600, 1000],
   'canvas-connectors': [1600, 1000],
   'canvas-feel-poster': [1600, 1000],
   'canvas-guides': [1600, 1000],
   'comment-reply': [1600, 1000],
   'connect-agent-en': [1600, 1000],
   'connect-agent-zh': [1600, 1000],
-  'desktop-app': [1600, 1000],
-  'desktop-zh': [1600, 970],
+  'empty-board-en': [1600, 1000],
+  'empty-board-zh': [1600, 1000],
   'final-board': [1600, 1000],
   'hero-agent-run-poster': [1600, 1000],
   'item-review': [1600, 1000],

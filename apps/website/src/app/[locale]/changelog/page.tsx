@@ -56,7 +56,7 @@ export default async function ChangelogPage({ params }: { params: Promise<{ loca
                     </li>
                   ))}
                 </ul>
-                {e.image && isShot(e.image) && <FramedShot name={e.image} alt={e.title} bare className="mt-8 max-w-3xl" />}
+                {e.image && isShot(e.image) && <FramedShot name={e.image} alt={e.title} bare className="mt-8 max-w-2xl" />}
               </article>
             </Reveal>
           ))}
