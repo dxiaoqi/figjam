@@ -1395,13 +1395,14 @@ const total = await ed(() => window.editor.blocks().length)
 await ed(() => window.editor.zoomToFit(false))
 await wait(400)
 const lodFar = await page.locator('.ae-canvas').getAttribute('data-lod')
-const domFar = await page.locator('.ae-block').count()
+// blocks stay mounted (unpainted) under the far-zoom canvas so zooming back in is instant; count what's shown
+const domFar = await page.evaluate(() => [...document.querySelectorAll('.ae-block')].filter((el) => el.checkVisibility({ visibilityProperty: true })).length)
 await shot('engine-lod-2k.png')
 await ed(() => window.editor.setCamera({ x: 200, y: -5900, z: 1 }))
 await wait(400)
 const lodNear = await page.locator('.ae-canvas').getAttribute('data-lod')
 const domNear = await page.locator('.ae-block').count()
-check('far zoom switches to the canvas level of detail', lodFar === 'canvas' && domFar <= 2, `${total} blocks, ${domFar} DOM nodes`)
+check('far zoom switches to the canvas level of detail', lodFar === 'canvas' && domFar <= 2, `${total} blocks, ${domFar} visible DOM blocks`)
 check('near zoom renders only nearby blocks as DOM', lodNear === 'dom' && domNear < 400, `${domNear} DOM blocks`)
 const perf = await ed(async () => {
   const ed = window.editor

@@ -94,7 +94,8 @@ export function BoardCanvas() {
     if (!synced) return
     const e = createEditor(provider.doc)
     setEditor(e)
-    if (import.meta.env.DEV) (window as any).editor = e
+    // `?perf` exposes the editor to `npm run bench` in production builds
+    if (import.meta.env.DEV || new URLSearchParams(location.search).has('perf')) (window as any).editor = e
     return () => {
       e.dispose()
       setEditor(null)

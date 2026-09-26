@@ -1,0 +1,53 @@
+{
+  "notes": [
+    "max = fail when above, min = fail when below. Numbers come from `npm run bench` on the fixtures in scripts/bench/fixtures.ts.",
+    "Frame and input metrics run in headless Chrome with software rendering: fps and main-thread time are meaningful, input→frame latency includes software raster (a GPU makes it lower).",
+    "Targets from product-concept §6.8: 60fps pan/zoom on 10k blocks, input→pixel ≤ 16ms, cold start to an interactive medium board < 1.5s."
+  ],
+  "metrics": {
+    "coldStart.core.ms": { "max": 1000 },
+    "coldStart.coreWith11kBlocks.ms": { "max": 1500 },
+    "coldStart.web.ms": { "max": 1500 },
+    "coldStart.desktop.ms": { "max": 1500 },
+    "openBoard.1k.ms": { "max": 800 },
+    "openBoard.10k.ms": { "max": 1500 },
+
+    "frames.pan100.fps": { "min": 55 },
+    "frames.zoom.fps": { "min": 55 },
+    "frames.panFit.fps": { "min": 55 },
+    "frames.pan40.fps": { "min": 55 },
+    "frames.pan100.mainThreadMsPerFrame": { "max": 8 },
+    "frames.zoom.mainThreadMsPerFrame": { "max": 10 },
+    "frames.panFit.mainThreadMsPerFrame": { "max": 8 },
+    "frames.pan40.mainThreadMsPerFrame": { "max": 10 },
+
+    "input.hover.p95Ms": { "max": 33 },
+    "input.drag.p95Ms": { "max": 33 },
+    "input.dragFrame.p95Ms": { "max": 33 },
+    "input.marquee.p95Ms": { "max": 33 },
+    "input.select.p95Ms": { "max": 200 },
+    "input.hover.mainThreadMsPerEvent": { "max": 6 },
+    "input.select.mainThreadMsPerEvent": { "max": 10 },
+    "input.drag.mainThreadMsPerEvent": { "max": 10 },
+    "input.dragFrame.mainThreadMsPerEvent": { "max": 16 },
+    "input.marquee.mainThreadMsPerEvent": { "max": 16 },
+
+    "memory.webHeapMB.board10k": { "max": 120 },
+    "memory.webDomNodes.board10k": { "max": 12000 },
+    "memory.coreRssMB.boardsLoaded": { "max": 400 },
+    "memory.coreRssMB.peakDuringPng10k": { "max": 1500 },
+    "memory.coreRssMB.afterMcp": { "max": 1000 },
+
+    "mcp.createBlocks10.emptyBoard.p95Ms": { "max": 50 },
+    "mcp.createBlocks100.emptyBoard.p95Ms": { "max": 80 },
+    "mcp.createBlocks10.board10k.p95Ms": { "max": 50 },
+    "mcp.createBlocks100.board10k.p95Ms": { "max": 80 },
+    "mcp.getBoard.board10k.ms": { "max": 400 },
+    "mcp.lintLayout.board10k.ms": { "max": 250 },
+    "mcp.renderSnapshotSvg.board10k.ms": { "max": 1500 },
+    "mcp.renderSnapshotPng.frame.ms": { "max": 1000 },
+    "mcp.renderSnapshotPng.board1k.ms": { "max": 3000 },
+    "mcp.renderSnapshotPng.board10k.ms": { "max": 4000 },
+    "mcp.coreResponsiveDuringSnapshot.maxMs": { "max": 250 }
+  }
+}

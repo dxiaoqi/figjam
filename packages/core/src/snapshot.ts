@@ -1,6 +1,8 @@
-import { bytesToBase64, estimateLabelSize, placeLabel, rotatedBounds, routeConnector, type Block, type Connector, type Rect } from '@aifig/shared'
+import { bytesToBase64, estimateLabelSize, placeLabel, rotatedBounds, routeConnector, SpatialGrid, type Block, type Connector, type Rect } from '@aifig/shared'
 import { CARD_ACCENT, CARD_BODY_SIZE, CARD_TITLE_SIZE, stickyFontSize, wrapText } from '@aifig/shared'
 import { COLORS, FONT_SIZES, LINE_HEIGHT, RADII, SPACING, SURFACES } from '@aifig/shared'
+import { createRequire } from 'node:module'
+import { Worker } from 'node:worker_threads'
 import type { Board } from './board'
 import { bboxOf, contentHeight } from './layout'
 import { fieldSummary, templateRows, typeDef, typeFields, type TypeRegistry } from '@aifig/shared'
@@ -20,6 +22,33 @@ function textLines(lines: string[], x: number, y: number, fs: number, fill: stri
     .join('')
 }
 
+/** Text smaller than this on the PNG is drawn as bars, like the canvas far-zoom view (unreadable anyway, and shaping thousands of runs is slow). */
+const MIN_TEXT_PX = 4
+const MAX_PNG_PIXELS = 16_000_000
+/** Blocks / connectors rendered between yields to the event loop, so live sync keeps flowing during big snapshots. */
+const YIELD_EVERY = 400
+const yieldToLoop = () => new Promise<void>((r) => setImmediate(r))
+
+/** Replace `<text>` runs that would render below MIN_TEXT_PX with rounded bars of about the same size and color. */
+export function greekText(svg: string, zoom: number) {
+  if (11 * zoom >= MIN_TEXT_PX) return svg
+  return svg.replace(/<text ([^>]*)>([^<]*)<\/text>/g, (whole, attrs: string, body: string) => {
+    const num = (name: string) => Number(attrs.match(new RegExp(`(?:^| )${name}="([-\\d.e]+)"`))?.[1] ?? NaN)
+    const fs = num('font-size')
+    const x = num('x')
+    const y = num('y')
+    if (!(fs * zoom < MIN_TEXT_PX) || Number.isNaN(x) || Number.isNaN(y)) return whole
+    const chars = body.replace(/&[a-z]+;/g, '_')
+    let em = 0
+    for (const ch of chars) em += ch.codePointAt(0)! >= 0x2e80 ? 1 : 0.55
+    const w = em * fs
+    const left = /text-anchor="middle"/.test(attrs) ? x - w / 2 : x
+    const fill = attrs.match(/fill="([^"]+)"/)?.[1] ?? '#888'
+    const opacity = Number(attrs.match(/opacity="([\d.]+)"/)?.[1] ?? 1) * 0.45
+    return `<rect x="${left.toFixed(1)}" y="${(y - fs * 0.62).toFixed(1)}" width="${w.toFixed(1)}" height="${(fs * 0.5).toFixed(1)}" rx="${(fs * 0.25).toFixed(1)}" fill="${fill}" opacity="${opacity.toFixed(2)}"/>`
+  })
+}
+
 const isCollapsed = (b: Block) => (b.kind === 'card' || b.kind === 'sticky') && contentHeight(b) > b.h + 4
 
 /** Same long-content treatment as the canvas: a fade over the last lines and a "Show more" hint. */
@@ -34,11 +63,11 @@ function collapsedFade(b: Block, r: Rect, bg: string, ink: string) {
 }
 
 /** Type header ("✦ INSIGHT") at the top of a typed block; returns the svg and the height it takes. */
-function typeHeader(b: Block, x: number, y: number, ink: string, reg: TypeRegistry) {
+function typeHeader(b: Block, x: number, y: number, ink: string, reg: TypeRegistry, opacity = 0.78) {
   if (!b.type) return { svg: '', h: 0 }
   const d = typeDef(b.type, reg)
   const done = b.type === 'todo' && typeFields(b, reg).done
-  return { svg: `<text x="${x}" y="${y + 11}" font-size="11" font-weight="650" letter-spacing="0.4" fill="${ink}" opacity="0.72">${done ? '☑' : esc(d.glyph)}  ${esc(d.label.toUpperCase())}</text>`, h: 22 }
+  return { svg: `<text x="${x}" y="${y + 11}" font-size="11" font-weight="650" letter-spacing="0.4" fill="${ink}" opacity="${opacity}">${done ? '☑' : esc(d.glyph)}  ${esc(d.label.toUpperCase())}</text>`, h: 22 }
 }
 
 /** Collapsed field summary at the bottom of a typed block. */
@@ -52,7 +81,7 @@ function typeFooter(b: Block, r: Rect, ink: string, reg: TypeRegistry, muted = i
     y += 20
     return line
   })
-  if (sum) out.push(`<text x="${x}" y="${r.y + r.h - 14}" font-size="11.5" font-weight="550" fill="${ink}" opacity="0.66">${esc(sum)}</text>`)
+  if (sum) out.push(`<text x="${x}" y="${r.y + r.h - 14}" font-size="11.5" font-weight="550" fill="${ink}" opacity="0.78">${esc(sum)}</text>`)
   return out.join('')
 }
 
@@ -93,7 +122,9 @@ export async function renderSnapshot(
     return `<rect x="${r.x - 4}" y="${r.y - 4}" width="${r.w + 8}" height="${r.h + 8}" rx="${radius + 3}" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="5 4"/>`
   }
 
+  let step = 0
   for (const b of sorted) {
+    if (++step % YIELD_EVERY === 0) await yieldToLoop()
     const r = rects.get(b.id)!
     const c = COLORS[b.color]?.[theme] ?? COLORS.gray[theme]
     const pad = SPACING.blockPadding
@@ -144,7 +175,7 @@ export async function renderSnapshot(
       parts.push(`<clipPath id="clip-${b.id}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${RADII.card}"/></clipPath>`)
       parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${CARD_ACCENT}" fill="${c.accent}" clip-path="url(#clip-${b.id})"/>`)
       let y = r.y + pad + CARD_ACCENT
-      const head = typeHeader(b, r.x + pad, y - 2, c.accent, reg)
+      const head = typeHeader(b, r.x + pad, y - 2, theme === 'light' ? c.ink : c.accent, reg, 1)
       parts.push(head.svg)
       y += head.h
       parts.push(typeFooter(b, r, surf.ink, reg, surf.muted))
@@ -171,13 +202,31 @@ export async function renderSnapshot(
   }
 
   const markers = `<marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9" fill="none" stroke="${surf.connector}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>`
+  // routing and labels only look at nearby blocks: query a grid, keeping the scope order the router relies on
   const obstacles = scope.filter((b) => b.kind !== 'frame')
-  for (const c of board.connectors.values()) {
+  const grid = new SpatialGrid(512)
+  const rank = new Map<string, number>()
+  obstacles.forEach((b, i) => {
+    grid.set(b.id, visual(b))
+    rank.set(b.id, i)
+  })
+  const near = (area: Rect, skip: (string | null | undefined)[] = []) =>
+    grid
+      .query(area)
+      .filter((id) => !skip.includes(id))
+      .sort((p, q) => rank.get(p)! - rank.get(q)!)
+      .map((id) => grid.get(id)!)
+  for (const c of [...board.connectors.values()]) {
+    if (++step % YIELD_EVERY === 0) await yieldToLoop()
     const fr = c.from ? rects.get(c.from) : null
     const tr = c.to ? rects.get(c.to) : null
     if ((c.from && !fr) || (c.to && !tr)) continue
     if (!fr && !tr && opts.ids?.length) continue
-    const obs = obstacles.filter((b) => b.id !== c.from && b.id !== c.to).map(visual)
+    const ends = [fr, tr, c.fromPoint && { ...c.fromPoint, w: 0, h: 0 }, c.toPoint && { ...c.toPoint, w: 0, h: 0 }, ...(c.waypoints ?? []).map((p) => ({ ...p, w: 0, h: 0 }))].filter(Boolean) as Rect[]
+    const span = bboxOf(ends)
+    // the orthogonal router looks 400px (+ stub and margin) around its ends; curves bulge with distance
+    const reach = 440 + Math.max(span.w, span.h) / 2
+    const obs = near({ x: span.x - reach, y: span.y - reach, w: span.w + reach * 2, h: span.h + reach * 2 }, [c.from, c.to])
     const route = routeConnector({
       from: fr ?? null,
       fromPoint: c.fromPoint,
@@ -194,7 +243,8 @@ export async function renderSnapshot(
     parts.push(`<path d="${route.d}" stroke="${stroke}" stroke-width="1.6" fill="none" stroke-linecap="round" marker-end="url(#ah)" ${c.pending ? 'stroke-dasharray="5 4"' : ''}/>`)
     if (c.label) {
       const { w } = estimateLabelSize(c.label)
-      const { x: mx, y: my } = placeLabel(route, w, 22, obs)
+      const along = bboxOf(route.points.map((p) => ({ ...p, w: 0, h: 0 })))
+      const { x: mx, y: my } = placeLabel(route, w, 22, near({ x: along.x - w, y: along.y - 22, w: along.w + w * 2, h: along.h + 44 }, [c.from, c.to]))
       parts.push(`<rect x="${mx - w / 2}" y="${my - 11}" width="${w}" height="22" rx="6" fill="${surf.canvas}"/>`)
       parts.push(`<text x="${mx}" y="${my + 4.5}" text-anchor="middle" font-size="13" fill="${surf.muted}">${esc(c.label)}</text>`)
     }
@@ -202,13 +252,83 @@ export async function renderSnapshot(
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="${vx} ${vy} ${W} ${H}" font-family="${esc(FONT)}"><defs>${markers}</defs>${parts.join('')}</svg>`
   if (opts.format === 'svg') return { svg, png: null, width: W, height: H }
-  const { Resvg } = await import('@resvg/resvg-js')
-  const scale = Math.min(2, 2400 / Math.max(W, H))
-  const png = new Resvg(svg, {
-    fitTo: { mode: 'zoom', value: Math.max(0.25, scale) },
-    font: { loadSystemFonts: true, defaultFontFamily: 'DejaVu Sans' },
+  // giant boards: cap the raster size (an image agents can use, and bounded memory in the core)
+  const zoom = Math.min(Math.max(0.25, Math.min(2, 2400 / Math.max(W, H))), Math.sqrt(MAX_PNG_PIXELS / (W * H)))
+  const raster = greekText(svg, zoom)
+  const png = await rasterize(raster, {
+    fitTo: { mode: 'zoom', value: zoom },
+    font: { loadSystemFonts: raster.includes('<text'), defaultFontFamily: 'DejaVu Sans' },
   })
-    .render()
-    .asPng()
   return { svg, png, width: W, height: H }
+}
+
+// ---- rasterizing off the event loop --------------------------------------------------------------------------
+
+type ResvgOptions = { fitTo: { mode: 'zoom'; value: number }; font: { loadSystemFonts: boolean; defaultFontFamily: string } }
+
+// Inline so the bundled desktop core needs no extra file; resvg is loaded by absolute path.
+const WORKER_SRC = `
+const { parentPort, workerData } = require('node:worker_threads')
+const { Resvg } = require(workerData)
+parentPort.on('message', ({ id, svg, opts }) => {
+  try {
+    parentPort.postMessage({ id, png: new Resvg(svg, opts).render().asPng() })
+  } catch (e) {
+    parentPort.postMessage({ id, error: String((e && e.message) || e) })
+  }
+})`
+
+let worker: Worker | null | undefined
+let idleTimer: ReturnType<typeof setTimeout> | undefined
+const WORKER_IDLE_MS = 10_000
+let seq = 0
+const jobs = new Map<number, { resolve: (b: Buffer) => void; reject: (e: Error) => void }>()
+
+function rasterWorker(): Worker | null {
+  if (worker !== undefined) return worker
+  try {
+    const w = new Worker(WORKER_SRC, { eval: true, workerData: createRequire(import.meta.url).resolve('@resvg/resvg-js') })
+    w.unref()
+    w.on('message', (m: { id: number; png?: Uint8Array; error?: string }) => {
+      const job = jobs.get(m.id)
+      jobs.delete(m.id)
+      if (!jobs.size) {
+        w.unref()
+        // big rasters leave hundreds of MB resident in the worker; give it back when idle
+        idleTimer = setTimeout(() => {
+          if (jobs.size || worker !== w) return
+          worker = undefined
+          void w.terminate()
+        }, WORKER_IDLE_MS)
+        idleTimer.unref()
+      }
+      if (m.error || !m.png) job?.reject(new Error(m.error ?? 'Rasterizing failed'))
+      else job?.resolve(Buffer.from(m.png.buffer, m.png.byteOffset, m.png.byteLength))
+    })
+    w.on('error', (e) => {
+      for (const j of jobs.values()) j.reject(e)
+      jobs.clear()
+      worker = undefined
+    })
+    worker = w
+  } catch {
+    worker = null
+  }
+  return worker
+}
+
+/** Render SVG to PNG in a worker thread so large boards don't stall live sync and other agents (inline fallback). */
+async function rasterize(svg: string, opts: ResvgOptions): Promise<Buffer> {
+  const w = rasterWorker()
+  if (w) {
+    const id = ++seq
+    return new Promise<Buffer>((resolve, reject) => {
+      jobs.set(id, { resolve, reject })
+      clearTimeout(idleTimer)
+      w.ref()
+      w.postMessage({ id, svg, opts })
+    })
+  }
+  const { Resvg } = await import('@resvg/resvg-js')
+  return new Resvg(svg, opts).render().asPng()
 }

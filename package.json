@@ -32,7 +32,9 @@
     "test:aesthetics:update": "node scripts/aesthetics.mjs --update",
     "test:e2e": "node scripts/engine-e2e.mjs",
     "test:data-safety": "node --import tsx --test tests/data-safety/*.test.ts && node scripts/data-safety.mjs",
-    "test:onboarding": "node scripts/onboarding-e2e.mjs"
+    "test:onboarding": "node scripts/onboarding-e2e.mjs",
+    "bench": "node scripts/bench/run.mjs",
+    "test:contrast": "tsx scripts/contrast.ts"
   },
   "dependencies": {
     "tsx": "^4.23.15"

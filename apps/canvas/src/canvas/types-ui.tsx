@@ -208,7 +208,8 @@ export function TypeFilterBar() {
   const f = useTypeFilter()
   const { mode: commentMode } = useCommentPrefs()
   useT()
-  const blocks = editor.blocks().filter(isTypeable)
+  const docVersion = editor.getDocVersion()
+  const blocks = useMemo(() => editor.blocks().filter(isTypeable), [editor, docVersion])
   const reg = useTypes()
   const counts = useMemo(() => {
     const c: Record<string, number> = {}

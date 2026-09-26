@@ -44,13 +44,13 @@
   --secondary: oklch(0.97 0.001 106.424);
   --secondary-foreground: oklch(0.216 0.006 56.043);
   --muted: oklch(0.97 0.001 106.424);
-  --muted-foreground: oklch(0.553 0.013 58.071);
+  --muted-foreground: oklch(0.54 0.013 58.071);
   --accent: oklch(0.97 0.001 106.424);
   --accent-foreground: oklch(0.216 0.006 56.043);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.923 0.003 48.717);
   --input: oklch(0.923 0.003 48.717);
-  --ring: oklch(0.709 0.01 56.259);
+  --ring: oklch(0.62 0.01 56.259);
   --chrome: color-mix(in oklab, white 88%, transparent);
   --chrome-shadow: 0 1px 2px rgb(28 25 23 / 0.06), 0 4px 16px rgb(28 25 23 / 0.06);
 }
@@ -483,11 +483,15 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   line-height: 1;
-  opacity: 0.72;
+  opacity: 0.78;
 }
+/* accents are too light for 11px text on white (WCAG AA); the hue's ink keeps the color identity */
 .aifig-card .aifig-type-header {
-  color: var(--c-accent);
+  color: var(--c-ink);
   opacity: 1;
+}
+.dark .aifig-card .aifig-type-header {
+  color: var(--c-accent);
 }
 .aifig-type-footer {
   display: flex;
@@ -597,7 +601,7 @@
 /* engine theme */
 .aifig-canvas {
   --ae-accent: #5b5bd6;
-  --ae-connector: #a8a29e;
+  --ae-connector: #908b88;
   --ae-grid-dot: rgb(28 25 23 / 0.13);
   --ae-label-bg: var(--canvas);
   --ae-label-ink: var(--muted-c);

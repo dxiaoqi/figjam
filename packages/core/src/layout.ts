@@ -273,10 +273,16 @@ export function layout(
 
 export function bboxOf(rects: Rect[]): Rect {
   if (!rects.length) return { x: 0, y: 0, w: 0, h: 0 }
-  const x = Math.min(...rects.map((r) => r.x))
-  const y = Math.min(...rects.map((r) => r.y))
-  const r = Math.max(...rects.map((r) => r.x + r.w))
-  const b = Math.max(...rects.map((r) => r.y + r.h))
+  let x = Infinity
+  let y = Infinity
+  let r = -Infinity
+  let b = -Infinity
+  for (const q of rects) {
+    if (q.x < x) x = q.x
+    if (q.y < y) y = q.y
+    if (q.x + q.w > r) r = q.x + q.w
+    if (q.y + q.h > b) b = q.y + q.h
+  }
   return { x, y, w: r - x, h: b - y }
 }
 
@@ -395,17 +401,29 @@ export function lintBlocks(all: Block[], scope: Block[], label: (b: Block) => st
     byParent.get(k)!.push(b)
   }
   for (const [, sibs] of byParent) {
-    for (let i = 0; i < sibs.length; i++) {
-      for (let j = i + 1; j < sibs.length; j++) {
-        const a = sibs[i]
-        const b = sibs[j]
-        if (intersects(a, b, -1)) {
-          issues.push({ severity: 'error', rule: 'overlap', ids: [a.id, b.id], message: `${label(a)} overlaps ${label(b)}` })
-        }
+    // sweep along x; pairs are reported in the same (i, j) order as a pairwise scan
+    const byX = sibs.map((b, i) => ({ b, i })).sort((p, q) => p.b.x - q.b.x)
+    const pairs: [number, number][] = []
+    for (let s = 0; s < byX.length; s++) {
+      const { b: a, i } = byX[s]
+      for (let t = s + 1; t < byX.length && byX[t].b.x < a.x + a.w - 1; t++) {
+        const { b, i: j } = byX[t]
+        if (intersects(a, b, -1)) pairs.push(i < j ? [i, j] : [j, i])
       }
     }
+    pairs.sort((p, q) => p[0] - q[0] || p[1] - q[1])
+    for (const [i, j] of pairs) issues.push({ severity: 'error', rule: 'overlap', ids: [sibs[i].id, sibs[j].id], message: `${label(sibs[i])} overlaps ${label(sibs[j])}` })
   }
   const frames = new Map(all.filter((b) => b.kind === 'frame').map((f) => [f.id, f]))
+  const inScope = new Set(scope.map((b) => b.id))
+  const scopeParents = new Set(scope.map((b) => b.parent).filter(Boolean))
+  const kidColors = new Map<string, Set<string>>()
+  for (const b of all) {
+    if (!b.parent || b.kind === 'text') continue
+    let s = kidColors.get(b.parent)
+    if (!s) kidColors.set(b.parent, (s = new Set()))
+    s.add(b.color)
+  }
   for (const b of scope) {
     if (b.kind !== 'frame') {
       // content taller than the block is fine once it's at its max height (it collapses behind "Show more"); below that it's clipped
@@ -428,8 +446,8 @@ export function lintBlocks(all: Block[], scope: Block[], label: (b: Block) => st
     }
   }
   for (const f of frames.values()) {
-    if (!scope.includes(f) && !scope.some((b) => b.parent === f.id)) continue
-    const colors = new Set(all.filter((b) => b.parent === f.id && b.kind !== 'text').map((b) => b.color))
+    if (!inScope.has(f.id) && !scopeParents.has(f.id)) continue
+    const colors = kidColors.get(f.id) ?? new Set()
     if (colors.size > 4) {
       issues.push({ severity: 'warning', rule: 'too-many-colors', ids: [f.id], message: `Frame "${f.title}" uses ${colors.size} colors; keep it to 4 or fewer` })
     }

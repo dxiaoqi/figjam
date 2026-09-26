@@ -502,4 +502,33 @@ node scripts/mcp-http-smoke.mjs                       # MCP over local HTTP
 node scripts/mcp-smoke.mjs                            # MCP over stdio
 node scripts/mvp-run.mjs <out-dir>                    # the recorded Phase 0 validation run
 node scripts/shot.mjs out.png [--dark] [--w=390]      # screenshot the running canvas (headless Chrome)
+npm run test:contrast                                 # WCAG AA contrast of tokens and theme, light and dark
+npm run bench                                         # performance report + budgets (see below)
 ```
+
+### Performance and quality budgets
+
+`npm run bench` generates deterministic 200 / 1k / 10k-block boards (frames, typed blocks, cards, images, web
+snippets, connectors) in a temporary home, builds the app and measures:
+
+- cold start: core (empty and with 11k blocks), web (cold browser profile, medium board), desktop (Electron spawning
+  its own core)
+- open-board time for 1k and 10k boards, browser heap and DOM size, core memory
+- 10k board in headless Chrome: fps and main-thread time for pan (100% / 40% / fit) and zoom through the level of
+  detail; input→frame latency for hover, select, drag, frame drag and marquee
+- Canvas API over MCP (HTTP): `create_blocks` ×10 / ×100 on an empty and a 10k board, `get_board`, `lint_layout`,
+  `render_snapshot`, and how responsive the core stays during a large PNG snapshot
+
+It writes `bench-results/latest.json` (`--out=…`) and exits 1 when a metric misses its budget in
+`scripts/bench/budgets.json`. Options: `--quick`, `--only=core,web,frames,mcp,desktop`, `--skip-desktop`,
+`--skip-build`, `--no-budgets`. Headless Chrome renders in software, so latencies include software raster; fps and
+main-thread time are the numbers to watch. `node scripts/bench/profile.mjs <app-url> <board> <scenario>` prints the
+hottest functions for one interaction (point it at `npm run dev` for readable names).
+
+How the canvas stays fast on big boards: a spatial grid indexes block bounds incrementally from Yjs changes, so hit
+tests, culling, snapping, marquee and connector obstacles only look at nearby blocks; connector routes and labels are
+cached against the grid cells around them rather than the whole document; only blocks and connectors near the
+viewport are rendered, and new ones outside it are mounted a batch per frame; far zoom draws on a canvas (a cached
+bitmap once the view holds thousands of blocks) while mounted blocks stay hidden, so zooming back in is instant. The
+core renders snapshots from the same grid, draws unreadably small text as bars, caps PNGs at 16 megapixels and
+rasterizes them in a worker thread.

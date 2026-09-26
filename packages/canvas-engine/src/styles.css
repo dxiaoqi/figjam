@@ -2,10 +2,10 @@
 .ae-canvas {
   --ae-accent: #5b5bd6;
   --ae-guide: #e5484d;
-  --ae-connector: #a8a29e;
+  --ae-connector: #908b88;
   --ae-grid-dot: rgb(28 25 23 / 0.13);
   --ae-label-bg: #fafaf9;
-  --ae-label-ink: #78716c;
+  --ae-label-ink: #756e69;
   position: relative;
   width: 100%;
   height: 100%;
@@ -198,6 +198,15 @@
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+
+/* far zoom draws on the canvas; blocks stay mounted but unpainted so zooming back in is instant */
+.ae-canvas.is-lod .ae-layer {
+  visibility: hidden;
+}
+
+.ae-canvas.is-lod .ae-block.is-editing {
+  visibility: visible;
 }
 
 /* connector endpoints: hollow when floating, filled when bound to a block */
