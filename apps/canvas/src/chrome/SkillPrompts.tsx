@@ -1,7 +1,7 @@
 import { Plus, ShieldQuestion, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { COLOR_TOKENS, COLORS, SKILL_ICONS, type FieldDef, type PermissionRequest } from '@aifig/shared'
+import { COLOR_TOKENS, COLORS, SKILL_ICONS, type FieldDef, type SkillPermissionRequest } from '@aifig/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -15,10 +15,10 @@ import { S } from '../lib/strings'
 /** First-use permission prompt for L1 skill tools (requests live in the board document). */
 export function PermissionPrompt() {
   const { provider, boardId } = useBoard()
-  const [reqs, setReqs] = useState<PermissionRequest[]>([])
+  const [reqs, setReqs] = useState<SkillPermissionRequest[]>([])
   const [busy, setBusy] = useState(false)
   useEffect(() => {
-    const map = provider.doc.getMap<PermissionRequest>('permissionRequests')
+    const map = provider.doc.getMap<SkillPermissionRequest>('permissionRequests')
     const update = () => setReqs([...map.values()].sort((a, b) => a.at - b.at))
     update()
     map.observe(update)

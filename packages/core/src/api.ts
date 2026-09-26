@@ -64,7 +64,7 @@ import {
   type LayoutItem,
 } from './layout'
 import { McpTools } from './mcp-client'
-import { BoardPermissions, type AuditLog, type PermissionBroker } from './permissions'
+import { BoardPermissions, type SkillAuditLog, type SkillPermissionBroker } from './skill-permissions'
 import { PresenceHub, identify } from './presence'
 import { SkillLibrary, userSkillsDir, writeSkillFolder } from './skills'
 
@@ -277,7 +277,7 @@ export class CanvasCore {
   private persistTimer: ReturnType<typeof setTimeout> | null = null
   readonly skills = new SkillLibrary()
   /** Swap for the shared security foundation when it lands (see permissions.ts). */
-  perms: PermissionBroker & AuditLog = new BoardPermissions()
+  perms: SkillPermissionBroker & SkillAuditLog = new BoardPermissions()
   readonly mcpTools = new McpTools()
 
   private get statePath() {

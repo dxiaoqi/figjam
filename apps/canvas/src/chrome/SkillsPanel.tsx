@@ -1,7 +1,7 @@
 import { ChevronDown, FolderInput, Puzzle, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { COLORS, type ActivityEntry, type SkillGrant } from '@aifig/shared'
+import { COLORS, type SkillActivityEntry, type SkillGrant } from '@aifig/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -175,8 +175,8 @@ function SkillCard({ s, onChange }: { s: SkillRow; onChange: () => void }) {
 
 function ActivityList() {
   const { boardId } = useBoard()
-  const [data, setData] = useState<{ activity: ActivityEntry[]; grants: SkillGrant[] } | null>(null)
-  const load = useCallback(() => callCore<{ activity: ActivityEntry[]; grants: SkillGrant[] }>('list_activity', { board: boardId, limit: 100 }).then(setData, () => {}), [boardId])
+  const [data, setData] = useState<{ activity: SkillActivityEntry[]; grants: SkillGrant[] } | null>(null)
+  const load = useCallback(() => callCore<{ activity: SkillActivityEntry[]; grants: SkillGrant[] }>('list_activity', { board: boardId, limit: 100 }).then(setData, () => {}), [boardId])
   useEffect(() => {
     load()
     const t = setInterval(load, 2000)

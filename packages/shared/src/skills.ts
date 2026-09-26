@@ -82,7 +82,7 @@ export function skillTypeRegistry(skills: Iterable<Pick<BoardSkill, 'canvas'>>):
 }
 
 /** Activity log entry (§3.3 audit): tool calls, permission decisions, enabling/disabling. */
-export interface ActivityEntry {
+export interface SkillActivityEntry {
   id: string
   at: number
   skill: string
@@ -94,7 +94,7 @@ export interface ActivityEntry {
   detail?: string
 }
 
-export interface PermissionRequest {
+export interface SkillPermissionRequest {
   id: string
   at: number
   skill: string
