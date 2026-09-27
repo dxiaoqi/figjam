@@ -70,8 +70,8 @@ await renderSnippet(variantB, { width: 960, height: 600 }, async (page) => {
 })
 const sketch = path.join(tmp, 'variant-c-sketch.png')
 await renderSnippet(variantC, { width: 880, height: 560 }, (page) => page.screenshot({ path: sketch }))
-const video = await call('add_video', { board, path: walkthrough, inside: brief.id, caption: 'B · walkthrough' })
-await call('add_image', { board, path: sketch, inside: brief.id, width: 320, caption: 'C · screenshot' })
+const video = await call('add_video', { board, path: walkthrough, inside: brief.id, width: 288, caption: 'B · walkthrough' })
+await call('add_image', { board, path: sketch, inside: brief.id, width: 288, caption: 'C · screenshot' })
 await call('review_change_set', { board, id: 'all', action: 'accept' })
 await call('tidy', { board, frame: brief.id })
 await call('create_version', { board, name: 'Ready to share' })
@@ -86,12 +86,12 @@ await ctx.addInitScript((t) => {
 const page = await ctx.newPage()
 const shot = (name, p = page) => p.screenshot({ path: path.join(out, name) })
 const open = async (id, locale) => {
-  await page.goto(`${base}/?board=${id}`)
+  await page.goto(`${base}/?board=${id}&perf`)
   if (locale) {
     await page.evaluate((l) => localStorage.setItem('aifig:locale', l), locale)
     await page.reload()
   }
-  await page.waitForSelector('.ae-block', { timeout: 20000 })
+  await page.waitForSelector('.ae-canvas', { timeout: 20000 })
   await page.waitForTimeout(1800)
 }
 const focus = (id, pad = 60) =>
