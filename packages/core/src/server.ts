@@ -17,7 +17,8 @@ import { CanvasCore } from './api'
 import { buildMcpServer } from './mcp'
 import { ActivityLog } from './activity'
 import { Assistant } from './assistant'
-import { localPolicy, presentedToken, selectWsProtocol, tokenGuard } from './auth'
+import { localPolicy, presentedToken, selectWsProtocol, tokenGuard, tokensEqual } from './auth'
+import { ASSET_PATH_RE, assetKeyFor, receiveUpload, serveAsset } from './asset-routes'
 import { aifigHome, type Board } from './board'
 import { PermissionBroker } from './permissions'
 import { auditedStore, openSecretStore } from './secrets'
@@ -111,7 +112,11 @@ export async function startCore(port = CORE_PORT) {
     })
   }
   core.registry.all().forEach(bindBoard)
-  core.registry.onBoardAdded = bindBoard
+  const onAdded = core.registry.onBoardAdded
+  core.registry.onBoardAdded = (b) => {
+    onAdded?.(b)
+    bindBoard(b)
+  }
 
   const broadcastPresence = () => {
     const msg: ServerMessage = { type: 'presence', agents: core.presence.list() }
@@ -129,6 +134,7 @@ export async function startCore(port = CORE_PORT) {
     settled: (id, decision) => broadcast({ type: 'permission-settled', id, decision }),
   }
   activity.onRecord((entry) => broadcast({ type: 'activity', entry }))
+  core.snippetFiles.onEvent = (e) => broadcast(e)
 
   /** Host (DNS rebinding), Origin (foreign pages) and the access token, for every API / MCP / sync request. */
   const gate = (req: http.IncomingMessage, surface: string): { status: number; error: string } | null => {
@@ -206,6 +212,17 @@ export async function startCore(port = CORE_PORT) {
       return res.end()
     }
     try {
+      // media elements can't send headers: asset files also take the asset key (`?k=`), which only reads them
+      const assetGet = url.pathname.match(ASSET_PATH_RE)
+      if (assetGet && (req.method === 'GET' || req.method === 'HEAD')) {
+        const keyOk = tokensEqual(url.searchParams.get('k'), assetKeyFor(guard.token))
+        const denied = keyOk && policy.hostOk(req.headers.host) && policy.originOk(req.headers.origin) ? null : gate(req, 'api')
+        if (denied) return json(res, denied.status, { ok: false, error: denied.error })
+        const board = core.registry.get(assetGet[1])
+        const asset = board?.assets.get(assetGet[2])
+        if (!board || !asset?.hash) return json(res, 404, { ok: false, error: 'No such asset' })
+        return serveAsset(req, res, board, asset)
+      }
       if (url.pathname.startsWith('/api/')) {
         const denied = gate(req, url.pathname === '/api/health' ? 'health' : 'api')
         // liveness stays answerable without the token (for clients deciding whether to start a core); details don't
@@ -213,7 +230,7 @@ export async function startCore(port = CORE_PORT) {
         if (denied) return json(res, denied.status, { ok: false, error: denied.error }, denied.status === 401 ? { 'www-authenticate': 'Bearer realm="ai-figma"' } : {})
       }
       if (url.pathname === '/api/health') {
-        return json(res, 200, { ok: true, name: 'aifig-core', auth: 'token', authenticated: true, home, bin: binPath, mcp: mcpLaunch, mcpUrl: `http://127.0.0.1:${port}/mcp`, token: guard.token, snippetOrigin: snippets.ok ? snippetOrigin(snippets.port) : null, boards: core.registry.all().length, pid: process.pid, secrets: { backend: secrets.backend, persistent: secrets.persistent, osBacked: secrets.osBacked }, readableCopy: readableCopies.status() })
+        return json(res, 200, { ok: true, name: 'aifig-core', auth: 'token', authenticated: true, home, bin: binPath, mcp: mcpLaunch, mcpUrl: `http://127.0.0.1:${port}/mcp`, token: guard.token, assetKey: assetKeyFor(guard.token), snippetOrigin: snippets.ok ? snippetOrigin(snippets.port) : null, boards: core.registry.all().length, pid: process.pid, secrets: { backend: secrets.backend, persistent: secrets.persistent, osBacked: secrets.osBacked }, readableCopy: readableCopies.status() })
       }
       if (url.pathname === '/api/activity' && req.method === 'GET') {
         const category = url.searchParams.get('category') ?? undefined
@@ -249,6 +266,13 @@ export async function startCore(port = CORE_PORT) {
       }
       if (url.pathname === '/api/boards' && req.method === 'GET') {
         return json(res, 200, { boards: core.registry.all().map((b) => b.summary()), active: core.activeBoardId })
+      }
+      const upload = url.pathname.match(/^\/api\/boards\/([\w-]+)\/assets$/)
+      if (upload && req.method === 'POST') {
+        const board = core.registry.get(upload[1])
+        if (!board) return json(res, 404, { ok: false, error: 'No such board' })
+        const r = await receiveUpload(req, board, url)
+        return json(res, r.status, r.body)
       }
       if (url.pathname === '/api/call' && req.method === 'POST') {
         const body = JSON.parse((await readBody(req)) || '{}') as CallRequest

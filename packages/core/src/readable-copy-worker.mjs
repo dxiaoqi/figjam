@@ -22,7 +22,7 @@ parentPort.on('message', ({ id, file, payload, board, title, schema }) => {
       blocks: values('blocks'),
       connectors: values('connectors'),
       changeSets: values('changeSets'),
-      assets: values('assets').map(({ bytes, ...rest }) => ({ ...rest, size: bytes.byteLength })),
+      assets: values('assets'),
       threads: values('threads'),
     }
     const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.w${++n}.tmp`)

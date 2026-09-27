@@ -11,6 +11,7 @@ import { Logo } from './chrome/BoardMenu'
 import { TokenGate } from './chrome/TokenGate'
 import { UNAUTHORIZED } from './lib/auth'
 import { callCore, fetchBoards, fetchHealth, Unauthorized, type Health } from './lib/core'
+import { setAssetKey } from './lib/assets'
 import { desktop } from './lib/desktop'
 import { CoreProvider } from './sync/provider'
 import { getLocale, subscribeLocale, t, tn, useLocale, useT, type LocalePref } from './i18n'
@@ -100,6 +101,7 @@ export default function App() {
     setRetrying(true)
     try {
       const [h, b] = await Promise.all([fetchHealth(), fetchBoards()])
+      setAssetKey(h.assetKey)
       setHealth(h)
       setBoards(b.boards)
       setOffline(false)

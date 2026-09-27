@@ -65,7 +65,8 @@ and shortcuts (New Board ⌘N, Open… ⌘O, Open Recent, Save As… ⇧⌘S, Ex
 minimap, Appearance), opens `.aifig` files from anywhere (Save As keeps the chosen file in sync), follows the OS
 light/dark setting, and its **Connect agent** dialog points agents at the bundled CLI/MCP.
 
-Boards live in `~/.aifig/boards/<id>.aifig` (checksummed Yjs state, see below) with a readable `<id>.json` next to it.
+Boards live in `~/.aifig/boards/<id>.aifig` (checksummed Yjs state, see below) with their files in `<id>.assets/` and
+a readable `<id>.json` next to it (see [Files next to the board](#files-next-to-the-board)).
 The same folder (kept at `0700`) holds `access-token`, `permissions.json` and `activity.jsonl`. Override the
 location with `AIFIG_HOME`, and ports with `AIFIG_CORE_PORT` / `AIFIG_UI_PORT`. `~/.aifig/state.json` remembers the
 board last active in the canvas, which is the default for tools called without `board` (agents should pass it anyway).
@@ -84,8 +85,8 @@ board last active in the canvas, which is the default for tools called without `
   previewed read-only; restoring checkpoints the current state first and ⌘Z undoes it. Retention keeps the newest 20
   automatic versions, then one per hour for 48 hours, then one per day for 30 days; named checkpoints stay until you
   delete them. History lives in `~/.aifig/history/<board>/`.
-- **File format.** `.aifig` files carry a header with a schema version (currently `1.0`) and a SHA-256 checksum of the
-  Yjs document. Older files are migrated forward on open (the original is kept in the backups); files from a newer
+- **File format.** `.aifig` files carry a header with a schema version (currently `2.0`), a SHA-256 checksum of the
+  Yjs document and the list of asset files it needs. Older files are migrated forward on open (the original is kept in the backups); files from a newer
   *major* version are refused with a message saying to update, and are left untouched.
 - **Corruption recovery.** If a board file is truncated or fails its checksum, the core keeps the damaged file aside
   (`backups/damaged/`), loads the newest copy that verifies (Save As mirror, version or backup) and shows a banner saying
@@ -100,6 +101,53 @@ board last active in the canvas, which is the default for tools called without `
 
   *Open backup folder* is in the board menu and in Version history; `aifig backups --open` from a terminal. Backups are
   plain `.aifig` files — open one with **Open…** to look inside.
+
+### Files next to the board
+
+Images, videos, video posters, snippet previews and web snippet source (HTML / CSS / JS) are real files, not bytes
+inside the Yjs document. Each is stored once, named by its content — `<sha256>.<ext>` — so the same image used five
+times (or kept by twenty versions) is one file, and a name always means the same bytes. The files are made read-only;
+editing happens through copies (below) and comes back as a new file.
+
+| Where | What |
+|---|---|
+| `~/.aifig/boards/<id>.aifig` + `<id>.assets/` | the board and its files (the core's working copy) |
+| `Name.aifig` + `Name.assets/` | a board you opened or saved with **Save As**: every save is mirrored to the file, and new files to the folder beside it |
+| `~/.aifig/history/<id>/v….aifig` | versions: the document only; their header lists the files they need from `<id>.assets/` |
+| `~/.aifig/backups/<title>--<id>/` | rolling backups, with one shared `assets/` pool (hard-linked when on the same disk) |
+
+*Why a folder beside the file and not a bundle or a zip:* the `.aifig` stays one small, checksummed file that opens,
+backs up and diffs like before; the files stay browsable, openable and editable in any app; and a pair travels by
+itself — move or copy `Name.aifig` together with `Name.assets/` (Finder, Explorer, `cp -r`, a USB stick) and it opens
+anywhere, because files are found by content, not by path. If the folder didn't come along, the core also looks in its
+own copy, the backups and other boards (same hash, same bytes; every file is checked before it's used), and the canvas
+and the Storage panel mark anything still missing, with **Replace…** to point at it again. Backups keep their own pool
+because they exist for the day the board's folder is gone.
+
+- **Migration.** Boards from format 1.x (bytes inside the document) move their files out on first open, their version
+  history is rewritten the same way (versions stop carrying copies of every image), and the original file is kept
+  byte for byte in the backups (`…-before-format-1.0.aifig`). Older builds refuse 2.0 files with the usual "update"
+  message instead of showing boards without images.
+- **Clean-up.** A file is deleted only when nothing names it: not the board, not a change waiting for review or an
+  accepted change that can still be undone, not any version in the history — and nothing at all is deleted while a
+  version file can't be read. The core collects such files on its own every 30 minutes (only ones older than 10
+  minutes); **Clean up unused** in the Storage panel (or `aifig assets --cleanup`) also drops files no block uses from
+  the board, and says what version history keeps. Backup pools are collected against the backups alone.
+- **Storage panel** (board menu › *Storage…*, desktop *File › Storage…*): where the board and its files are, the total
+  size by type, every file with its type, size and the blocks that use it (click to select them), *Show in Finder /
+  Explorer*, *Open in default app*, *Replace…*, *Clean up unused*, and where its history and backups are.
+- **Videos.** Drop, paste or upload an MP4 or WebM (up to 1 GB): it is uploaded into the assets folder, the canvas takes
+  a poster frame, and the block plays inline with native controls (it pauses when scrolled away). Exports show the
+  poster (PNG/SVG) or link the file (Markdown/JSON); exported web pages play it.
+- **Edit snippet source in your editor.** Right-click a web snippet › *Edit files in your editor* (or the Storage
+  panel, `aifig snippet-files <id> --open`) writes `index.html`, `style.css` and `script.js` to `snippets/<block>/` in
+  the assets folder and opens them in Cursor / VS Code (`AIFIG_EDITOR` picks another; never a browser). Every save
+  updates the canvas live, attributed to *External editor*. An agent that asks for the files (`edit_snippet_files`)
+  owns its saves for 30 minutes: each becomes a change set to review, and rejecting it rewrites the files. A save with a
+  JS syntax error is reported in the canvas and not applied.
+- Media elements load files from `/api/assets/<board>/<asset>` with an *asset key* (an HMAC of the access token that
+  opens nothing but asset files), served with `nosniff`, a sandbox CSP and Range support; snippet source is served as
+  plain text, never as a page on the app's origin.
 
 **Sandboxed launchers** (agent IDEs or tools that can't write to your home folder or use the GPU): if the core fails
 with `EACCES` or the desktop window stays white, point every writable location somewhere the sandbox allows:
@@ -174,7 +222,8 @@ use the canvas well. Copy it into `~/.claude/skills/` (or your agent's skills fo
 | Group | Tools |
 |---|---|
 | Read | `list_boards`, `get_board` (markdown or JSON outline), `get_design_tokens`, `list_templates` |
-| Write | `create_blocks` (layout intents `grid` / `row` / `stack` / `cluster` / `tree`; placement `inside` / `right_of` / `below` / new `frame`), `update_blocks` (incl. `rotation`), `delete_blocks`, `connect` (routing `curved` / `elbow` / `straight`), `update_connectors` (routing, label, elbow `waypoints`), `add_image` (file path, URL or base64 — stored inside the board), `group_into_frame`, `create_board` (optionally `template` + `language`) |
+| Write | `create_blocks` (layout intents `grid` / `row` / `stack` / `cluster` / `tree`; placement `inside` / `right_of` / `below` / new `frame`), `update_blocks` (incl. `rotation`), `delete_blocks`, `connect` (routing `curved` / `elbow` / `straight`), `update_connectors` (routing, label, elbow `waypoints`), `add_image` (file path, URL or base64), `add_video` (MP4 / WebM path, optional poster), `group_into_frame`, `create_board` (optionally `template` + `language`) |
+| Files | `list_assets` (files, sizes, paths, which blocks use them; board, history and backup locations), `replace_asset` (swap an image, video, poster or snippet source for a local file — through review), `edit_snippet_files` (editable snippet source; saves become change sets) |
 | Layout | `arrange`, `tidy`, `lint_layout` |
 | Look | `render_snapshot` (PNG or SVG of the board, a frame or specific blocks, rendered headlessly by the core) |
 | Collaborate | `set_status`, `begin_change_set`, `commit_change_set`, `list_change_sets` (incl. per-item rejections and reasons), `get_threads`, `reply_thread`, `resolve_thread` |
@@ -201,6 +250,12 @@ aifig route <connectorId...> --style curved         # curved | elbow | straight
 aifig route <connectorId> --waypoints "400,120;400,480"   # elbow bends (--clear-waypoints to auto-route)
 aifig update <id> --rotate 15
 aifig image ./sketch.png --width 320 --inside "Inspiration"  # or an https:// URL
+aifig video ./demo.mp4 --poster ./demo.png         # MP4 / WebM, plays inline
+aifig assets                                       # files next to the board: type, size, users, locations
+aifig assets --cleanup [--dry-run]                 # remove files no block uses (history keeps what it needs)
+aifig replace <assetId|blockId> ./new.png          # --part poster|html|css|js
+aifig snippet-files <id> [--open]                  # editable index.html / style.css / script.js, live
+aifig storage [--reveal]                           # where the board, its files, history and backups are
 aifig tidy --frame "Principles"
 aifig lint
 aifig snapshot -o board.png                        # --dark, --frame, --ids a,b,c, .svg
@@ -259,7 +314,8 @@ connectors show bend handles: drag a hollow dot to add a bend, drag a bend to mo
 Connector labels slide along the route to stay clear of blocks. Text in stickies, cards and headings is rich text
 (⌘B, ⌘I, ⌘E for code, ⌘K for links, `- ` / `1. ` for lists) and is stored as Markdown in the board, so agents can
 write it too; ⌘/Ctrl-click opens links. Paste, drop or upload images (toolbar) — they are downscaled if huge,
-stored inside the board file, resize with a locked aspect ratio and appear in exports. On touch screens, long-press
+stored as files next to the board, resize with a locked aspect ratio and appear in exports. MP4 and WebM videos work
+the same way and play inline. On touch screens, long-press
 opens the context menu. On touch
 screens, one finger pans and two fingers pinch-zoom. The minimap (bottom-left) can be toggled and clicked to navigate.
 Far zoom switches to a canvas level of detail, so boards with thousands of blocks stay at 60fps. Dragging snaps to the 8px grid and shows alignment guides against nearby blocks; dropping
@@ -536,6 +592,7 @@ English ones longer.
 npm run typecheck                                     # every workspace
 npm run test:e2e                                      # canvas engine + app, real pointer/keyboard input (166 checks)
 npm run test:onboarding                               # languages, welcome, templates (UI/CLI/MCP), one-click agent setup; isolated core
+npm run test:sharing                                  # asset files, 1.0 migration, videos, live snippet files, storage panel (isolated core, headless Chrome)
 npm run test:aesthetics                               # agent-output aesthetics vs baselines (update: test:aesthetics:update)
 npm run test:data-safety                              # format, migrations, retention, kill -9 / SIGTERM, recovery, versions over MCP + CLI
 node scripts/desktop-e2e.mjs                          # Electron app (window, menus, files, theme, bundled MCP, keychain)
@@ -580,7 +637,7 @@ desktop suites test whichever state the flag is in.
 `npm run ci` runs typecheck, lint, every suite above, the bench budgets and the desktop e2e, one after another
 against a temporary `AIFIG_HOME` (it starts `npm run dev` for the suites that need it, on ports 47820/47821). It writes
 `ci-results/<step>.log`, `results.json` and `summary.md` and exits 1 when any step fails. `--only=` / `--skip=` take
-step ids (`typecheck, lint, api, security, data-safety, skills, contrast, onboarding, e2e, aesthetics, mcp-stdio,
+step ids (`typecheck, lint, api, security, data-safety, skills, contrast, onboarding, sharing, e2e, aesthetics, mcp-stdio,
 mcp-http, bench, desktop`). It needs Node 22+, `npm ci` and Chrome at `/usr/local/bin/google-chrome`; the desktop step
 and the bench's desktop cold start need a display (`DISPLAY`, e.g. Xvfb) and are skipped without one.
 

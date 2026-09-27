@@ -26,6 +26,8 @@ export interface Health {
   token?: string
   secrets?: { backend: string; persistent: boolean; osBacked: boolean }
   snippetOrigin?: string | null
+  /** reads asset files from media elements (see lib/assets.ts) */
+  assetKey?: string
 }
 
 export class Unauthorized extends Error {

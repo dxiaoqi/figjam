@@ -1,10 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import * as Y from 'yjs'
-import type { VersionInfo, VersionKind } from '@aifig/shared'
+import { assetFileName, type Asset, type VersionInfo, type VersionKind } from '@aifig/shared'
+import type { AssetStore } from './assets'
 import { writeFileAtomic } from './atomic'
 import { aifigHome, type RetentionPolicy } from './config'
-import { CorruptFileError, decodeContainer, encodeContainer, readHeader, type ContainerHeader } from './fileformat'
+import { compareSchema, CorruptFileError, CURRENT_SCHEMA, decodeContainer, encodeContainer, formatSchema, readHeader, type ContainerHeader } from './fileformat'
+import { migrate } from './migrations'
 
 /** Kinds that retention never removes on its own. */
 const PROTECTED: VersionKind[] = ['checkpoint', 'recovered']
@@ -77,9 +79,16 @@ export function writeVersion(board: VersionSource, kind: VersionKind, name: stri
     connectorCount: doc.getMap('connectors').size,
     ...(by ? { by } : {}),
   }
-  const bytes = encodeContainer(payload ?? Y.encodeStateAsUpdate(board.doc), { savedAt: at, board: board.id, title: board.title, schema: board.schemaLabel, version: { ...info } })
+  const bytes = encodeContainer(payload ?? Y.encodeStateAsUpdate(board.doc), { savedAt: at, board: board.id, title: board.title, schema: board.schemaLabel, version: { ...info }, assets: docAssetFiles(doc) })
   writeFileAtomic(path.join(historyDir(board.id), `${id}.aifig`), bytes)
   return { ...info, size: bytes.byteLength }
+}
+
+/** `<sha256>.<ext>` of every asset entry in a document. */
+export function docAssetFiles(doc: Y.Doc) {
+  const out = new Set<string>()
+  for (const a of doc.getMap<Asset>('assets').values()) if (a?.hash) out.add(assetFileName(a))
+  return [...out]
 }
 
 function docFrom(payload: Uint8Array) {
@@ -169,4 +178,62 @@ export function pruneVersions(boardId: string, policy: RetentionPolicy, now = Da
   const doomed = selectPrunable(listVersions(boardId), policy, now)
   for (const id of doomed) deleteVersion(boardId, id)
   return doomed
+}
+
+/**
+ * Asset files the board's history needs (from version headers only). `unreadable` counts version files
+ * whose header can't be read: garbage collection must not delete anything while that is non-zero.
+ */
+export function historyAssetFiles(boardId: string): { files: Set<string>; versions: number; unreadable: number } {
+  const dir = historyDir(boardId)
+  const files = new Set<string>()
+  let names: string[] = []
+  try {
+    names = fs.readdirSync(dir).filter((n) => n.endsWith('.aifig'))
+  } catch {
+    return { files, versions: 0, unreadable: 0 }
+  }
+  let unreadable = 0
+  for (const n of names) {
+    try {
+      const { header } = readHeaderFromFile(path.join(dir, n))
+      for (const f of header.assets ?? []) files.add(f)
+    } catch {
+      unreadable++
+    }
+  }
+  return { files, versions: names.length, unreadable }
+}
+
+/**
+ * After a board moves to schema 2.0, rewrite its older versions the same way (file bytes to the assets folder,
+ * listed in the header) so history stops carrying copies of every image. Versions that fail to decode are left
+ * alone. Returns how many were rewritten.
+ */
+export function migrateHistory(boardId: string, store: AssetStore) {
+  const dir = historyDir(boardId)
+  let names: string[] = []
+  try {
+    names = fs.readdirSync(dir).filter((n) => n.endsWith('.aifig'))
+  } catch {
+    return 0
+  }
+  let done = 0
+  for (const n of names) {
+    const file = path.join(dir, n)
+    try {
+      const data = fs.readFileSync(file)
+      const decoded = decodeContainer(data, file)
+      if (compareSchema(decoded.schema, CURRENT_SCHEMA) >= 0 || !decoded.header?.version) continue
+      const doc = new Y.Doc()
+      Y.applyUpdate(doc, decoded.payload)
+      migrate(doc, decoded.schema, undefined, undefined, { putFile: (bytes, ext) => store.put(bytes, ext).hash })
+      const h = decoded.header
+      writeFileAtomic(file, encodeContainer(Y.encodeStateAsUpdate(doc), { savedAt: h.savedAt, board: h.board, title: h.title, schema: formatSchema(CURRENT_SCHEMA), version: h.version, assets: docAssetFiles(doc) }))
+      done++
+    } catch {
+      // unreadable or damaged versions stay as they are
+    }
+  }
+  return done
 }

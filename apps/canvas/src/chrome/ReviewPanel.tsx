@@ -5,10 +5,11 @@ import { union, type Box } from '@aifig/canvas-engine'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { Block, ChangeSet, Connector } from '@aifig/shared'
+import type { Asset, Block, ChangeSet, Connector, WebSnippet } from '@aifig/shared'
 import { useBoard, useChangeSets } from '../board-context'
 import { useEditor } from '../canvas/editor-context'
 import { callCore } from '../lib/core'
+import { snippetText } from '../lib/assets'
 import { blockChanges, type DiffPart, type FieldChange } from '../lib/diff'
 import { AgentAvatar, useNow } from './TopRight'
 import { ago, t, tn, useT, type MessageKey } from '../i18n'
@@ -136,15 +137,36 @@ function ChangeRow({ c }: { c: FieldChange }) {
 /** Before/after for the item under review. */
 function ItemDiff({ cs, id }: { cs: ChangeSet; id: string }) {
   const editor = useEditor()
+  const { boardId } = useBoard()
   const entry = cs.entries.find((e) => e.id === id)
+  const now0 = editor.block(id)
+  const first0 = cs.entries.find((e) => e.id === id && e.op === 'update') as { before: Block } | undefined
+  // snippet source lives in files: read both sides before diffing
+  const [texts, setTexts] = useState<{ key: string; before: Pick<WebSnippet, 'html' | 'css' | 'js'>; now: Pick<WebSnippet, 'html' | 'css' | 'js'> } | null>(null)
+  const srcKey = `${JSON.stringify(first0?.before.web?.src ?? null)}|${JSON.stringify(now0?.web?.src ?? null)}`
+  useEffect(() => {
+    if (!first0?.before.web?.src && !now0?.web?.src) return
+    let live = true
+    const assets = editor.doc.getMap<Asset>('assets')
+    Promise.all([snippetText(boardId, assets, first0?.before.web), snippetText(boardId, assets, now0?.web)])
+      .then(([before, now]) => live && setTexts({ key: srcKey, before, now }))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [srcKey, boardId, editor])
   if (!entry || entry.target !== 'block') return null
   const frameTitle = (fid?: string | null) => (fid ? editor.block(fid)?.title || kindName('frame') : t('review.canvas'))
   let body: ReactNode = null
   if (entry.op === 'update') {
-    const now = editor.block(id)
-    const first = cs.entries.find((e) => e.id === id && e.op === 'update') as { before: Block } | undefined
-    if (!now || !first) return null
-    const changes = blockChanges(first.before, now, frameTitle)
+    let now = now0
+    let before = first0?.before
+    if (!now || !before) return null
+    if (texts?.key === srcKey && now.web && before.web) {
+      now = { ...now, web: { ...now.web, ...texts.now } }
+      before = { ...before, web: { ...before.web, ...texts.before } }
+    }
+    const changes = blockChanges(before, now, frameTitle)
     if (!changes.length) return null
     body = changes.map((c, i) => <ChangeRow key={i} c={c} />)
   } else if (entry.op === 'delete') {

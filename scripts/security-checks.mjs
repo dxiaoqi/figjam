@@ -152,6 +152,41 @@ check('the sync WebSocket from a foreign origin is rejected (403)', wsBadOrigin.
 const canvas = await wsOpen(['aifig', `aifig-token.${token}`])
 check('the sync WebSocket with the token connects (subprotocol "aifig")', canvas.ok && canvas.protocol === 'aifig')
 
+// asset files: token or asset key, read-only, never served as HTML on the app origin
+{
+  const png = Buffer.concat([Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex'), Buffer.from([0, 0, 0, 4, 0, 0, 0, 3]), Buffer.alloc(24, 7)])
+  const upNoToken = await fetch(`${base}/api/boards/${board}/assets?role=image`, { method: 'POST', body: png })
+  check('uploading an asset needs the token (401)', upNoToken.status === 401)
+  const up = await (await fetch(`${base}/api/boards/${board}/assets?role=image&name=x.png`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: png })).json()
+  check('uploading with the token stores the file', up.ok && /^[0-9a-f]{64}$/.test(up.asset?.hash))
+  const notImage = await fetch(`${base}/api/boards/${board}/assets?role=image`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: '<html><script>alert(1)</script>' })
+  check('an upload that isn’t an image or video is refused (415)', notImage.status === 415)
+  const key = priv.assetKey
+  const url = `/api/assets/${board}/${up.asset.id}/x.png`
+  check('the asset key is not the token', typeof key === 'string' && key.length >= 24 && key !== token && !token.includes(key))
+  const noKey = await raw({ path: url })
+  const badKey = await raw({ path: `${url}?k=${'x'.repeat(32)}` })
+  const withKey = await raw({ path: `${url}?k=${key}` })
+  check('asset files need the token or the asset key', noKey.status === 401 && badKey.status === 401 && withKey.status === 200, `${noKey.status} ${badKey.status} ${withKey.status}`)
+  check('asset responses are opaque: nosniff, sandbox CSP, same-origin CORP', withKey.headers['x-content-type-options'] === 'nosniff' && /sandbox/.test(withKey.headers['content-security-policy'] ?? '') && withKey.headers['cross-origin-resource-policy'] === 'same-origin')
+  const keyElsewhere = await raw({ path: `/api/boards?k=${key}` })
+  const keyCall = await raw({ method: 'POST', path: `/api/call?k=${key}`, headers: { 'content-type': 'application/json' } }, JSON.stringify({ tool: 'list_boards', args: {}, caller: HUMAN }))
+  check('the asset key opens nothing but asset files', keyElsewhere.status === 401 && keyCall.status === 401)
+  const keyRebind = await raw({ path: `${url}?k=${key}`, headers: { host: `evil.example:${port}` } })
+  const keyForeign = await raw({ path: `${url}?k=${key}`, headers: { origin: 'https://evil.example' } })
+  check('asset URLs still check Host and Origin', keyRebind.status === 403 && keyForeign.status === 403, `${keyRebind.status} ${keyForeign.status}`)
+  await call(HUMAN, 'create_snippet', { board, html: '<script>parent.alert(1)</script><h1>x</h1>' })
+  const info = (await call(HUMAN, 'get_storage', { board })).result
+  const html = info.assets.find((a) => a.role === 'snippet-html')
+  const served = await raw({ path: `/api/assets/${board}/${html.id}/index.html?k=${key}` })
+  check('snippet HTML is served as text/plain, never as a page on the app origin', served.status === 200 && served.headers['content-type'].startsWith('text/plain'))
+  const range = await raw({ path: `${url}?k=${key}`, headers: { range: 'bytes=0-7' } })
+  check('asset files support Range requests (video seeking)', range.status === 206 && range.headers['content-range'] === `bytes 0-7/${png.length}` && range.body.length > 0)
+  const agentReveal = await call(AGENT, 'reveal_asset', { board, what: 'history' })
+  const agentCleanup = await call(AGENT, 'cleanup_assets', { board })
+  check('revealing files and cleaning up are for people only', !agentReveal.ok && !agentCleanup.ok)
+}
+
 // permissions: an agent fetching an image by URL
 const inbox = []
 canvas.ws.onmessage = (e) => typeof e.data === 'string' && inbox.push(JSON.parse(e.data))

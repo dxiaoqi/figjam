@@ -3,8 +3,8 @@ import type { ColorToken, SizeToken } from './tokens'
 import type { WebSnippet } from './snippet'
 import type { FieldValue, Relation, TypeId } from './types'
 
-export type BlockKind = 'sticky' | 'card' | 'text' | 'frame' | 'image' | 'web'
-export const BLOCK_KINDS: BlockKind[] = ['sticky', 'card', 'text', 'frame', 'image', 'web']
+export type BlockKind = 'sticky' | 'card' | 'text' | 'frame' | 'image' | 'web' | 'video'
+export const BLOCK_KINDS: BlockKind[] = ['sticky', 'card', 'text', 'frame', 'image', 'web', 'video']
 
 export interface Author {
   kind: 'human' | 'agent'
@@ -50,8 +50,10 @@ export interface Block {
   expanded?: boolean
   /** Web snippet blocks: an embedded URL or inline HTML/CSS/JS (see snippet.ts). */
   web?: WebSnippet
-  /** Image blocks: id of an entry in the board's `assets` map. */
+  /** Image and video blocks: id of an entry in the board's `assets` map. */
   asset?: string
+  /** Video blocks: poster image (asset id), shown until the video plays. */
+  poster?: string
   /** Fractional z-index from the canvas; optional for agent-created blocks. */
   index?: string
   author?: Author
@@ -137,8 +139,33 @@ export interface Thread {
   anchor?: { x: number; y: number }
 }
 
-/** Binary asset stored inside the board document (`assets` map). */
+/** What an asset is for; decides how it is listed and opened. */
+export type AssetRole = 'image' | 'video' | 'poster' | 'preview' | 'snippet-html' | 'snippet-css' | 'snippet-js'
+
+/**
+ * A file the board uses (`assets` map). The bytes live next to the board as `<sha256>.<ext>` in its assets
+ * folder (see packages/core/src/assets.ts), so identical files are stored once and history and backups
+ * refer to them instead of copying them.
+ */
 export interface Asset {
+  id: string
+  /** SHA-256 of the file (hex); with `ext` it names the file in the assets folder. */
+  hash: string
+  ext: string
+  mime: string
+  size: number
+  role: AssetRole
+  /** Natural size of images, posters and videos. */
+  w?: number
+  h?: number
+  /** Seconds (videos). */
+  duration?: number
+  name?: string
+  createdAt: number
+}
+
+/** Schema 1.x kept asset bytes inside the document; the 2.0 migration moves them to files. */
+export interface LegacyAsset {
   id: string
   mime: string
   w: number
@@ -181,9 +208,22 @@ export interface AgentPresence {
 }
 
 /** JSON (text) messages on the sync websocket. Binary frames carry the Yjs sync protocol. */
+/** A snippet's working-copy file was saved in an editor and applied, sent to review, or refused. */
+export interface SnippetFileEvent {
+  type: 'snippet-file'
+  boardId: string
+  blockId: string
+  file: string
+  status: 'applied' | 'review' | 'error'
+  by: string
+  changeSet?: string | null
+  message?: string
+}
+
 export type ServerMessage =
   | { type: 'presence'; agents: AgentPresence[] }
   | { type: 'board-deleted'; boardId: string }
+  | SnippetFileEvent
   | import('./security').SecurityServerMessage
 
 export type ClientMessage =

@@ -61,6 +61,8 @@ export class CoreProvider {
           this.emit()
         } else if (msg.type === 'permission' || msg.type === 'permission-settled' || msg.type === 'activity') {
           window.dispatchEvent(new CustomEvent(SECURITY_EVENT, { detail: msg }))
+        } else if (msg.type === 'snippet-file' && msg.boardId === this.boardId) {
+          window.dispatchEvent(new CustomEvent('aifig:snippet-file', { detail: msg }))
         }
         return
       }

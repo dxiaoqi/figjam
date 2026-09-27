@@ -1,7 +1,7 @@
 import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { CanvasView, Editor } from '@aifig/canvas-engine'
-import { COLORS, FEATURES, SURFACES, type Author, type Block } from '@aifig/shared'
+import { COLORS, FEATURES, SURFACES, type Author, type Block, type SnippetFileEvent } from '@aifig/shared'
 import { useBoard, useProviderState } from '../board-context'
 import { BoardMenu } from '../chrome/BoardMenu'
 import { ContextMenu } from '../chrome/ContextMenu'
@@ -13,6 +13,7 @@ import { ReviewPanel } from '../chrome/ReviewPanel'
 import { StatusBanner } from '../chrome/StatusBanner'
 import { DataNotices } from '../chrome/DataNotices'
 import { VersionHistory } from '../chrome/VersionHistory'
+import { openStorage, StoragePanel } from '../chrome/StoragePanel'
 import { StylePanel } from '../chrome/StylePanel'
 import { Toolbar } from '../chrome/Toolbar'
 import { TopRight } from '../chrome/TopRight'
@@ -31,7 +32,7 @@ import { EditorContext } from './editor-context'
 import { desktop } from '../lib/desktop'
 import { downloadDocument, downloadSnapshot } from '../lib/export'
 import { openVersionHistory } from '../lib/versions'
-import { draftForPastedText, draftForTool, importImages, nextColor, shapeDefs } from './shapes'
+import { draftForPastedText, draftForTool, importFiles, nextColor, shapeDefs } from './shapes'
 import { toast } from 'sonner'
 import { relationLabel, t, useT } from '../i18n'
 
@@ -51,12 +52,14 @@ function lodStyle(b: Block) {
       return { fill: 'rgba(0,0,0,0)', accent: s.muted }
     case 'image':
       return { fill: s.border, stroke: s.border }
+    case 'video':
+      return { fill: '#1c1917', stroke: s.border }
     default:
       return { fill: c[mode].bg, accent: c[mode].accent }
   }
 }
 
-function createEditor(doc: Editor['doc']) {
+function createEditor(doc: Editor['doc'], boardId: string) {
   const editor: Editor = new Editor({
     doc,
     shapes: shapeDefs,
@@ -72,7 +75,7 @@ function createEditor(doc: Editor['doc']) {
     },
     onDoubleClickCanvas: (at) => editor.createWithTool('sticky', at),
     onFiles: (files, at) => {
-      importImages(editor, files, at).catch(() => toast.error(t('tool.imageError')))
+      importFiles(editor, boardId, files, at).catch(() => toast.error(t('tool.imageError')))
     },
     onPasteText: (text, at) => {
       if (!text.trim()) return
@@ -93,7 +96,7 @@ export function BoardCanvas() {
 
   useEffect(() => {
     if (!synced) return
-    const e = createEditor(provider.doc)
+    const e = createEditor(provider.doc, provider.boardId)
     setEditor(e)
     // `?perf` exposes the editor to `npm run bench` in production builds
     if (import.meta.env.DEV || new URLSearchParams(location.search).has('perf')) (window as any).editor = e
@@ -102,6 +105,19 @@ export function BoardCanvas() {
       setEditor(null)
     }
   }, [synced, provider])
+
+  // a snippet's files were saved in an editor: say what happened to them
+  useEffect(() => {
+    const on = (e: Event) => {
+      const m = (e as CustomEvent<SnippetFileEvent>).detail
+      const by = m.by === 'External editor' ? t('files.yourEditor') : m.by
+      if (m.status === 'error') toast.error(t('files.error', { file: m.file }), { description: m.message })
+      else if (m.status === 'review') toast.message(t('files.review', { file: m.file, by }))
+      else toast.success(t('files.applied', { file: m.file, by }))
+    }
+    window.addEventListener('aifig:snippet-file', on)
+    return () => window.removeEventListener('aifig:snippet-file', on)
+  }, [])
 
   // first frame: fit content, then keep the core informed about what the person is looking at
   useEffect(() => {
@@ -164,6 +180,8 @@ export function BoardCanvas() {
           return window.dispatchEvent(new Event('aifig:activity'))
         case 'version-history':
           return openVersionHistory()
+        case 'storage':
+          return openStorage()
         case 'export':
           if (payload === 'png' || payload === 'svg') return downloadSnapshot(boardId, document.title.replace(/ — ai-figma$/, ''), payload, { ids: ids.length ? ids : undefined, theme: themeMode })
           return downloadDocument(boardId, payload === 'json' ? 'json' : 'md')
@@ -207,6 +225,7 @@ export function BoardCanvas() {
           <StatusBanner />
           <DataNotices />
           <VersionHistory />
+          <StoragePanel />
         </EditorContext.Provider>
       ) : (
         <div className="absolute inset-0 z-[1000] flex items-center justify-center">

@@ -5,12 +5,17 @@ import type { Board, ChangeCounts } from './board'
 import { dataSafetyConfig } from './config'
 import { decodeContainer } from './fileformat'
 import type { NoticeStore } from './notices'
+import { collectBoardAssets } from './storage'
 import { deleteHistory, listVersions, pruneVersions, writeVersion } from './versions'
 
 interface Track {
   lastVersionAt: number
   lastBackupAt: number
+  lastCollectAt: number
 }
+
+/** Unreferenced asset files are collected at most this often per board (and only once they're this old). */
+const COLLECT_EVERY_MS = 30 * 60_000
 
 /** Rows of blocks that make an edit "large": the state from just before it is kept as a version. */
 export function isSignificant(p: ChangeCounts, threshold: number) {
@@ -36,7 +41,7 @@ export class DataSafety {
   private state(b: Board): Track {
     let t = this.track.get(b)
     if (!t) {
-      t = { lastVersionAt: listVersions(b.id)[0]?.createdAt ?? 0, lastBackupAt: listBackups(b.id)[0]?.savedAt ?? 0 }
+      t = { lastVersionAt: listVersions(b.id)[0]?.createdAt ?? 0, lastBackupAt: listBackups(b.id)[0]?.savedAt ?? 0, lastCollectAt: Date.now() }
       this.track.set(b, t)
     }
     return t
@@ -62,7 +67,7 @@ export class DataSafety {
   onLoaded(b: Board, data: Uint8Array) {
     const t = this.state(b)
     try {
-      const file = backupFile(b.id, b.title, data)
+      const file = backupFile(b.id, b.title, data, '', b.store)
       if (file) t.lastBackupAt = Date.now()
       if (b.lastSavedAt > t.lastVersionAt + 1000) this.snapshot(b, 'opened', 'Opened')
     } catch (e) {
@@ -103,8 +108,13 @@ export class DataSafety {
     try {
       if (now - t.lastVersionAt >= cfg.versions.intervalMinutes * 60_000) this.snapshot(b, 'auto', 'Autosave')
       if (now - t.lastBackupAt >= cfg.backups.intervalMinutes * 60_000) {
-        backupFile(b.id, b.title, fs.readFileSync(b.file))
+        backupFile(b.id, b.title, fs.readFileSync(b.file), '', b.store)
         t.lastBackupAt = now
+      }
+      if (now - t.lastCollectAt >= COLLECT_EVERY_MS) {
+        t.lastCollectAt = now
+        const r = collectBoardAssets(b)
+        if (r.deleted.length) console.error(`[core] removed ${r.deleted.length} asset file(s) of ${b.id} that nothing uses any more`)
       }
     } catch (e) {
       console.error(`[core] history/backup for ${b.id} failed:`, e)
@@ -115,7 +125,7 @@ export class DataSafety {
   beforeDelete(b: Board) {
     try {
       b.saveNow()
-      backupFile(b.id, b.title, fs.readFileSync(b.file), 'deleted')
+      backupFile(b.id, b.title, fs.readFileSync(b.file), 'deleted', b.store)
     } catch (e) {
       console.error(`[core] final backup of ${b.id} failed:`, e)
     }

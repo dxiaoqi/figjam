@@ -183,7 +183,7 @@ export const toolDefs = {
   add_image: {
     title: 'Add image',
     description:
-      'Place an image (PNG, JPEG, GIF or WebP) on the board. It is stored inside the board file. Provide a local file path, an http(s) URL, or base64 data. Placement works like create_blocks.',
+      'Place an image (PNG, JPEG, GIF or WebP) on the board. It is stored as a file in the board\'s assets folder (identical files are stored once). Provide a local file path, an http(s) URL, or base64 data. Placement works like create_blocks.',
     input: {
       board,
       path: z.string().optional().describe('Absolute path to a local image file.'),
@@ -198,6 +198,48 @@ export const toolDefs = {
       at: z.object({ x: z.number(), y: z.number() }).optional(),
       intent,
     },
+  },
+  add_video: {
+    title: 'Add video',
+    description:
+      'Place a local video (MP4 or WebM, up to 1 GB) on the board from a file path. It is stored as a file in the board\'s assets folder, plays inline in the canvas and in exported web pages, and shows its poster in PNG/SVG exports. Pass `poster` (an image path) or let the canvas capture a frame. Placement works like create_blocks; goes through review.',
+    input: {
+      board,
+      path: z.string().describe('Absolute path to an .mp4 or .webm file.'),
+      poster: z.string().optional().describe('Absolute path to a PNG/JPEG/WebP poster image.'),
+      width: z.number().optional().describe('Display width in px (default: natural width, max 640).'),
+      caption: z.string().optional(),
+      inside: z.string().optional(),
+      right_of: z.string().optional(),
+      below: z.string().optional(),
+      at: z.object({ x: z.number(), y: z.number() }).optional(),
+      intent,
+    },
+  },
+  replace_asset: {
+    title: 'Replace asset file',
+    description:
+      'Replace a file the board uses with a local file: an image, a video, a video poster, or a web snippet\'s html / css / js. Every block using the old file switches to the new one (through review). Identify it by `asset` id (see list_assets) or by `block` id (+ `part` for posters and snippet source).',
+    input: {
+      board,
+      path: z.string().optional().describe('Absolute path to the new file.'),
+      with: z.string().optional().describe('Or: id of an asset already on the board (e.g. just uploaded by the canvas).'),
+      asset: z.string().optional().describe('Asset id from list_assets.'),
+      block: z.string().optional().describe('Block id: its image or video file, or with `part` its poster / snippet source.'),
+      part: z.enum(['file', 'poster', 'html', 'css', 'js']).optional().describe('Default "file".'),
+      intent,
+    },
+  },
+  list_assets: {
+    title: 'List assets',
+    description: 'Files the board stores next to it (images, videos, posters, snippet source): type, size, path on disk and which blocks use them, plus where the board, its version history and backups live.',
+    input: { board },
+  },
+  edit_snippet_files: {
+    title: 'Edit snippet files',
+    description:
+      'Get editable files (index.html, style.css, script.js) for an inline web snippet, to change with your own file tools. Saves are picked up live; for the next 30 minutes each save becomes a change set from you for the person to review (syntax errors are reported, not applied). Prefer update_snippet for small changes.',
+    input: { board, id: z.string().describe('Web snippet block id') },
   },
   group_into_frame: {
     title: 'Group into frame',
@@ -476,6 +518,20 @@ export const humanToolDefs = {
   delete_version: { input: { board, version: z.string() } },
   get_notices: { input: { board: z.string().optional() } },
   dismiss_notice: { input: { id: z.string() } },
+  get_storage: { input: { board } },
+  cleanup_assets: { input: { board, dry_run: z.boolean().optional() } },
+  reveal_asset: {
+    input: {
+      board,
+      asset: z.string().optional().describe('Asset id'),
+      block: z.string().optional().describe('Web snippet block: its editable source files'),
+      what: z.enum(['board', 'assets', 'history', 'backups']).optional(),
+      open: z.boolean().optional().describe('Open in the default app (snippet source: in an editor) instead of revealing in the file manager.'),
+    },
+  },
+  report_video_poster: {
+    input: { board, id: z.string(), png: z.string(), w: z.number().optional(), h: z.number().optional(), duration: z.number().optional() },
+  },
   open_backup_folder: { input: { board: z.string().optional(), reveal: z.boolean().optional().describe('Open it in the file manager (default true).') } },
 } as const
 

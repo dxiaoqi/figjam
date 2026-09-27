@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import type { Vec } from '@aifig/canvas-engine'
-import { normalizeEmbedUrl, SNIPPET_LIMITS } from '@aifig/shared'
+import { normalizeEmbedUrl, SNIPPET_LIMITS, type Asset } from '@aifig/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useBoard } from '../board-context'
 import { useEditor } from '../canvas/editor-context'
 import { callCore } from '../lib/core'
+import { fetchAssetText } from '../lib/assets'
 import { useT } from '../i18n'
 
 export interface SnippetDialogRequest {
@@ -29,6 +30,7 @@ export function SnippetDialog() {
   const [css, setCss] = useState('')
   const [js, setJs] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(false)
   const t = useT()
 
   useEffect(() => {
@@ -42,10 +44,27 @@ export function SnippetDialog() {
       setCss(web?.css ?? '')
       setJs(web?.js ?? '')
       setReq(r)
+      // stored source lives in the board's files
+      if (web?.src) {
+        const assets = editor.doc.getMap<Asset>('assets')
+        const read = (id?: string) => {
+          const a = id ? assets.get(id) : undefined
+          return a ? fetchAssetText(boardId, a) : Promise.resolve('')
+        }
+        setLoading(true)
+        Promise.all([read(web.src.html), read(web.src.css), read(web.src.js)])
+          .then(([h, c, j]) => {
+            setHtml(h)
+            setCss(c)
+            setJs(j)
+          })
+          .catch((err) => toast.error((err as Error).message))
+          .finally(() => setLoading(false))
+      }
     }
     window.addEventListener('aifig:snippet-dialog', on)
     return () => window.removeEventListener('aifig:snippet-dialog', on)
-  }, [editor])
+  }, [editor, boardId])
 
   const check = tab === 'url' ? (url.trim() ? normalizeEmbedUrl(url) : null) : null
   const bytes = new TextEncoder().encode(html + css + js).byteLength
@@ -105,7 +124,7 @@ export function SnippetDialog() {
           <Button variant="ghost" onClick={() => setReq(null)}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={save} disabled={invalid || busy} data-snippet-save>
+          <Button onClick={save} disabled={invalid || busy || loading} data-snippet-save>
             {t(req?.id ? 'common.save' : 'snippet.add')}
           </Button>
         </div>

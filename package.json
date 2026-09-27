@@ -38,6 +38,7 @@
     "ci": "node scripts/ci.mjs",
     "test:data-safety": "node --import tsx --test tests/data-safety/*.test.ts && node scripts/data-safety.mjs",
     "test:onboarding": "node scripts/onboarding-e2e.mjs",
+    "test:sharing": "node scripts/sharing-e2e.mjs",
     "bench": "node scripts/bench/run.mjs",
     "test:contrast": "tsx scripts/contrast.ts",
     "release": "node scripts/release/release.mjs",
