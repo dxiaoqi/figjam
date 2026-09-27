@@ -25,6 +25,8 @@
     "desktop": "npm run build && electron apps/desktop",
     "desktop:dev": "AIFIG_DESKTOP_URL=http://127.0.0.1:47820 electron apps/desktop",
     "desktop:build": "node apps/desktop/scripts/build.mjs",
+    "website": "npm run dev -w @aifig/website",
+    "website:build": "npm run build -w @aifig/website",
     "test:api": "node scripts/api-regressions.mjs",
     "test:skills": "node scripts/skills-tests.mjs && node scripts/scenarios/run.mjs",
     "test:scenarios": "node scripts/scenarios/run.mjs",
