@@ -455,7 +455,7 @@ export class BoardRegistry {
       for (const src of sources) {
         if (!src.has(a.hash, a.ext)) continue
         try {
-          b.store.importFile(src.file(a.hash, a.ext), a.ext, a.hash)
+          b.store.importFile(src.file(a.hash, a.ext), a.ext, a.hash, { link: true })
           break
         } catch (e) {
           console.error(`[core] skipped ${assetFileName(a)} from ${src.dir}: ${(e as Error).message}`)

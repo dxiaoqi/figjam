@@ -1,4 +1,4 @@
-import type { Asset, AssetRole } from '@aifig/shared'
+import type { Asset, AssetRole, WebSnippet } from '@aifig/shared'
 import { apiFetch } from './auth'
 
 /**
@@ -85,3 +85,29 @@ export const blobToDataUrl = (b: Blob) =>
     r.onerror = () => reject(r.error)
     r.readAsDataURL(b)
   })
+
+/** A file's text never changes for a given asset id, so it's fetched once. */
+const textCache = new Map<string, Promise<string>>()
+
+function assetText(boardId: string, asset: Pick<Asset, 'id' | 'name' | 'ext'>) {
+  const key = `${boardId}/${asset.id}`
+  let p = textCache.get(key)
+  if (!p) {
+    p = fetchAssetText(boardId, asset)
+    p.catch(() => textCache.delete(key))
+    textCache.set(key, p)
+  }
+  return p
+}
+
+/** Inline snippet source as text: from its files (web.src), or inline (older documents). */
+export async function snippetText(boardId: string, assets: Map<string, Asset> | { get(id: string): Asset | undefined }, web: WebSnippet | undefined): Promise<Pick<WebSnippet, 'html' | 'css' | 'js'>> {
+  if (!web || web.mode !== 'inline') return {}
+  if (!web.src) return { html: web.html, css: web.css, js: web.js }
+  const read = (id?: string) => {
+    const a = id ? assets.get(id) : undefined
+    return a ? assetText(boardId, a) : Promise.resolve('')
+  }
+  const [html, css, js] = await Promise.all([read(web.src.html), read(web.src.css), read(web.src.js)])
+  return { html, css, js }
+}

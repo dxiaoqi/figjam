@@ -37,6 +37,7 @@ const STEPS = [
   { id: 'skills', name: 'Skills', cmd: ['npm', 'run', '-s', 'test:skills'] },
   { id: 'contrast', name: 'WCAG contrast', cmd: ['npm', 'run', '-s', 'test:contrast'] },
   { id: 'onboarding', name: 'Onboarding and i18n e2e', cmd: ['npm', 'run', '-s', 'test:onboarding'] },
+  { id: 'sharing', name: 'Local files and sharing e2e', cmd: ['npm', 'run', '-s', 'test:sharing'] },
   { id: 'e2e', name: 'Canvas engine e2e', cmd: ['npm', 'run', '-s', 'test:e2e'], dev: true },
   { id: 'aesthetics', name: 'Agent-output aesthetics', cmd: ['npm', 'run', '-s', 'test:aesthetics'], dev: true },
   { id: 'mcp-stdio', name: 'MCP smoke (stdio)', cmd: ['node', 'scripts/mcp-smoke.mjs', '--quiet'], dev: true },

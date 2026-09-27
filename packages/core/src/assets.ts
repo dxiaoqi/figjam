@@ -106,13 +106,16 @@ export class AssetStore {
     return { hash, file, size: bytes.byteLength, added: true }
   }
 
-  /** Store a file from disk (hashed in chunks, linked or copied). `expect` rejects a file whose hash differs. */
-  importFile(src: string, ext: string, expect?: string): { hash: string; file: string; size: number; added: boolean } {
+  /**
+   * Store a file from disk (hashed in chunks, then copied). `expect` rejects a file whose hash differs; `link`
+   * (only for another assets folder, whose files never change) hard-links when it can.
+   */
+  importFile(src: string, ext: string, expect?: string, opts: { link?: boolean } = {}): { hash: string; file: string; size: number; added: boolean } {
     const { hash, size } = hashFile(src)
     if (expect && hash !== expect) throw new Error(`${path.basename(src)} doesn't match its checksum`)
     const file = this.file(hash, ext)
     if (this.has(hash, ext)) return { hash, file, size, added: false }
-    linkOrCopy(src, file)
+    linkOrCopy(src, file, opts)
     return { hash, file, size, added: true }
   }
 

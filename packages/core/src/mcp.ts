@@ -15,7 +15,7 @@ Best practices:
 7. Never delete or rewrite the user's content unless asked.\n8. People leave comments on blocks: call get_threads to read them, revise, then reply_thread / resolve_thread.\n9. Before a large reorganization, save a checkpoint with create_version; list_versions / restore_version bring a board back.\n10. Skills: call list_skills. Skills enabled on the board add block types (e.g. research.quote — use them in create_blocks), layouts and actions; read get_skill and follow its instructions when working with its blocks.`
 
 
-const READ_ONLY = ['list_boards', 'get_board', 'lint_layout', 'render_snapshot', 'list_change_sets', 'get_design_tokens', 'get_threads', 'export_board', 'list_versions', 'list_templates', 'list_types', 'query_blocks', 'list_skills', 'get_skill']
+const READ_ONLY = ['list_boards', 'get_board', 'lint_layout', 'render_snapshot', 'list_change_sets', 'get_design_tokens', 'get_threads', 'export_board', 'list_versions', 'list_templates', 'list_types', 'query_blocks', 'list_skills', 'get_skill', 'list_assets']
 
 /** The ai-figma MCP server, shared by the stdio transport (CLI) and the core's local HTTP endpoint. */
 export function buildMcpServer(invoke: (tool: ToolName, args: Record<string, unknown>, caller: CallerInfo) => Promise<CallResponse>, callerFor: (clientName: string) => CallerInfo) {

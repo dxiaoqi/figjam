@@ -1971,7 +1971,7 @@ export class CanvasCore {
     const name = path.basename(file)
     if (like.role === 'video') {
       const { size, info } = this.probeVideo(file)
-      if (!info) throw new ToolError('Unsupported video — use an MP4 (H.264) or WebM file')
+      if (!info) throw new ToolError(`${like.name ?? 'This'} is a video: replace it with an MP4 or WebM video file`)
       if (size > ASSET_LIMITS.videoBytes) throw new ToolError('Videos are limited to 1 GB')
       return board.importAssetFile(file, { mime: info.mime, ext: extForMime(info.mime), role: 'video', name, w: info.w, h: info.h, duration: info.duration })
     }

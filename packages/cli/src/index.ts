@@ -183,7 +183,7 @@ program
     }),
   )
 
-const mb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
+const mb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : n ? `${Math.max(1, Math.round(n / 1024))} KB` : "0 KB")
 
 program
   .command('assets')

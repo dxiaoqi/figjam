@@ -125,7 +125,18 @@ export type AssetStatus = 'used' | 'unused' | 'missing'
 export function storageInfo(board: Board) {
   const used = new Map<string, { id: string; kind: Block['kind']; label: string }[]>()
   const posters = new Map<string, string>()
+  // what blocks use a file for decides how it's listed (the same bytes may be an image and a poster)
+  const usage = new Map<string, Asset['role']>()
+  const rank: Asset['role'][] = ['image', 'video', 'poster', 'preview']
+  const note = (id: string | undefined, role: Asset['role']) => {
+    if (!id) return
+    const cur = usage.get(id)
+    if (!cur || rank.indexOf(role) < rank.indexOf(cur)) usage.set(id, role)
+  }
   for (const b of board.blocks.values()) {
+    note(b.asset, b.kind === 'video' ? 'video' : 'image')
+    note(b.poster, 'poster')
+    note(b.web?.thumb, 'preview')
     if (b.kind === 'video' && b.asset && b.poster && !posters.has(b.asset)) posters.set(b.asset, b.poster)
     for (const id of blockAssetRefs(b)) {
       const label = (b.kind === 'web' ? b.web?.title : b.title) || b.text || ''
@@ -140,7 +151,8 @@ export function storageInfo(board: Board) {
     .map((a) => {
       const file = board.assetPath(a)
       const status: AssetStatus = !file ? 'missing' : referenced.has(a.id) ? 'used' : 'unused'
-      return { ...a, file: file ?? board.store.file(a.hash, a.ext), status, usedBy: used.get(a.id) ?? [], pendingOnly: !used.has(a.id) && referenced.has(a.id), ...(posters.has(a.id) ? { poster: posters.get(a.id) } : {}) }
+      const role = a.role.startsWith('snippet-') ? a.role : (usage.get(a.id) ?? a.role)
+      return { ...a, role, file: file ?? board.store.file(a.hash, a.ext), status, usedBy: used.get(a.id) ?? [], pendingOnly: !used.has(a.id) && referenced.has(a.id), ...(posters.has(a.id) ? { poster: posters.get(a.id) } : {}) }
     })
     .sort((p, q) => q.size - p.size)
   const live = new Set(board.assetFiles())
