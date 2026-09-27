@@ -1,8 +1,11 @@
 // Serves the static export in ./out, for checking the build as a static host would: compressed text
 // (brotli or gzip) and long-lived caching for hashed assets and media, short caching for HTML.
-import { createReadStream, existsSync, statSync } from 'node:fs'
+// Text is compressed once per file and sent whole with a Content-Length, like the precompressed files a static host
+// or CDN serves. Streaming it through a brotli compressor instead made headless Chrome hold the first frame ~1.2 s
+// on the home page, which cost ~1.4 s of Speed Index in Lighthouse and wasn't what visitors get.
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { createBrotliCompress, createGzip } from 'node:zlib'
+import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 import { extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -24,6 +27,18 @@ const types = {
 }
 
 const compressible = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.xml'])
+const packed = new Map()
+
+function compressed(file, br) {
+  const { mtimeMs } = statSync(file)
+  const key = `${br ? 'br' : 'gz'}:${file}`
+  const hit = packed.get(key)
+  if (hit?.mtimeMs === mtimeMs) return hit.body
+  const raw = readFileSync(file)
+  const body = br ? brotliCompressSync(raw, { params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_SIZE_HINT]: raw.length } }) : gzipSync(raw, { level: 9 })
+  packed.set(key, { mtimeMs, body })
+  return body
+}
 
 function cacheControl(path) {
   if (path.startsWith('/_next/static/')) return 'public, max-age=31536000, immutable'
@@ -57,8 +72,9 @@ createServer((req, res) => {
   const accept = String(req.headers['accept-encoding'] ?? '')
   if (compressible.has(extname(file)) && /\b(br|gzip)\b/.test(accept)) {
     const br = /\bbr\b/.test(accept)
-    res.writeHead(200, { ...headers, 'content-encoding': br ? 'br' : 'gzip' })
-    return createReadStream(file).pipe(br ? createBrotliCompress() : createGzip()).pipe(res)
+    const body = compressed(file, br)
+    res.writeHead(200, { ...headers, 'content-encoding': br ? 'br' : 'gzip', 'content-length': body.length })
+    return res.end(body)
   }
   res.writeHead(200, { ...headers, 'content-length': size, 'accept-ranges': 'bytes' })
   createReadStream(file).pipe(res)

@@ -62,4 +62,6 @@ node apps/website/scripts/lighthouse.mjs <out-dir> [--pages=/,/privacy/] [--base
   `src/lib/scenario-shots.ts`. The New board ▸ Scenarios clip is `public/media/scenarios-flow.{mp4,webm}`.
 - **Screenshots** captures pages in both languages at desktop (1440×900) and mobile (390×844) sizes with headless
   Chrome (`CHROME_PATH` overrides the browser).
-- **Lighthouse** runs mobile and desktop audits against `npm start` and writes JSON reports plus `summary.md`.
+- **Lighthouse** runs mobile and desktop audits against `npm start` and writes JSON reports plus `summary.md`. Mobile
+  scores (95–97) are limited by the simulated LCP of the hero poster, which is only partly above the fold on a phone
+  (2.5–2.9 s on Lighthouse's throttled profile; the observed LCP is ~0.15 s). Desktop scores are 100.

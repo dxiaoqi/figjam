@@ -1,8 +1,8 @@
 // Lighthouse (mobile and desktop) for pages in both languages, against a running static export (`npm start`).
 // usage: node scripts/lighthouse.mjs <out-dir> [--base=http://127.0.0.1:47901] [--pages=/,/scenarios/architecture/]
 // Writes one JSON report per run plus summary.json / summary.md. Needs network once for `npx lighthouse`.
-// One discarded warm-up run comes first: on a machine where no browser has drawn Chinese text yet, the OS font
-// lookup for CJK adds about a second to the first paint of whichever page happens to be audited first.
+// One discarded warm-up run comes first (cold disk and font caches). Serve the export with `npm start`: it sends
+// precompressed text like a static host; a streaming compressor held the first frame ~1.2 s in headless Chrome.
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
