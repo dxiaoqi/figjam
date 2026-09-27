@@ -197,6 +197,13 @@ try {
   check('the agent-started core (runtime folder) builds the readable copy in its worker too', agentCopy.ok, JSON.stringify(agentCopy.st))
   const snap = await client.callTool({ name: 'render_snapshot', arguments: {} })
   check('PNG export works (bundled resvg native module)', snap.content?.some((c) => c.type === 'image'), snap.isError ? snap.content?.[0]?.text : '')
+  const webDir = path.join(tmp, 'web-export')
+  const web = await client.callTool({ name: 'export_web', arguments: { path: webDir } })
+  check('web page export works (the viewer ships with the UI)', !web.isError && fs.existsSync(path.join(webDir, 'viewer.js')) && fs.existsSync(path.join(webDir, 'index.html')), web.content?.[0]?.text?.slice(0, 200))
+  const packFile = path.join(tmp, 'packaged.aifigpack')
+  const pk = await client.callTool({ name: 'export_pack', arguments: { path: packFile } })
+  const up = pk.isError ? pk : await client.callTool({ name: 'import_pack', arguments: { path: packFile, dest: path.join(tmp, 'packs') } })
+  check('share packs export and import', !pk.isError && !up.isError && fs.readdirSync(path.join(tmp, 'packs')).some((f) => f.endsWith('.aifig')), (up.content ?? pk.content)?.[0]?.text?.slice(0, 200))
   const ui = await fetch(`${coreUrl}/`, { headers: { authorization: `Bearer ${token()}` } }).then((r) => r.text())
   check('a core started by an agent still serves the canvas', ui.includes('<div id="root"'))
 } catch (e) {
