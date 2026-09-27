@@ -33,6 +33,11 @@ export interface WebSnippet {
   url?: string
   embedUrl?: string
   provider?: string
+  /**
+   * Inline source as stored: asset ids of the HTML / CSS / JS files in the board's assets folder. `html` /
+   * `css` / `js` are the resolved text in API input and output (and in schema 1.x documents).
+   */
+  src?: { html?: string; css?: string; js?: string }
   html?: string
   css?: string
   js?: string
@@ -115,8 +120,13 @@ export function normalizeEmbedUrl(input: string): { embedUrl: string; provider: 
 }
 
 /** Stable hash of what a snippet runs, so a thumbnail is re-captured only when the source changes. */
-export function snippetHash(web: Pick<WebSnippet, 'mode' | 'embedUrl' | 'html' | 'css' | 'js'>) {
-  const s = web.mode === 'url' ? `u:${web.embedUrl}` : `i:${web.html ?? ''}\u0000${web.css ?? ''}\u0000${web.js ?? ''}`
+export function snippetHash(web: Pick<WebSnippet, 'mode' | 'embedUrl' | 'html' | 'css' | 'js' | 'src'>) {
+  const s =
+    web.mode === 'url'
+      ? `u:${web.embedUrl}`
+      : web.src
+        ? `s:${web.src.html ?? ''}\u0000${web.src.css ?? ''}\u0000${web.src.js ?? ''}`
+        : `i:${web.html ?? ''}\u0000${web.css ?? ''}\u0000${web.js ?? ''}`
   let h = 2166136261
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i)
@@ -135,7 +145,7 @@ export function snippetLabel(web?: WebSnippet) {
 }
 
 /** What a preview was captured for: the source, plus the saved state for inline snippets (it changes what they show). */
-export function snippetThumbKey(web: Pick<WebSnippet, 'mode' | 'embedUrl' | 'html' | 'css' | 'js' | 'state'>) {
+export function snippetThumbKey(web: Pick<WebSnippet, 'mode' | 'embedUrl' | 'html' | 'css' | 'js' | 'src' | 'state'>) {
   const base = snippetHash(web)
   if (web.mode !== 'inline' || web.state === undefined) return base
   return `${base}.${snippetHash({ mode: 'inline', js: JSON.stringify(web.state) })}`

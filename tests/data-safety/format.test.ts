@@ -19,7 +19,7 @@ test('container round-trips and records the schema version', () => {
   assert.ok(file.subarray(0, MAGIC.length).equals(MAGIC))
   const d = decodeContainer(file)
   assert.deepEqual(d.schema, CURRENT_SCHEMA)
-  assert.equal(d.header?.schema, '1.0')
+  assert.equal(d.header?.schema, '2.0')
   assert.equal(d.header?.board, 'b1')
   assert.deepEqual(Buffer.from(d.payload), Buffer.from(payload))
 })
@@ -42,10 +42,10 @@ test('an empty file is corrupt, not an empty board', () => {
 })
 
 test('a file from a newer major version is refused with a clear message', () => {
-  const file = encodeContainer(docBytes(), { savedAt: 1, schema: '2.0' })
+  const file = encodeContainer(docBytes(), { savedAt: 1, schema: '3.0' })
   assert.throws(
     () => decodeContainer(file),
-    (e: unknown) => e instanceof FutureVersionError && e.schema === '2.0' && /newer version of ai-figma/.test(e.message) && /Update ai-figma/.test(e.message) && /has not been changed/.test(e.message),
+    (e: unknown) => e instanceof FutureVersionError && e.schema === '3.0' && /newer version of ai-figma/.test(e.message) && /Update ai-figma/.test(e.message) && /has not been changed/.test(e.message),
   )
 })
 
@@ -70,7 +70,7 @@ test('migration 0.0 → 1.0 stamps the schema and fills missing metadata', () =>
   const doc = new Y.Doc()
   doc.getMap('meta').set('format', 'aifig/0')
   doc.getMap('blocks').set('a', { id: 'a', createdAt: 5000 })
-  const r = migrate(doc, { major: 0, minor: 0 })
+  const r = migrate(doc, { major: 0, minor: 0 }, undefined, { major: 1, minor: 0 })
   assert.equal(r.applied.length, 1)
   const meta = doc.getMap('meta')
   assert.equal(meta.get('schema'), '1.0')

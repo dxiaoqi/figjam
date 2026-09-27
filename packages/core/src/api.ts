@@ -7,7 +7,7 @@ import type { ActivityLog } from './activity'
 import { guardedFetch, NetGuardError } from './net-guard'
 import { deniedMessage, type PermissionAsk, type PermissionBroker } from './permissions'
 import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
-import { bytesToBase64, COLOR_TOKENS, fitHeight, imageInfo, matchColor, maxBlockHeight, measureSticky, stickyContentHeight } from '@aifig/shared'
+import { ASSET_LIMITS, assetFileName, blockAssetRefs, bytesToBase64, COLOR_TOKENS, extForMime, fitHeight, IMAGE_MIMES, imageInfo, matchColor, maxBlockHeight, measureSticky, SNIPPET_FILES, SNIPPET_ROLES, stickyContentHeight, videoInfo, type Asset, type SnippetPart } from '@aifig/shared'
 import {
   BLOCK_TYPE_IDS,
   cardContentHeight,
@@ -77,6 +77,9 @@ import {
 } from './layout'
 import { McpTools } from './mcp-client'
 import { PresenceHub, identify } from './presence'
+import { openInOs } from './os-open'
+import { SnippetFiles } from './snippet-files'
+import { cleanUpAssets, storageInfo } from './storage'
 import { SkillLibrary, userSkillsDir, writeSkillFolder } from './skills'
 
 /** Axis labels of matrix / timeline layouts: small bold text. */
@@ -306,6 +309,7 @@ export class CanvasCore {
   private persistTimer: ReturnType<typeof setTimeout> | null = null
   readonly skills = new SkillLibrary()
   readonly mcpTools = new McpTools()
+  readonly snippetFiles = new SnippetFiles(this)
   /** Set by the server; without them (unit use) outbound fetches are refused. */
   security: { permissions?: PermissionBroker; activity?: ActivityLog } = {}
 
@@ -314,6 +318,7 @@ export class CanvasCore {
   }
 
   init() {
+    this.registry.onBoardAdded = (b) => this.snippetFiles.resume(b)
     this.registry.loadAll()
     if (!this.registry.all().length) this.registry.create('My first board')
     try {
@@ -498,6 +503,32 @@ export class CanvasCore {
         return this.updateSnippet(a, caller)
       case 'report_snippet_thumb':
         return this.reportSnippetThumb(a)
+      case 'report_video_poster':
+        return this.reportVideoPoster(a)
+      case 'add_video':
+        return this.addVideo(a, caller)
+      case 'replace_asset':
+        return this.replaceAsset(a, caller)
+      case 'list_assets':
+      case 'get_storage':
+        return storageInfo(this.board(a.board))
+      case 'cleanup_assets':
+        return { board: this.board(a.board).id, ...cleanUpAssets(this.board(a.board), { dryRun: a.dry_run }) }
+      case 'reveal_asset':
+        return this.revealAsset(a)
+      case 'edit_snippet_files': {
+        const board = this.board(a.board)
+        const b = board.blocks.get(a.id) ?? board.resolve(a.id)
+        if (!b || b.kind !== 'web' || b.web?.mode !== 'inline') throw new ToolError(`No inline web snippet "${a.id}" (URL embeds have no files)`)
+        const r = this.snippetFiles.checkout(board, b.id, caller)
+        return {
+          board: board.id,
+          id: b.id,
+          dir: r.dir,
+          files: r.files,
+          note: caller.kind === 'agent' ? 'Edit these files with your own tools. Each save is picked up within a second and becomes a change set for the person to review (syntax errors are reported and not applied). Your edits count as yours for 30 minutes after the last one.' : 'Saves apply to the snippet live.',
+        }
+      }
       case 'set_type':
         return this.setType(a, caller)
       case 'query_blocks':
@@ -880,7 +911,8 @@ export class CanvasCore {
 
   // ---- web snippets --------------------------------------------------------
 
-  private snippetFrom(a: Args, base?: WebSnippet): WebSnippet {
+  private snippetFrom(a: Args, base?: WebSnippet, board?: Board): WebSnippet {
+    const baseSrc = base?.mode === 'inline' && board ? board.snippetSource(base) : { html: base?.html, css: base?.css, js: base?.js }
     const hasInline = a.html !== undefined || a.css !== undefined || a.js !== undefined
     if (a.url && hasInline) throw new ToolError('Pass either `url` or `html`/`css`/`js`, not both')
     let web: WebSnippet
@@ -889,7 +921,7 @@ export class CanvasCore {
       if ('error' in n) throw new ToolError(n.error)
       web = { mode: 'url', url: String(a.url), embedUrl: n.embedUrl, provider: n.provider, posterUrl: n.thumbUrl, title: a.title ?? base?.title ?? n.title, state: base?.state, thumb: base?.thumb, thumbFor: base?.thumbFor }
     } else if (hasInline || base?.mode === 'inline') {
-      web = { ...(base?.mode === 'inline' ? base : {}), mode: 'inline', html: a.html ?? base?.html ?? '', css: a.css ?? base?.css ?? '', js: a.js ?? base?.js ?? '', title: a.title ?? base?.title }
+      web = { ...(base?.mode === 'inline' ? base : {}), mode: 'inline', html: a.html ?? baseSrc.html ?? '', css: a.css ?? baseSrc.css ?? '', js: a.js ?? baseSrc.js ?? '', title: a.title ?? base?.title }
       if (snippetSourceBytes(web) > SNIPPET_LIMITS.sourceBytes) throw new ToolError(`Snippet source is over ${SNIPPET_LIMITS.sourceBytes / 1024} KB`)
       if (!`${web.html}${web.js}`.trim()) throw new ToolError('An inline snippet needs some html or js')
       const js = checkSnippetJs(web.js ?? '')
@@ -940,18 +972,41 @@ export class CanvasCore {
       const bytes = r.bytes
       const info = imageInfo(bytes)
       if (!info || bytes.byteLength > SNIPPET_LIMITS.thumbBytes) return web
-      const id = `a${newId()}`
-      board.doc.transact(() => board.assets.set(id, { id, mime: info.mime, w: info.w, h: info.h, bytes, name: 'poster', createdAt: Date.now() }), 'api')
+      let id = ''
+      board.doc.transact(() => (id = board.putAsset(bytes, { mime: info.mime, ext: extForMime(info.mime), role: 'preview', name: 'poster', w: info.w, h: info.h }).id), 'api')
       return { ...web, thumb: id, thumbFor: snippetHash(web) }
     } catch {
       return web
     }
   }
 
+  /** Inline source goes to files in the assets folder; the block keeps their ids (`web.src`). */
+  private storeSnippet(board: Board, web: WebSnippet): WebSnippet {
+    const { html, css, js, src: _src, ...rest } = web
+    if (web.mode !== 'inline') return rest
+    const text = { html, css, js }
+    const src: NonNullable<WebSnippet['src']> = {}
+    board.doc.transact(() => {
+      for (const k of Object.keys(SNIPPET_FILES) as SnippetPart[]) {
+        if (!text[k]) continue
+        src[k] = board.putAsset(new TextEncoder().encode(text[k]), { mime: SNIPPET_FILES[k].mime, ext: k, role: SNIPPET_ROLES[k], name: SNIPPET_FILES[k].name }).id
+      }
+    }, 'api')
+    return { ...rest, src }
+  }
+
+  /** A block with its snippet source as text (what agents and exports read). */
+  private withSource<T extends Block | undefined>(board: Board, b: T): T {
+    if (!b || b.kind !== 'web' || b.web?.mode !== 'inline' || !b.web.src) return b
+    const { src: _src, ...web } = b.web
+    return { ...b, web: { ...web, ...board.snippetSource(b.web) } }
+  }
+
   private async createSnippet(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
     let web = this.snippetFrom(a)
     web = await this.posterFor(board, web, caller)
+    web = this.storeSnippet(board, web)
     const video = web.mode === 'url' && /YouTube|Vimeo|Loom/.test(web.provider ?? '')
     const w = snap(Math.min(Math.max(a.width ?? 480, 160), 1600))
     const h = snap(Math.min(Math.max(a.height ?? (video ? Math.round((w * 9) / 16) : 320), 120), 1200))
@@ -963,12 +1018,18 @@ export class CanvasCore {
     const board = this.board(a.board)
     const cur = board.blocks.get(a.id) ?? board.resolve(a.id)
     if (!cur || cur.kind !== 'web' || !cur.web) throw new ToolError(`No web snippet "${a.id}"`)
-    let web = this.snippetFrom(a, cur.web)
+    let web = this.snippetFrom(a, cur.web, board)
     web = await this.posterFor(board, web, caller)
-    const { changeSet } = this.edit(board, caller, a.intent, `Update snippet “${preview(web.title ?? '', 30)}”`, (rec) => {
-      rec.updateBlock(cur.id, { web, text: web.title ?? '' })
-    })
-    const before = cur.web
+    const before: WebSnippet = { ...cur.web, ...board.snippetSource(cur.web) }
+    const texts = web
+    web = this.storeSnippet(board, web)
+    const same = JSON.stringify(web) === JSON.stringify(cur.web) && (web.title ?? '') === (cur.text ?? '')
+    const { changeSet } = same
+      ? { changeSet: null }
+      : this.edit(board, caller, a.intent, `Update snippet “${preview(web.title ?? '', 30)}”`, (rec) => {
+          rec.updateBlock(cur.id, { web, text: web.title ?? '' })
+        })
+    web = texts
     const lines = (v?: string) => (v ?? '').split('\n')
     const changed: Record<string, string> = {}
     for (const k of ['url', 'title', 'html', 'css', 'js'] as const) {
@@ -993,9 +1054,9 @@ export class CanvasCore {
     const bytes = new Uint8Array(Buffer.from(String(a.png).replace(/^data:image\/png;base64,/, ''), 'base64'))
     const info = imageInfo(bytes)
     if (!info || info.mime !== 'image/png' || bytes.byteLength > SNIPPET_LIMITS.thumbBytes) throw new ToolError('Preview must be a PNG under 1.5 MB')
-    const id = `a${newId()}`
+    let id = ''
     board.doc.transact(() => {
-      board.assets.set(id, { id, mime: 'image/png', w: info.w, h: info.h, bytes, name: 'snippet-preview.png', createdAt: Date.now() })
+      id = board.putAsset(bytes, { mime: 'image/png', ext: 'png', role: 'preview', name: 'snippet-preview.png', w: info.w, h: info.h }).id
       const now = board.blocks.get(cur.id)!
       board.blocks.set(cur.id, { ...now, web: { ...now.web!, thumb: id, thumbFor: a.hash } })
     }, 'layout')
@@ -1442,8 +1503,8 @@ export class CanvasCore {
     if (a.format === 'json') {
       return {
         board: board.summary(),
-        frames: frames.map((f) => ({ ...f, children: board.childrenOf(f.id) })),
-        blocks: loose,
+        frames: frames.map((f) => ({ ...f, children: board.childrenOf(f.id).map((b) => this.withSource(board, b)) })),
+        blocks: loose.map((b) => this.withSource(board, b)),
         connectors: conns,
         pendingChangeSets: pending.map((c) => ({ id: c.id, author: c.author.name, intent: c.intent, entries: c.entries.length })),
       }
@@ -1453,8 +1514,10 @@ export class CanvasCore {
         b.kind === 'card'
           ? `**${preview(b.title, 60)}** — ${preview(b.text, 100)}`
           : b.kind === 'web' && b.web
-            ? `"${preview(b.web.title ?? '', 60)}" (${b.web.mode === 'url' ? `embed ${b.web.url}` : `inline snippet, ${snippetSourceBytes(b.web)} bytes`})`
-            : `"${preview(b.text, 100)}"`
+            ? `"${preview(b.web.title ?? '', 60)}" (${b.web.mode === 'url' ? `embed ${b.web.url}` : `inline snippet, ${snippetSourceBytes(board.snippetSource(b.web))} bytes`})`
+            : b.kind === 'video'
+              ? `"${preview(b.text || board.assets.get(b.asset ?? '')?.name || 'video', 60)}" (${board.assets.get(b.asset ?? '')?.duration?.toFixed(1) ?? '?'} s)`
+              : `"${preview(b.text, 100)}"`
       const collapsed = b.contentH != null && b.contentH > b.h + 4 && b.h >= maxBlockHeight(b.kind, b.w, b.expanded) - 8
       const flags = [b.kind === 'image' ? '' : b.color, b.size !== 'm' && b.kind !== 'image' ? `size ${b.size}` : '', b.rotation ? `rotated ${b.rotation}°` : '', b.pending ? 'pending review' : '', collapsed ? `long: collapsed, full height ${b.contentH}px` : ''].filter(Boolean).join(', ')
       const sum = b.type ? fieldSummary(b, reg) : ''
@@ -1507,6 +1570,7 @@ export class CanvasCore {
       group?: string
       parentRef?: string
       asset?: string
+      poster?: string
       type?: TypeId
       fields?: Record<string, FieldValue>
       extra: number
@@ -1539,10 +1603,10 @@ export class CanvasCore {
       const extra = type ? typeChrome({ type, typeData: { [type]: fields ?? {} } }, reg) : 0
       let dims: { w: number; h: number; size?: SizeToken }
       if (kind === 'sticky') dims = measureSticky(text, size, false, extra)
-      else if (kind === 'image' || kind === 'web') dims = { w: b.w, h: b.h }
+      else if (kind === 'image' || kind === 'web' || kind === 'video') dims = { w: b.w, h: b.h }
       else if (kind === 'card') dims = measureCard(title ?? '', text, size, false, extra)
       else dims = measureBlock({ kind, text, title, size, w: 0, h: 0 })
-      return { key: `k${i}`, ref: b.ref, kind, text, title, color: tdef ? tdef.color : color, size: dims.size ?? size, w: dims.w, h: dims.h, group: b.group, parentRef: b.parent, asset: b.asset as string | undefined, type, fields, extra, web: kind === 'web' ? (b.web as WebSnippet) : undefined, row: b.row, col: b.col, date: b.date }
+      return { key: `k${i}`, ref: b.ref, kind, text, title, color: tdef ? tdef.color : color, size: dims.size ?? size, w: dims.w, h: dims.h, group: b.group, parentRef: b.parent, asset: b.asset as string | undefined, poster: b.poster as string | undefined, type, fields, extra, web: kind === 'web' ? (b.web as WebSnippet) : undefined, row: b.row, col: b.col, date: b.date }
     })
     // same kind in one batch → same size
     const stickies = drafts.filter((d) => d.kind === 'sticky')
@@ -1634,7 +1698,7 @@ export class CanvasCore {
       const keyToId = new Map<string, string>()
       for (const d of drafts) {
         const p = res.placed.get(d.key)!
-        const b = rec.createBlock({ id: newId(), kind: d.kind, x: snap(p.x + offset.x), y: snap(p.y + offset.y), w: p.w, h: p.h, parent, text: d.text, title: d.title, color: d.color, size: d.size, ...(d.asset ? { asset: d.asset } : {}), ...(d.type ? { type: d.type, typeData: { [d.type]: d.fields ?? {} } } : {}), ...(d.web ? { web: d.web } : {}) })
+        const b = rec.createBlock({ id: newId(), kind: d.kind, x: snap(p.x + offset.x), y: snap(p.y + offset.y), w: p.w, h: p.h, parent, text: d.text, title: d.title, color: d.color, size: d.size, ...(d.asset ? { asset: d.asset } : {}), ...(d.poster ? { poster: d.poster } : {}), ...(d.type ? { type: d.type, typeData: { [d.type]: d.fields ?? {} } } : {}), ...(d.web ? { web: d.web } : {}) })
         keyToId.set(d.key, b.id)
         created.push({ id: b.id, ref: d.ref, kind: d.kind, label: preview(d.kind === 'card' ? d.title : d.text, 40) })
       }
@@ -1767,14 +1831,191 @@ export class CanvasCore {
     } else if (a.data) {
       bytes = new Uint8Array(Buffer.from(String(a.data).replace(/^data:[^,]+,/, ''), 'base64'))
     } else throw new ToolError('Provide path, url or data')
-    if (bytes.byteLength > 12 * 1024 * 1024) throw new ToolError('Images are limited to 12 MB')
+    if (bytes.byteLength > ASSET_LIMITS.imageBytes) throw new ToolError(`Images are limited to ${ASSET_LIMITS.imageBytes / 1024 / 1024} MB`)
     const info = imageInfo(bytes)
     if (!info || !info.w || !info.h) throw new ToolError('Unsupported image — use PNG, JPEG, GIF or WebP')
-    const assetId = `a${newId()}`
-    board.doc.transact(() => board.assets.set(assetId, { id: assetId, mime: info.mime, w: info.w, h: info.h, bytes, name: a.path?.split('/').pop(), createdAt: Date.now() }), 'api')
+    let assetId = ''
+    board.doc.transact(() => (assetId = board.putAsset(bytes, { mime: info.mime, ext: extForMime(info.mime), role: 'image', name: a.path ? path.basename(a.path) : undefined, w: info.w, h: info.h }).id), 'api')
     const w = snap(Math.min(a.width ?? Math.min(info.w, 480), 1600))
     const h = snap((w * info.h) / info.w)
     return this.createBlocks({ ...a, blocks: [{ kind: 'image', w, h, asset: assetId, text: a.caption ?? '' }], intent: a.intent ?? 'Add an image' }, caller)
+  }
+
+  /** Size, mime and duration of a local video file, from its container headers. */
+  private probeVideo(file: string) {
+    const fd = fs.openSync(file, 'r')
+    try {
+      const size = fs.fstatSync(fd).size
+      const info = videoInfo((pos, len) => {
+        const buf = Buffer.alloc(Math.max(0, Math.min(len, size - pos)))
+        if (buf.length) fs.readSync(fd, buf, 0, buf.length, pos)
+        return buf
+      }, size)
+      return { size, info }
+    } finally {
+      fs.closeSync(fd)
+    }
+  }
+
+  private readPoster(board: Board, file: string) {
+    if (!fs.existsSync(file)) throw new ToolError(`No file at ${file}`)
+    const bytes = new Uint8Array(fs.readFileSync(file))
+    const info = imageInfo(bytes)
+    if (!info || bytes.byteLength > ASSET_LIMITS.posterBytes) throw new ToolError(`The poster must be a PNG, JPEG, GIF or WebP image under ${ASSET_LIMITS.posterBytes / 1024 / 1024} MB`)
+    return board.putAsset(bytes, { mime: info.mime, ext: extForMime(info.mime), role: 'poster', name: path.basename(file), w: info.w, h: info.h })
+  }
+
+  private async addVideo(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    const file = path.resolve(String(a.path))
+    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new ToolError(`No file at ${file}`)
+    const { size, info } = this.probeVideo(file)
+    if (!info) throw new ToolError('Unsupported video — use an MP4 (H.264) or WebM file')
+    if (size > ASSET_LIMITS.videoBytes) throw new ToolError(`Videos are limited to ${ASSET_LIMITS.videoBytes / 1024 / 1024 / 1024} GB`)
+    let video!: Asset
+    let poster: Asset | undefined
+    board.doc.transact(() => {
+      video = board.importAssetFile(file, { mime: info.mime, ext: extForMime(info.mime), role: 'video', name: path.basename(file), w: info.w, h: info.h, duration: info.duration })
+      if (a.poster) poster = this.readPoster(board, path.resolve(String(a.poster)))
+    }, 'api')
+    const w = snap(Math.min(Math.max(a.width ?? Math.min(info.w, 640), 160), 1600))
+    const h = snap((w * info.h) / info.w)
+    const r = await this.createBlocks({ ...a, blocks: [{ kind: 'video', w, h, asset: video.id, ...(poster ? { poster: poster.id } : {}), text: a.caption ?? '' }], intent: a.intent ?? `Add the video ${path.basename(file)}` }, caller)
+    return { ...r, id: r.created?.find((c: { kind: string }) => c.kind === 'video')?.id, asset: video.id, file: board.assetPath(video), duration: info.duration, ...(poster ? {} : { note: 'The canvas captures a poster frame the first time it shows the video.' }) }
+  }
+
+  /** The canvas grabbed a frame of a video without a poster. Not an edit (no change set, not undoable). */
+  private reportVideoPoster(a: Args) {
+    const board = this.board(a.board)
+    const cur = board.blocks.get(a.id)
+    if (cur?.kind !== 'video') throw new ToolError('No such video')
+    if (cur.poster) return { board: board.id, poster: cur.poster, stale: true }
+    const bytes = new Uint8Array(Buffer.from(String(a.png).replace(/^data:image\/\w+;base64,/, ''), 'base64'))
+    const info = imageInfo(bytes)
+    if (!info || bytes.byteLength > ASSET_LIMITS.posterBytes) throw new ToolError('The poster must be an image under 4 MB')
+    let id = ''
+    board.doc.transact(() => {
+      id = board.putAsset(bytes, { mime: info.mime, ext: extForMime(info.mime), role: 'poster', name: 'poster', w: info.w, h: info.h }).id
+      const video = cur.asset ? board.assets.get(cur.asset) : undefined
+      if (video && !video.duration && a.duration) board.assets.set(video.id, { ...video, duration: a.duration, ...(a.w && a.h ? { w: a.w, h: a.h } : {}) })
+      board.blocks.set(cur.id, { ...board.blocks.get(cur.id)!, poster: id })
+    }, 'layout')
+    return { board: board.id, poster: id }
+  }
+
+  /** Swap a file for another everywhere the board uses it (through review for agents). */
+  private replaceAsset(a: Args, caller: CallerInfo) {
+    const board = this.board(a.board)
+    let old: Asset | undefined
+    const part: 'file' | 'poster' | SnippetPart = a.part ?? 'file'
+    if (a.asset) old = board.assets.get(a.asset)
+    else if (a.block) {
+      const b = board.blocks.get(a.block) ?? board.resolve(a.block)
+      if (!b) throw new ToolError(`No block "${a.block}"`)
+      const id = part === 'file' ? b.asset : part === 'poster' ? b.poster : b.web?.src?.[part]
+      if (!id && part === 'poster' && b.kind === 'video') old = undefined
+      else old = id ? board.assets.get(id) : undefined
+      if (!old && !(part === 'poster' && b.kind === 'video')) throw new ToolError(`Block ${b.id} has no ${part === 'file' ? 'image or video file' : part} to replace`)
+      if (!old) {
+        // a video without a poster yet: set one
+        if (!a.path) throw new ToolError('Pass `path` to a poster image')
+        let poster!: Asset
+        board.doc.transact(() => (poster = this.readPoster(board, path.resolve(String(a.path)))), 'api')
+        const { changeSet } = this.edit(board, caller, a.intent, 'Set the video poster', (rec) => rec.updateBlock(b.id, { poster: poster.id }))
+        return { board: board.id, replaced: null, with: poster.id, blocks: [b.id], changeSet }
+      }
+    } else throw new ToolError('Pass `asset` (see list_assets) or `block`')
+    if (!old) throw new ToolError(`No asset "${a.asset}" on this board`)
+    const target = old
+    let next: Asset | undefined
+    if (a.with) {
+      next = board.assets.get(a.with)
+      if (!next) throw new ToolError(`No asset "${a.with}" on this board`)
+    } else if (a.path) {
+      const file = path.resolve(String(a.path))
+      if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new ToolError(`No file at ${file}`)
+      board.doc.transact(() => (next = this.assetFromFile(board, file, target)), 'api')
+    } else throw new ToolError('Pass `path` to the new file')
+    const repl = next!
+    if (repl.id === target.id) {
+      warn('The new file is identical to the old one — nothing changed.')
+      return { board: board.id, replaced: target.id, with: repl.id, blocks: [], changeSet: null }
+    }
+    const kindOf = (r: Asset['role']) => (r.startsWith('snippet-') ? r : r === 'video' ? 'video' : 'image')
+    if (kindOf(repl.role) !== kindOf(target.role)) throw new ToolError(`A ${target.role} can only be replaced with the same kind of file (got ${repl.mime})`)
+    const users = [...board.blocks.values()].filter((b) => blockAssetRefs(b).includes(target.id))
+    const swap = (id: string | undefined) => (id === target.id ? repl.id : id)
+    const { changeSet } = this.edit(board, caller, a.intent, `Replace ${target.name ?? assetFileName(target)}`, (rec) => {
+      for (const b of users) {
+        const patch: Partial<Block> = {}
+        if (b.asset === target.id) {
+          patch.asset = repl.id
+          if (b.kind === 'image' && repl.w && repl.h) patch.h = snap((b.w * repl.h) / repl.w)
+          if (b.kind === 'video') {
+            if (repl.w && repl.h) patch.h = snap((b.w * repl.h) / repl.w)
+            if (b.poster) patch.poster = undefined
+          }
+        }
+        if (b.poster === target.id) patch.poster = repl.id
+        if (b.web && (b.web.thumb === target.id || Object.values(b.web.src ?? {}).includes(target.id))) {
+          patch.web = { ...b.web, ...(b.web.thumb === target.id ? { thumb: repl.id } : {}), ...(b.web.src ? { src: { html: swap(b.web.src.html), css: swap(b.web.src.css), js: swap(b.web.src.js) } } : {}) }
+        }
+        rec.updateBlock(b.id, patch)
+      }
+    })
+    return { board: board.id, replaced: target.id, with: repl.id, file: board.assetPath(repl), blocks: users.map((b) => b.id), changeSet }
+  }
+
+  /** A local file as an asset of the same kind as `like` (checked: image, video or snippet source). */
+  private assetFromFile(board: Board, file: string, like: Asset): Asset {
+    const name = path.basename(file)
+    if (like.role === 'video') {
+      const { size, info } = this.probeVideo(file)
+      if (!info) throw new ToolError('Unsupported video — use an MP4 (H.264) or WebM file')
+      if (size > ASSET_LIMITS.videoBytes) throw new ToolError('Videos are limited to 1 GB')
+      return board.importAssetFile(file, { mime: info.mime, ext: extForMime(info.mime), role: 'video', name, w: info.w, h: info.h, duration: info.duration })
+    }
+    if (like.role.startsWith('snippet-')) {
+      const part = like.ext as SnippetPart
+      const text = fs.readFileSync(file, 'utf8')
+      if (Buffer.byteLength(text) > SNIPPET_LIMITS.sourceBytes) throw new ToolError(`Snippet source is over ${SNIPPET_LIMITS.sourceBytes / 1024} KB`)
+      if (part === 'js') {
+        const js = checkSnippetJs(text)
+        if (js.mode === 'error') throw new ToolError(`${js.error}. Nothing was saved.`)
+      }
+      return board.putAsset(new TextEncoder().encode(text), { mime: SNIPPET_FILES[part].mime, ext: part, role: like.role, name: SNIPPET_FILES[part].name })
+    }
+    const bytes = new Uint8Array(fs.readFileSync(file))
+    const info = imageInfo(bytes)
+    if (!info || !IMAGE_MIMES.includes(info.mime)) throw new ToolError('Unsupported image — use PNG, JPEG, GIF or WebP')
+    if (bytes.byteLength > ASSET_LIMITS.imageBytes) throw new ToolError(`Images are limited to ${ASSET_LIMITS.imageBytes / 1024 / 1024} MB`)
+    return board.putAsset(bytes, { mime: info.mime, ext: extForMime(info.mime), role: like.role, name, w: info.w, h: info.h })
+  }
+
+  /** Reveal a board location or asset in the file manager, or open it (snippet source: in a code editor). */
+  private async revealAsset(a: Args) {
+    const board = this.board(a.board)
+    let target: string
+    let mode: 'reveal' | 'open' | 'edit' = a.open ? 'open' : 'reveal'
+    if (a.block) {
+      const b = board.blocks.get(a.block)
+      if (b?.kind !== 'web' || b.web?.mode !== 'inline') throw new ToolError(`No inline web snippet "${a.block}"`)
+      const r = this.snippetFiles.materialize(board, b.id)
+      target = a.open ? r.files.html : r.dir
+      if (a.open) mode = 'edit'
+    } else if (a.asset) {
+      const as = board.assets.get(a.asset)
+      const p = as ? board.assetPath(as) : null
+      if (!as || !p) throw new ToolError(as ? `${as.name ?? assetFileName(as)} is missing from the assets folder` : `No asset "${a.asset}"`)
+      target = p
+      if (a.open && as.role.startsWith('snippet-')) mode = 'edit'
+    } else {
+      const info = storageInfo(board)
+      const what = a.what ?? 'board'
+      target = what === 'board' ? (board.externalPath ?? board.file) : what === 'assets' ? (info.board.externalAssetsDir ?? board.assetsDir) : what === 'history' ? info.history.dir : info.backups.dir
+      fs.mkdirSync(what === 'board' ? path.dirname(target) : target, { recursive: true })
+    }
+    return { board: board.id, ...(await openInOs(target, mode)), mode }
   }
 
   private updateConnectors(a: Args, caller: CallerInfo) {
@@ -2047,11 +2288,12 @@ export class CanvasCore {
     const connectors = [...board.connectors.values()].filter((c) => (!c.from || ids.has(c.from)) && (!c.to || ids.has(c.to)))
     const threads = [...board.threads.values()].filter((t) => ids.has(t.target))
     if (a.format === 'json') {
-      const assets = [...board.assets.values()].filter((as) => blocks.some((b) => b.asset === as.id)).map(({ bytes, ...meta }) => ({ ...meta, size: bytes.byteLength }))
+      const refs = new Set(blocks.flatMap((b) => blockAssetRefs(b)))
+      const assets = [...board.assets.values()].filter((as) => refs.has(as.id)).map((as) => ({ ...as, file: assetFileName(as) }))
       const clean = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).filter(([k, v]) => v !== undefined && v !== null && k !== 'changeSet')) as T
       const typeIds = [...new Set(blocks.map((b) => b.type).filter((t): t is string => !!t))]
       const byType = Object.fromEntries(typeIds.map((t) => [t, blocks.filter((b) => b.type === t).map((b) => b.id)]))
-      return { format: 'json', filename: `${slug(board.title)}.json`, content: JSON.stringify({ format: 'aifig-export/1', exportedAt: new Date().toISOString(), board: { id: board.id, title: board.title }, byType, blocks: blocks.map((b) => clean({ ...b, ...(b.type ? { fields: typeFields(b, reg) } : {}) })), connectors: connectors.map(clean), threads, assets }, null, 2) }
+      return { format: 'json', filename: `${slug(board.title)}.json`, content: JSON.stringify({ format: 'aifig-export/1', exportedAt: new Date().toISOString(), board: { id: board.id, title: board.title }, byType, blocks: blocks.map((b) => clean({ ...this.withSource(board, b), ...(b.type ? { fields: typeFields(b, reg) } : {}) })), connectors: connectors.map(clean), threads, assets }, null, 2) }
     }
     const byY = (p: Block, q: Block) => p.y - q.y || p.x - q.x
     const label = (b: Block | undefined) => (b ? (b.kind === 'card' || b.kind === 'frame' ? b.title || b.text : b.text).replace(/\s+/g, ' ').trim() : '(free end)')
@@ -2069,12 +2311,18 @@ export class CanvasCore {
           const head = `### 🌐 ${w.title || (w.mode === 'url' ? w.provider : 'Web snippet')}`
           if (w.mode === 'url') return [head, '', `<${w.url}>`, '', ...notes]
           const fence = (lang: string, code?: string) => (code?.trim() ? ['```' + lang, code.trim(), '```', ''] : [])
-          return [head, '', ...fence('html', w.html), ...fence('css', w.css), ...fence('js', w.js), ...notes]
+          const src = board.snippetSource(w)
+          return [head, '', ...fence('html', src.html), ...fence('css', src.css), ...fence('js', src.js), ...notes]
         }
         case 'image': {
           const as = b.asset ? board.assets.get(b.asset) : undefined
-          const src = a.images === 'inline' && as ? `data:${as.mime};base64,${bytesToBase64(as.bytes)}` : (as?.name ?? b.asset ?? '')
+          const bytes = a.images === 'inline' && as ? board.readAsset(as) : null
+          const src = bytes && as ? `data:${as.mime};base64,${bytesToBase64(bytes)}` : (as?.name ?? b.asset ?? '')
           return [`![${b.text || as?.name || 'image'}](${src})`, '', ...notes]
+        }
+        case 'video': {
+          const as = b.asset ? board.assets.get(b.asset) : undefined
+          return [`[▶ ${b.text || as?.name || 'video'}](${as ? assetFileName(as) : ''})${as?.duration ? ` · ${Math.round(as.duration)} s` : ''}`, '', ...notes]
         }
         default:
           return [`- ${b.text.replace(/\n/g, '\n  ')}`, ...notes]

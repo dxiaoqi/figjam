@@ -8,7 +8,7 @@ import { sticky, tempHome } from './helpers'
 const fill = (b: Board, n: number) =>
   b.doc.transact(() => {
     for (let i = 0; i < n; i++) b.blocks.set(`s${i}`, sticky(`s${i}`, `note ${i}`, { x: (i % 100) * 240, y: Math.floor(i / 100) * 240 }))
-    b.assets.set('img', { id: 'img', mime: 'image/png', bytes: new Uint8Array([1, 2, 3]), width: 1, height: 1 } as never)
+    b.assets.set('img', { id: 'img', hash: '0'.repeat(64), ext: 'png', mime: 'image/png', size: 3, role: 'image', w: 1, h: 1, createdAt: 1 })
   })
 
 const readJson = (b: Board) => JSON.parse(fs.readFileSync(b.jsonFile, 'utf8'))

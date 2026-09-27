@@ -9,6 +9,13 @@ import { fieldSummary, templateRows, typeDef, typeFields, typeText, type TypeReg
 
 const FONT = `Inter, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', 'DejaVu Sans', sans-serif`
 
+/** An image asset as a data URI for the SVG (null when the file is missing). */
+function assetDataUri(board: Board, id: string | undefined) {
+  const a = id ? board.assets.get(id) : undefined
+  const bytes = a?.mime.startsWith('image/') ? board.readAsset(a) : null
+  return a && bytes ? `data:${a.mime};base64,${bytesToBase64(bytes)}` : null
+}
+
 function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
@@ -132,18 +139,30 @@ export async function renderSnapshot(
     const pad = SPACING.blockPadding
     if (b.rotation) parts.push(`<g transform="rotate(${b.rotation} ${r.x + r.w / 2} ${r.y + r.h / 2})">`)
     if (b.kind === 'image') {
-      const asset = b.asset ? board.assets.get(b.asset) : undefined
+      const href = assetDataUri(board, b.asset)
       parts.push(`<clipPath id="clip-${b.id}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="6"/></clipPath>`)
-      if (asset) parts.push(`<image x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${b.id})" href="data:${asset.mime};base64,${bytesToBase64(asset.bytes)}"/>`)
+      if (href) parts.push(`<image x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${b.id})" href="${href}"/>`)
       else parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="6" fill="${surf.frame}" stroke="${surf.border}"/>`)
+    } else if (b.kind === 'video') {
+      const href = assetDataUri(board, b.poster)
+      parts.push(`<clipPath id="clip-${b.id}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="8"/></clipPath>`)
+      parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="8" fill="#111"/>`)
+      if (href) parts.push(`<image x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${b.id})" href="${href}"/>`)
+      const cx = r.x + r.w / 2
+      const cy = r.y + r.h / 2
+      const k = Math.max(0.6, Math.min(1.2, Math.min(r.w, r.h) / 200))
+      parts.push(`<circle cx="${cx}" cy="${cy}" r="${26 * k}" fill="#000" opacity="0.5"/>`)
+      parts.push(`<path d="M ${cx - 8 * k} ${cy - 12 * k} L ${cx + 13 * k} ${cy} L ${cx - 8 * k} ${cy + 12 * k} Z" fill="#fff"/>`)
+      const name = board.assets.get(b.asset ?? '')?.name
+      if (b.text || name) parts.push(`<text x="${r.x + 12}" y="${r.y + r.h - 12}" font-size="12" font-weight="600" fill="#fff" opacity="0.9">${esc(b.text || name || '')}</text>`)
     } else if (b.kind === 'web') {
       const w = b.web
-      const asset = w?.thumb ? board.assets.get(w.thumb) : undefined
+      const thumb = assetDataUri(board, w?.thumb)
       parts.push(`<rect x="${r.x}" y="${r.y + 1}" width="${r.w}" height="${r.h}" rx="8" fill="#000" opacity="${theme === 'light' ? 0.05 : 0.3}"/>`)
       parts.push(`<clipPath id="clip-${b.id}"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="8"/></clipPath>`)
-      if (asset) {
+      if (thumb) {
         parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="8" fill="${surf.surface}"/>`)
-        parts.push(`<image x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${b.id})" href="data:${asset.mime};base64,${bytesToBase64(asset.bytes)}"/>`)
+        parts.push(`<image x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${b.id})" href="${thumb}"/>`)
       } else {
         parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="8" fill="${surf.frame}"/>`)
         parts.push(`<text x="${r.x + r.w / 2}" y="${r.y + r.h / 2 - 4}" text-anchor="middle" font-size="15" font-weight="600" fill="${surf.ink}">${esc(w?.title || (w?.mode === 'url' ? (w?.provider ?? 'Embed') : 'Web snippet'))}</text>`)

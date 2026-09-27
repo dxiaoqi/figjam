@@ -173,7 +173,7 @@ export async function startSnippetHost(registry: BoardRegistry, port = SNIPPET_P
     const block = board?.blocks.get(m[2])
     const web = block?.kind === 'web' ? block.web : undefined
     if (!web || web.mode !== 'inline') return deny(404, 'No such snippet')
-    const body = snippetDocument(web)
+    const body = snippetDocument({ ...web, ...board!.snippetSource(web) })
     if (Buffer.byteLength(body) > SNIPPET_LIMITS.sourceBytes + 16 * 1024) return deny(413, 'Snippet too large')
     res.writeHead(200, {
       'content-type': 'text/html; charset=utf-8',

@@ -5,12 +5,15 @@ import { createHash } from 'node:crypto'
  *
  *   "AIFIG\0"        6-byte magic
  *   u32 LE           header length
- *   header           UTF-8 JSON: { format, schema, app, savedAt, board?, version?, payload: { encoding, bytes, sha256 } }
+ *   header           UTF-8 JSON: { format, schema, app, savedAt, board?, version?, assets?, payload: { encoding, bytes, sha256 } }
  *   payload          Yjs update (Y.encodeStateAsUpdate) of the board document
  *
  * The header is readable without decoding the document (version lists read only headers), and the payload
  * checksum catches truncated or damaged files before they reach Yjs. Files without the magic are schema 0:
  * a bare Yjs update, as written before the container existed.
+ *
+ * Since schema 2.0 the document holds no file bytes: `assets` lists the `<sha256>.<ext>` files it needs from
+ * the assets folder next to it, so history, backups and copies can find (and keep) them from the header alone.
  */
 
 export const MAGIC = Buffer.from('AIFIG\0', 'latin1')
@@ -21,7 +24,7 @@ export interface SchemaVersion {
   minor: number
 }
 
-export const CURRENT_SCHEMA: SchemaVersion = { major: 1, minor: 0 }
+export const CURRENT_SCHEMA: SchemaVersion = { major: 2, minor: 0 }
 export const LEGACY_SCHEMA: SchemaVersion = { major: 0, minor: 0 }
 
 export const formatSchema = (v: SchemaVersion) => `${v.major}.${v.minor}`
@@ -44,6 +47,8 @@ export interface ContainerHeader {
   title?: string
   /** Present on version snapshots. */
   version?: Record<string, unknown>
+  /** Asset files the document refers to (`<sha256>.<ext>`), schema 2.0+. */
+  assets?: string[]
   payload: { encoding: 'yjs-update'; bytes: number; sha256: string }
 }
 
@@ -82,6 +87,7 @@ export function encodeContainer(payload: Uint8Array, meta: Omit<ContainerHeader,
     ...(meta.board ? { board: meta.board } : {}),
     ...(meta.title ? { title: meta.title } : {}),
     ...(meta.version ? { version: meta.version } : {}),
+    ...(meta.assets ? { assets: meta.assets } : {}),
     payload: { encoding: 'yjs-update', bytes: payload.byteLength, sha256: sha256(payload) },
   }
   const h = Buffer.from(JSON.stringify(header), 'utf8')

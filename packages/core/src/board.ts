@@ -2,10 +2,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { customAlphabet } from 'nanoid'
 import * as Y from 'yjs'
-import { skillTypeRegistry } from '@aifig/shared'
+import { assetFileName, assetIdFor, skillTypeRegistry, type AssetRole, type WebSnippet } from '@aifig/shared'
 import type { Asset, Block, BoardSkill, BoardSummary, ChangeSet, Connector, Rect, Thread, TypeRegistry } from '@aifig/shared'
+import { AssetStore, siblingAssetsDir } from './assets'
 import { cleanStaleTemps, writeFileAtomic } from './atomic'
-import { backupFile, listBackups, quarantine } from './backups'
+import { backupFile, backupPools, listBackups, quarantine } from './backups'
 import { aifigHome } from './config'
 import {
   compareSchema,
@@ -22,7 +23,7 @@ import { migrate, type MigrationResult } from './migrations'
 import { NoticeStore } from './notices'
 import { readableCopies } from './readable-copy'
 import { DataSafety } from './safety'
-import { listVersions, readVersion } from './versions'
+import { listVersions, migrateHistory, readVersion } from './versions'
 
 export { aifigHome }
 
@@ -39,6 +40,21 @@ export const SAVE_MAX_WAIT_MS = 2000
 const SAVE_RETRY_MS = 3000
 
 /** Edits since the last write, used to spot large changes worth a version from just before them. */
+/** Metadata of a new asset (the rest — id, hash, size, ext — comes from the file). */
+export interface AssetMeta {
+  mime: string
+  ext: string
+  role: AssetRole
+  name?: string
+  w?: number
+  h?: number
+  duration?: number
+}
+
+export function assetsDirFor(boardId: string) {
+  return path.join(boardsDir(), `${boardId}.assets`)
+}
+
 export interface ChangeCounts {
   added: number
   removed: number
@@ -46,9 +62,10 @@ export interface ChangeCounts {
 }
 
 /**
- * One board = one Yjs document, persisted as `<id>.aifig` (checksummed container, see fileformat.ts)
- * plus a readable `<id>.json` copy (debounced, built off the event loop; see readable-copy.ts). Saves are
- * coalesced and atomic.
+ * One board = one Yjs document, persisted as `<id>.aifig` (checksummed container, see fileformat.ts), its
+ * files in `<id>.assets/` (content-addressed, see assets.ts), plus a readable `<id>.json` copy (debounced,
+ * built off the event loop; see readable-copy.ts). Saves are coalesced and atomic. A board opened from or
+ * saved to a user file (`Name.aifig`) mirrors every save there, with its files in `Name.assets/` next to it.
  */
 export class Board {
   readonly doc = new Y.Doc()
@@ -83,6 +100,11 @@ export class Board {
   beforeWrite: ((b: Board, pending: ChangeCounts) => void) | null = null
   onSaved: ((b: Board) => void) | null = null
   onSaveError: ((b: Board, e: Error) => void) | null = null
+  /** Other places a missing asset file may still be found (the registry adds backups and other boards). */
+  static fallbackStores: (b: Board) => AssetStore[] = () => []
+  private storeCache: AssetStore | null = null
+  /** Files known to be in the external `Name.assets/` folder already. */
+  private mirrored = new Set<string>()
 
   constructor(
     readonly id: string,
@@ -115,6 +137,115 @@ export class Board {
     return path.join(boardsDir(), `${this.id}.json`)
   }
 
+  get assetsDir() {
+    return assetsDirFor(this.id)
+  }
+
+  /** The board's own asset files. */
+  get store() {
+    if (!this.storeCache || this.storeCache.dir !== this.assetsDir) this.storeCache = new AssetStore(this.assetsDir)
+    return this.storeCache
+  }
+
+  /** `Name.assets/` next to the user's `Name.aifig` (Open / Save As), if there is one. */
+  get externalStore() {
+    return this.externalPath ? new AssetStore(siblingAssetsDir(this.externalPath)) : null
+  }
+
+  /** Asset files the document refers to, as `<sha256>.<ext>`. */
+  assetFiles(): string[] {
+    const out = new Set<string>()
+    for (const a of this.assets.values()) if (a?.hash) out.add(assetFileName(a))
+    return [...out]
+  }
+
+  /**
+   * Put bytes into the assets folder and the `assets` map (reusing the entry when the same file is already
+   * there). Call inside the caller's transaction to make the entry part of its edit.
+   */
+  putAsset(bytes: Uint8Array, meta: AssetMeta): Asset {
+    const { hash } = this.store.put(bytes, meta.ext)
+    return this.recordAsset(hash, bytes.byteLength, meta)
+  }
+
+  /** Same as putAsset for a file on disk (linked or copied, never read into memory whole). */
+  importAssetFile(file: string, meta: AssetMeta): Asset {
+    const { hash, size } = this.store.importFile(file, meta.ext)
+    return this.recordAsset(hash, size, meta)
+  }
+
+  /** A finished upload (a temp file in the assets folder, hashed while it was written). */
+  adoptAssetFile(tmp: string, hash: string, size: number, meta: AssetMeta): Asset {
+    this.store.adopt(tmp, hash, meta.ext)
+    return this.recordAsset(hash, size, meta)
+  }
+
+  private recordAsset(hash: string, size: number, meta: AssetMeta): Asset {
+    const id = assetIdFor(hash)
+    const existing = this.assets.get(id)
+    if (existing?.hash === hash) return existing
+    const asset: Asset = { id, hash, size, ...meta, createdAt: Date.now() }
+    for (const k of Object.keys(asset) as (keyof Asset)[]) if (asset[k] === undefined) delete asset[k]
+    this.assets.set(id, asset)
+    return asset
+  }
+
+  /**
+   * Path of an asset's file, or null when it can't be found. A file missing here but found elsewhere (the
+   * external folder, a backup, another board — same hash, same bytes) is linked back in first.
+   */
+  assetPath(ref: string | Asset | undefined): string | null {
+    const a = typeof ref === 'string' ? this.assets.get(ref) : ref
+    if (!a?.hash) return null
+    if (this.store.has(a.hash, a.ext)) return this.store.file(a.hash, a.ext)
+    const elsewhere = [this.externalStore, ...Board.fallbackStores(this)].filter((s): s is AssetStore => !!s && s.dir !== this.store.dir)
+    for (const s of elsewhere) {
+      if (!s.has(a.hash, a.ext)) continue
+      try {
+        if (s.verify(a.hash, a.ext) && s.copyTo(this.store, a.hash, a.ext)) return this.store.file(a.hash, a.ext)
+      } catch {
+        return s.file(a.hash, a.ext)
+      }
+    }
+    return null
+  }
+
+  readAsset(ref: string | Asset | undefined): Buffer | null {
+    const p = this.assetPath(ref)
+    try {
+      return p ? fs.readFileSync(p) : null
+    } catch {
+      return null
+    }
+  }
+
+  readAssetText(ref: string | undefined) {
+    return ref ? (this.readAsset(ref)?.toString('utf8') ?? '') : ''
+  }
+
+  /** Inline snippet source as text, from its files (or from a 1.x-style inline snippet). */
+  snippetSource(web: WebSnippet | undefined): { html: string; css: string; js: string } {
+    if (!web || web.mode !== 'inline') return { html: '', css: '', js: '' }
+    if (!web.src) return { html: web.html ?? '', css: web.css ?? '', js: web.js ?? '' }
+    return { html: this.readAssetText(web.src.html), css: this.readAssetText(web.src.css), js: this.readAssetText(web.src.js) }
+  }
+
+  /** Copy asset files the external `Name.assets/` folder doesn't have yet. */
+  syncExternalAssets() {
+    const ext = this.externalStore
+    if (!ext) return
+    for (const a of this.assets.values()) {
+      if (!a?.hash) continue
+      const name = assetFileName(a)
+      if (this.mirrored.has(`${ext.dir}/${name}`)) continue
+      try {
+        if (ext.has(a.hash, a.ext) || (this.assetPath(a) && this.store.copyTo(ext, a.hash, a.ext))) this.mirrored.add(`${ext.dir}/${name}`)
+      } catch (e) {
+        console.error(`[core] could not copy ${name} to ${ext.dir}:`, e)
+      }
+    }
+  }
+
   get title() {
     return (this.meta.get('title') as string) ?? 'Untitled board'
   }
@@ -127,7 +258,7 @@ export class Board {
    * Decode a file into a detached board: verify the container, apply the Yjs payload, run migrations.
    * Throws CorruptFileError or FutureVersionError; never returns a silently empty board.
    */
-  static fromBytes(id: string, data: Uint8Array, file?: string, opts: { persist?: boolean } = {}): { board: Board; migration: MigrationResult; savedAt: number | null } {
+  static fromBytes(id: string, data: Uint8Array, file?: string, opts: { persist?: boolean; store?: AssetStore } = {}): { board: Board; migration: MigrationResult; savedAt: number | null } {
     const decoded = decodeContainer(data, file)
     const b = new Board(id, opts)
     try {
@@ -138,7 +269,8 @@ export class Board {
     if (compareSchema(decoded.schema, LEGACY_SCHEMA) === 0 && !b.meta.size && !b.blocks.size) {
       throw new CorruptFileError('no board data in the file', file)
     }
-    const migration = migrate(b.doc, decoded.schema)
+    const store = opts.store ?? new AssetStore(assetsDirFor(id))
+    const migration = migrate(b.doc, decoded.schema, undefined, undefined, { putFile: (bytes, ext) => store.put(bytes, ext).hash })
     b.schema = migration.newerMinor ? decoded.schema : CURRENT_SCHEMA
     return { board: b, migration, savedAt: decoded.header?.savedAt ?? null }
   }
@@ -173,7 +305,7 @@ export class Board {
   }
 
   encode(payload = Y.encodeStateAsUpdate(this.doc)) {
-    return encodeContainer(payload, { savedAt: Date.now(), board: this.id, title: this.title, schema: this.schemaLabel })
+    return encodeContainer(payload, { savedAt: Date.now(), board: this.id, title: this.title, schema: this.schemaLabel, assets: this.assetFiles() })
   }
 
   /** Write now if there are unsaved edits (or always with `force`). Returns false if the write failed. */
@@ -199,6 +331,7 @@ export class Board {
       if (this.externalPath) {
         try {
           writeFileAtomic(this.externalPath, bytes)
+          this.syncExternalAssets()
         } catch (e) {
           console.error(`[core] could not write ${this.externalPath}:`, e)
         }
@@ -224,6 +357,8 @@ export class Board {
     if (this.saveTimer) clearTimeout(this.saveTimer)
     fs.rmSync(this.file, { force: true })
     readableCopies.remove(this.jsonFile)
+    for (const f of this.store.list()) this.store.remove(f.hash, f.ext)
+    fs.rmSync(this.assetsDir, { recursive: true, force: true })
   }
 
   touch() {
@@ -240,7 +375,7 @@ export class Board {
       blocks: [...this.blocks.values()],
       connectors: [...this.connectors.values()],
       changeSets: [...this.changeSets.values()],
-      assets: [...this.assets.values()].map(({ bytes, ...meta }) => ({ ...meta, size: bytes.byteLength })),
+      assets: [...this.assets.values()],
       threads: [...this.threads.values()],
     }
   }
@@ -302,6 +437,33 @@ export class BoardRegistry {
   readonly safety = new DataSafety(this.notices)
   onBoardAdded: ((b: Board) => void) | null = null
 
+  constructor() {
+    Board.fallbackStores = (b) => [
+      ...backupPools(b.id).map((dir) => new AssetStore(dir)),
+      ...[...this.boards.values()].filter((o) => o !== b).flatMap((o) => [o.store, o.externalStore].filter((s): s is AssetStore => !!s)),
+    ]
+  }
+
+  /**
+   * Bring in the files a board from a user file needs: from `Name.assets/` next to it, or the `assets/` pool
+   * when it is a backup. Hash-checked, so a file whose bytes don't match its name is never taken in.
+   */
+  private importSiblingAssets(b: Board, file: string) {
+    const sources = [new AssetStore(siblingAssetsDir(file)), new AssetStore(path.join(path.dirname(file), 'assets'))]
+    for (const a of b.assets.values()) {
+      if (!a?.hash || b.store.has(a.hash, a.ext)) continue
+      for (const src of sources) {
+        if (!src.has(a.hash, a.ext)) continue
+        try {
+          b.store.importFile(src.file(a.hash, a.ext), a.ext, a.hash)
+          break
+        } catch (e) {
+          console.error(`[core] skipped ${assetFileName(a)} from ${src.dir}: ${(e as Error).message}`)
+        }
+      }
+    }
+  }
+
   private externalIndex() {
     return path.join(aifigHome(), 'external.json')
   }
@@ -319,6 +481,7 @@ export class BoardRegistry {
     if (open) return open
     const data = fs.readFileSync(abs)
     const { board: b, migration } = Board.fromBytes(`b${newId()}`, data, abs)
+    this.importSiblingAssets(b, abs)
     if (!b.meta.get('title')) b.meta.set('title', path.basename(abs, '.aifig'))
     if (migration.applied.length) backupFile(b.id, b.title, data, `before-format-${formatSchema(migration.from)}`)
     b.externalPath = abs
@@ -331,6 +494,7 @@ export class BoardRegistry {
   /** A new board with a copy of a file's content (the file itself is not linked or changed). */
   importCopy(file: string, title?: string): Board {
     const { board: b } = Board.fromBytes(`b${newId()}`, fs.readFileSync(path.resolve(file)), path.resolve(file))
+    this.importSiblingAssets(b, path.resolve(file))
     b.doc.transact(() => {
       if (title) b.meta.set('title', title)
       b.meta.set('createdAt', Date.now())
@@ -345,6 +509,7 @@ export class BoardRegistry {
   saveAs(b: Board, file: string) {
     b.externalPath = path.resolve(file)
     b.saveNow(true)
+    b.syncExternalAssets()
     this.saveExternalIndex()
   }
 
@@ -384,6 +549,12 @@ export class BoardRegistry {
         backupFile(id, board.title, data, `before-format-${formatSchema(migration.from)}`)
         console.error(`[core] migrated “${board.title}” to file format ${formatSchema(migration.to)}`)
         board.saveNow(true)
+        try {
+          const n = migrateHistory(id, board.store)
+          if (n) console.error(`[core] moved the files of ${n} version${n === 1 ? '' : 's'} of “${board.title}” to its assets folder`)
+        } catch (e) {
+          console.error(`[core] history of ${id} not migrated (it still opens as is):`, e)
+        }
       }
       this.safety.onLoaded(board, data)
       return board
