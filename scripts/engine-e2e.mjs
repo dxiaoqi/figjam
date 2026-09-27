@@ -106,7 +106,7 @@ await page.keyboard.press('Escape')
 await wait(300)
 bs = await blocks()
 conns = await ed(() => window.editor.connectors().length)
-check('connector dropped on empty canvas creates a connected sticky', !!bs.find((x) => x.text === 'Dropped here') && conns === 2)
+check('connector dropped on empty canvas creates a connected sticky', !!bs.find((x) => x.text === 'Dropped here' && x.kind === 'sticky') && conns === 2)
 
 // 6. marquee select + frame tool around everything
 await page.mouse.move(120, 120)
@@ -1399,6 +1399,53 @@ const boardFiles = fs.readdirSync(boardsDir).map((f) => fs.readFileSync(path.joi
 check('the API key never reaches board files', !boardFiles.includes('sk-test-DO-NOT-PERSIST'))
 await cfg({ provider: null })
 }
+
+// connector drop on empty canvas matches the source kind (and type)
+const dropSrc = await ed(() => {
+  const ed = window.editor
+  return {
+    heading: ed.createBlock({ kind: 'text', x: 28000, y: 4000, w: 200, h: 40, text: 'Drop heading', color: 'gray', size: 'l' }),
+    card: ed.createBlock({ kind: 'card', x: 28000, y: 4200, w: 280, h: 96, title: 'Drop card', text: 'A source card', color: 'blue', size: 'm' }),
+    sticky: ed.createBlock({ kind: 'sticky', x: 28000, y: 4440, w: 200, h: 200, text: 'Drop sticky', color: 'pink', size: 'm' }),
+    quote: ed.createBlock({ kind: 'sticky', x: 28000, y: 4720, w: 200, h: 200, text: 'Drop quote', color: 'teal', size: 'm', type: 'quote' }),
+  }
+})
+const dropConnect = async (id, shotName) => {
+  await ed((i) => {
+    const r = window.editor.pageRect(i)
+    window.editor.select([i])
+    window.editor.stopEditing()
+    window.editor.zoomToBounds({ x: r.x - 80, y: r.y - 180, w: r.w + 720, h: r.h + 360 }, { animate: false })
+  }, id)
+  await wait(350)
+  const sb = await screenOf(id)
+  await page.mouse.move(sb.x, sb.y)
+  await wait(180)
+  const handle = page.locator(`.ae-connect-handle[data-connect-from="${id}"]`).nth(1)
+  const box = await handle.boundingBox()
+  if (!box) return null
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 280, box.y + box.height / 2, { steps: 10 })
+  await page.mouse.up()
+  await wait(250)
+  if (shotName) await shot(shotName)
+  await page.keyboard.press('Escape')
+  await wait(250)
+  return ed((from) => {
+    const dest = window.editor.connectors().find((c) => c.from === from && c.to)
+    const b = dest?.to ? window.editor.block(dest.to) : null
+    return b ? { id: b.id, kind: b.kind, type: b.type ?? null, color: b.color, text: b.text, title: b.title ?? '' } : null
+  }, id)
+}
+const dropHeading = await dropConnect(dropSrc.heading, 'engine-drop-heading.png')
+check('drop from a heading creates a heading', dropHeading?.kind === 'text' && !dropHeading.type, JSON.stringify(dropHeading))
+const dropCard = await dropConnect(dropSrc.card, 'engine-drop-card.png')
+check('drop from a card creates a card', dropCard?.kind === 'card' && !dropCard.type, JSON.stringify(dropCard))
+const dropSticky = await dropConnect(dropSrc.sticky)
+check('drop from a sticky creates a sticky', dropSticky?.kind === 'sticky' && !dropSticky.type && dropSticky.color === 'pink', JSON.stringify(dropSticky))
+const dropQuote = await dropConnect(dropSrc.quote, 'engine-drop-quote.png')
+check('drop from a typed quote creates a quote', dropQuote?.kind === 'sticky' && dropQuote.type === 'quote', JSON.stringify(dropQuote))
 
 // level of detail + 2,000-block performance
 const many = { blocks: Array.from({ length: 2000 }, (_, i) => ({ text: `Note ${i + 1}`, color: ['yellow', 'blue', 'green', 'pink', 'purple'][i % 5], size: 's' })), layout: 'grid', columns: 50, at: { x: 0, y: 6000 } }
