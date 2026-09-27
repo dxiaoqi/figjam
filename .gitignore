@@ -9,3 +9,5 @@ apps/desktop/release
 tests/aesthetics/output
 bench-results
 ci-results
+release/
+apps/telemetry/data

@@ -8,6 +8,7 @@
   "devDependencies": {
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
+    "electron-updater": "^6.8.9",
     "esbuild": "^0.28.2"
   },
   "scripts": {
@@ -15,64 +16,9 @@
     "build": "node scripts/build.mjs",
     "build:dir": "node scripts/build.mjs --dir"
   },
-  "build": {
-    "appId": "dev.aifig.desktop",
-    "productName": "ai-figma",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "src/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "build/aifig.mjs",
-        "to": "aifig.mjs"
-      },
-      {
-        "from": "build/features.json",
-        "to": "features.json"
-      },
-      {
-        "from": "../canvas/dist",
-        "to": "ui"
-      },
-      {
-        "from": "../../skills/builtin",
-        "to": "skills"
-      },
-      {
-        "from": "../../node_modules/@resvg",
-        "to": "node_modules/@resvg"
-      }
-    ],
-    "fileAssociations": [
-      {
-        "ext": "aifig",
-        "name": "ai-figma board",
-        "role": "Editor"
-      }
-    ],
-    "mac": {
-      "category": "public.app-category.productivity",
-      "target": [
-        "dmg"
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ],
-      "category": "Graphics",
-      "executableName": "ai-figma"
-    },
-    "win": {
-      "target": [
-        "nsis"
-      ]
-    },
-    "npmRebuild": false,
-    "executableName": "ai-figma"
-  }
+  "author": {
+    "name": "ai-figma",
+    "email": "beta@example.com"
+  },
+  "homepage": "https://cursor.com/codebase/we-ding/genesis"
 }

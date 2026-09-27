@@ -16,6 +16,14 @@ export const site = {
   betaEmail: 'beta@example.com',
   corePort: 47821,
   uiPort: 47820,
+  /**
+   * The release manifest written by `npm run release` (installers, sizes, SHA-256). An absolute URL (your bucket's
+   * latest.json, served with CORS) is re-read in the browser, so a new release shows up without rebuilding the site;
+   * a path is read from ./public at build time.
+   */
+  releaseManifestUrl: process.env.NEXT_PUBLIC_RELEASE_MANIFEST_URL ?? '/downloads/latest.json',
+  /** The counter service (apps/telemetry). Empty: downloads aren't counted. */
+  telemetryUrl: (process.env.NEXT_PUBLIC_TELEMETRY_URL ?? '').replace(/\/+$/, ''),
 } as const
 
 export type Site = typeof site

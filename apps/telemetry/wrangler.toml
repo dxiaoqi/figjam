@@ -1,0 +1,12 @@
+name = "aifig-telemetry"
+main = "src/worker.ts"
+compatibility_date = "2026-09-01"
+
+# npx wrangler d1 create aifig-telemetry   → paste the database_id below
+[[d1_databases]]
+binding = "DB"
+database_name = "aifig-telemetry"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[vars]
+RATE_LIMIT = "30"

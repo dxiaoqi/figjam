@@ -1,0 +1,8 @@
+{
+  "telemetryUrl": "",
+  "updateFeedUrl": "",
+  "downloadBaseUrl": "",
+  "publish": {
+    "target": "none"
+  }
+}

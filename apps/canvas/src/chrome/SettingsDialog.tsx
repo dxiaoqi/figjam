@@ -1,10 +1,11 @@
-import { Languages, Monitor, Moon, Sparkles, Sun, WandSparkles } from 'lucide-react'
+import { BarChart3, Languages, Monitor, Moon, Sparkles, Sun, WandSparkles } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { FEATURES } from '@aifig/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { LOCALES, systemLocale, useLocale, useT, type LocalePref } from '../i18n'
+import { UsageSharing, useTelemetry } from './UsageSharing'
 
 export type ThemePref = 'system' | 'light' | 'dark'
 
@@ -45,6 +46,17 @@ function Row({ icon, title, hint, children }: { icon: ReactNode; title: string; 
       </div>
       <div className="shrink-0 sm:w-[300px]">{children}</div>
     </div>
+  )
+}
+
+function UsageRow() {
+  const t = useT()
+  const { status } = useTelemetry()
+  if (!status) return null
+  return (
+    <Row icon={<BarChart3 className="size-4" />} title={t('usage.settingsTitle')} hint={t('usage.settingsHint')}>
+      <UsageSharing variant="settings" />
+    </Row>
   )
 }
 
@@ -118,6 +130,7 @@ export function SettingsDialog({ themePref, setTheme, onShowWelcome }: { themePr
             </Button>
           </Row>
           )}
+          <UsageRow />
         </div>
       </DialogContent>
     </Dialog>

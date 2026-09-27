@@ -44,7 +44,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
           </Reveal>
           <Reveal delay={180} className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg" className="h-11 rounded-full px-6 text-[15px]">
-              <Link href={`${base}/download/#beta`}>
+              <Link href={`${base}/download/`}>
                 {h.hero.primary}
                 <ArrowRight className="size-4" aria-hidden />
               </Link>
@@ -264,13 +264,13 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
             <p className="lede mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-muted-foreground">{h.cta.body}</p>
             <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button asChild size="lg" className="h-11 rounded-full px-6 text-[15px]">
-                <Link href={`${base}/download/#beta`}>
+                <Link href={`${base}/download/`}>
                   {h.cta.primary}
                   <ArrowRight className="size-4" aria-hidden />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="h-11 rounded-full bg-white/70 px-6 text-[15px]">
-                <Link href={`${base}/download/#source`}>{h.cta.secondary}</Link>
+                <Link href={`${base}/docs/`}>{h.cta.secondary}</Link>
               </Button>
             </div>
           </Reveal>

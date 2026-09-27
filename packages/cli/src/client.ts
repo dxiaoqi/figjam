@@ -42,7 +42,12 @@ export function ensureCore(): Promise<void> {
     fs.mkdirSync(home, { recursive: true })
     const log = fs.openSync(path.join(home, 'core.log'), 'a')
     const bin = process.env.AIFIG_BIN ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../bin/aifig.mjs')
-    const child = spawn(process.execPath, [bin, 'core'], { detached: true, stdio: ['ignore', log, log], env: process.env })
+    // Linux AppImage: process.execPath is inside this process's temporary mount, which goes away when it exits;
+    // start the core through the AppImage file so it gets a mount that lives as long as it does
+    const appImage = process.env.ELECTRON_RUN_AS_NODE && process.env.APPIMAGE
+    const child = appImage
+      ? spawn(appImage, [bin, 'core', '--no-sandbox'], { detached: true, stdio: ['ignore', log, log], env: process.env })
+      : spawn(process.execPath, [bin, 'core'], { detached: true, stdio: ['ignore', log, log], env: process.env })
     child.unref()
     for (let i = 0; i < 50; i++) {
       await new Promise((r) => setTimeout(r, 200))

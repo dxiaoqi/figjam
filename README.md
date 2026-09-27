@@ -11,7 +11,15 @@ design system, agent access over MCP (stdio and local HTTP) and the CLI, review,
 [scenarios](#scenarios) packaged as skills. There is no built-in AI: the canvas is driven by your own agents
 (Claude Code, Cursor, …). No execution or sync yet.
 
-## Quick start
+## Install
+
+Download the installer for macOS (`.dmg`, Apple silicon or Intel), Windows (`.exe`, x64 or Arm64) or Linux
+(`.AppImage` or `.deb`) from the website's Download page. Nothing else is needed: the canvas, the core, the CLI and the
+MCP server for Claude Code and Cursor are inside the app, running on its own Node. Beta builds may be unsigned — the
+Download page and [docs/distribution.md](docs/distribution.md#first-launch-on-unsigned-builds) show the one-time
+Gatekeeper / SmartScreen step. After installing, **Help › Connect agent** sets up Claude Code and Cursor.
+
+## Quick start (from source)
 
 Requires Node 22+.
 
@@ -40,8 +48,14 @@ the core serves it on port 47821.
 ```bash
 npm run desktop          # build the UI and run the Electron app (starts or reuses the core)
 npm run desktop:dev      # same, but load the Vite dev server for hot reload (run `npm run dev` first)
-npm run desktop:build    # package it (electron-builder; add `-- --dir` for an unpacked build)
+npm run desktop:build    # package for this OS (electron-builder; add `-- --dir` for an unpacked build)
+npm run release:linux    # AppImage + .deb → release/<version>/ with SHA256SUMS.txt and latest.json
+npm run release:win      # NSIS installers, x64 + arm64 (on Linux: needs wine)
+npm run release:mac      # .dmg + .zip, arm64 + x64 — on a Mac; signs/notarizes when CSC_LINK / APPLE_ID… are set
 ```
+
+Releases, signing, publishing (S3-compatible bucket, HTTP PUT or a folder), auto-update and the install counter are
+described in [docs/distribution.md](docs/distribution.md).
 
 The desktop app runs the core with Electron's own Node, so nothing else needs to be installed, and signs in to it on its own. It has native menus
 and shortcuts (New Board ⌘N, Open… ⌘O, Open Recent, Save As… ⇧⌘S, Export PNG/SVG/JSON/Markdown, Undo/Redo, zoom,
@@ -532,6 +546,9 @@ npm run test:contrast                                 # WCAG AA contrast of toke
 npm run bench                                         # performance report + budgets (see below)
 npm run test:skills                                   # skill format, L0/L1, permissions, CLI, save as block type + scenario runs
 npm run test:scenarios                                # just the scenario runs (MCP agent follows each SKILL.md; see Scenarios)
+npm run test:telemetry                                # install counting (opt-in, env off, no PII), release manifest, counter service
+npm run test:packaging                                # packaged AppImage: core, window, consent, one-click setup, MCP without Node
+npm run telemetry:dev                                 # counter service with mock data: http://127.0.0.1:47910/admin
 npm run ci                                            # all of the above in one run (see CI)
 ```
 

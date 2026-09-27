@@ -669,7 +669,9 @@ skill
     }),
   )
 
-program.parseAsync(process.argv, { from: 'node' }).catch((e) => {
+// The Linux AppImage launcher adds --no-sandbox (an Electron flag) when user namespaces are off; agent configs
+// append it themselves so it lands here as a harmless trailing argument instead of breaking Node mode.
+program.parseAsync(process.argv.filter((a, i) => i < 2 || a !== '--no-sandbox'), { from: 'node' }).catch((e) => {
   console.error(`✗ ${(e as Error).message}`)
   process.exit(1)
 })
