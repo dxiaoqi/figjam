@@ -1403,40 +1403,46 @@ await cfg({ provider: null })
 // connector drop on empty canvas matches the source kind (and type)
 const dropSrc = await ed(() => {
   const ed = window.editor
+  ed.setTool('select')
+  ed.stopEditing()
   return {
     heading: ed.createBlock({ kind: 'text', x: 28000, y: 4000, w: 200, h: 40, text: 'Drop heading', color: 'gray', size: 'l' }),
-    card: ed.createBlock({ kind: 'card', x: 28000, y: 4200, w: 280, h: 96, title: 'Drop card', text: 'A source card', color: 'blue', size: 'm' }),
-    sticky: ed.createBlock({ kind: 'sticky', x: 28000, y: 4440, w: 200, h: 200, text: 'Drop sticky', color: 'pink', size: 'm' }),
-    quote: ed.createBlock({ kind: 'sticky', x: 28000, y: 4720, w: 200, h: 200, text: 'Drop quote', color: 'teal', size: 'm', type: 'quote' }),
+    card: ed.createBlock({ kind: 'card', x: 29400, y: 4000, w: 280, h: 96, title: 'Drop card', text: 'A source card', color: 'blue', size: 'm' }),
+    sticky: ed.createBlock({ kind: 'sticky', x: 31000, y: 4000, w: 200, h: 200, text: 'Drop sticky', color: 'pink', size: 'm' }),
+    quote: ed.createBlock({ kind: 'sticky', x: 32600, y: 4000, w: 200, h: 200, text: 'Drop quote', color: 'teal', size: 'm', type: 'quote' }),
   }
 })
 const dropConnect = async (id, shotName) => {
   await ed((i) => {
-    const r = window.editor.pageRect(i)
-    window.editor.select([i])
-    window.editor.stopEditing()
-    window.editor.zoomToBounds({ x: r.x - 80, y: r.y - 180, w: r.w + 720, h: r.h + 360 }, { animate: false })
+    const ed = window.editor
+    ed.setTool('select')
+    ed.stopEditing()
+    const r = ed.pageRect(i)
+    ed.select([i])
+    // pin the source near the top-left, same gesture as the earlier connect-handle check
+    ed.setCamera({ x: 200 - r.x, y: 120 - r.y, z: 1 })
   }, id)
-  await wait(350)
+  await wait(400)
   const sb = await screenOf(id)
   await page.mouse.move(sb.x, sb.y)
-  await wait(180)
-  const handle = page.locator(`.ae-connect-handle[data-connect-from="${id}"]`).nth(1)
-  const box = await handle.boundingBox()
-  if (!box) return null
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await wait(150)
+  const handles = await page.locator('.ae-connect-handle').all()
+  const right = handles.length > 1 ? await handles[1].boundingBox() : null
+  if (!right) return null
+  await page.mouse.move(right.x + 6, right.y + 6)
   await page.mouse.down()
-  await page.mouse.move(box.x + 280, box.y + box.height / 2, { steps: 10 })
+  await page.mouse.move(right.x + 260, right.y + 6, { steps: 10 })
   await page.mouse.up()
-  await wait(250)
+  await wait()
   if (shotName) await shot(shotName)
-  await page.keyboard.press('Escape')
-  await wait(250)
-  return ed((from) => {
-    const dest = window.editor.connectors().find((c) => c.from === from && c.to)
-    const b = dest?.to ? window.editor.block(dest.to) : null
-    return b ? { id: b.id, kind: b.kind, type: b.type ?? null, color: b.color, text: b.text, title: b.title ?? '' } : null
+  const dest = await ed((from) => {
+    const c = window.editor.connectors().find((c) => c.from === from && c.to)
+    const b = c?.to ? window.editor.block(c.to) : null
+    return b ? { id: b.id, kind: b.kind, type: b.type ?? null, color: b.color } : null
   }, id)
+  await page.keyboard.press('Escape')
+  await wait(200)
+  return dest
 }
 const dropHeading = await dropConnect(dropSrc.heading, 'engine-drop-heading.png')
 check('drop from a heading creates a heading', dropHeading?.kind === 'text' && !dropHeading.type, JSON.stringify(dropHeading))
