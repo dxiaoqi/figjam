@@ -42,7 +42,7 @@ module.exports = {
   mac: {
     category: 'public.app-category.productivity',
     target: ['dmg', 'zip'],
-    icon: 'build/resources/icon.png',
+    icon: 'resources/icon.icns',
     identity: macSigned ? undefined : '-',
     hardenedRuntime: macSigned,
     entitlements: 'resources/entitlements.mac.plist',
@@ -52,7 +52,7 @@ module.exports = {
   dmg: { artifactName: 'ai-figma-${version}-mac-${arch}.${ext}' },
   win: {
     target: ['nsis'],
-    icon: 'build/resources/icon.png',
+    icon: 'resources/icon.ico',
     // editing the exe (icon, version info) needs wine when cross-building from Linux/macOS
     signAndEditExecutable: env.AIFIG_WIN_EDIT_EXE !== '0',
   },
@@ -64,7 +64,8 @@ module.exports = {
   },
   linux: {
     target: ['AppImage', 'deb'],
-    icon: 'build/resources/icon.png',
+    // <n>x<n>.png, 16–1024; all icons come from assets/brand/ via scripts/brand-icons.mjs
+    icon: 'resources/icons',
     category: 'Graphics',
     executableName: 'ai-figma',
     maintainer: `ai-figma <${contactEmail}>`,

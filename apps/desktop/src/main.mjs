@@ -577,6 +577,9 @@ app.on('web-contents-created', (_e, contents) => {
 
 // ---- window ------------------------------------------------------------------
 
+// packaged: build/app/icon.png (copied by scripts/build.mjs); from source: the committed Linux raster
+const windowIcon = [path.join(here, 'icon.png'), path.join(here, '../resources/icons/512x512.png')].find((p) => fs.existsSync(p))
+
 async function createWindow() {
   const prefs = readPrefs()
   nativeTheme.themeSource = prefs.theme ?? 'system'
@@ -587,6 +590,7 @@ async function createWindow() {
     minWidth: 720,
     minHeight: 480,
     title: 'ai-figma',
+    ...(process.platform !== 'darwin' && windowIcon ? { icon: windowIcon } : {}),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#141416' : '#FAFAF9',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: { preload: path.join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, webviewTag: true },

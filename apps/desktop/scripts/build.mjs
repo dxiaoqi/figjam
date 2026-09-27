@@ -83,15 +83,8 @@ for (const f of ['preload.cjs', 'snippet-preload.cjs']) fs.copyFileSync(path.joi
 // runtime URLs baked into the package (env vars and ~/.aifig/config.json can still override them)
 fs.writeFileSync(path.join(out, 'app/distribution.json'), JSON.stringify({ version, telemetryUrl: dist.telemetryUrl, updateFeedUrl: dist.updateFeedUrl }, null, 2))
 
-console.log('› rendering icons')
-{
-  const { Resvg } = await import('@resvg/resvg-js')
-  const svg = fs.readFileSync(path.join(desktop, 'resources/icon.svg'))
-  for (const size of [1024, 512, 256]) {
-    const png = new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng()
-    fs.writeFileSync(path.join(out, 'resources', size === 1024 ? 'icon.png' : `icon-${size}.png`), png)
-  }
-}
+// the window/taskbar icon on Linux and Windows (macOS uses the bundle's .icns)
+fs.copyFileSync(path.join(desktop, 'resources/icons/512x512.png'), path.join(out, 'app/icon.png'))
 
 // ---- the resvg native module for each target platform/arch --------------------------------------
 const RESVG_TRIPLES = {

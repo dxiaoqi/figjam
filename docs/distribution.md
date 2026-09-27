@@ -17,7 +17,8 @@ agent skill (`resources/agent-skill`) and the resvg native module for the target
 run on Electron's own Node (`ELECTRON_RUN_AS_NODE=1`), so users need nothing else installed.
 
 `apps/desktop/scripts/build.mjs` does the work: builds the UI, bundles the CLI/core/MCP and the Electron main process
-(with electron-updater) with esbuild, renders icons from `apps/desktop/resources/icon.svg`, stages the resvg binary for
+(with electron-updater) with esbuild, copies the window icon from `apps/desktop/resources/icons/` (the committed icon rasters; regenerate them from
+`assets/brand/` with `node scripts/brand-icons.mjs`), stages the resvg binary for
 each target (fetched from npm when the host OS/arch differs), and runs electron-builder with
 `apps/desktop/electron-builder.config.cjs`.
 
