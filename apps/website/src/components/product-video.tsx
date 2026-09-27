@@ -2,9 +2,14 @@
 
 import { Pause, Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { shotSrcSet } from '@/components/product-shot'
+import { type ShotName, shots } from '@/lib/media'
 import { cn } from '@/lib/utils'
 
-/** A muted product clip that plays only while on screen, never with reduced motion unless asked, and can be paused. */
+/**
+ * A muted product clip that plays only while on screen, never with reduced motion unless asked, and can be paused.
+ * The poster is a responsive image underneath, so phones get the small one and nothing loads before it's needed.
+ */
 export function ProductVideo({
   src,
   poster,
@@ -12,14 +17,17 @@ export function ProductVideo({
   className,
   pauseLabel,
   playLabel,
+  priority,
 }: {
   src: string
-  poster: string
+  poster: ShotName
   label: string
   className?: string
   pauseLabel: string
   playLabel: string
+  priority?: boolean
 }) {
+  const [w, h] = shots[poster]
   const ref = useRef<HTMLVideoElement>(null)
   const [playing, setPlaying] = useState(false)
   const userPaused = useRef(false)
@@ -32,12 +40,30 @@ export function ProductVideo({
     const io = new IntersectionObserver(
       ([e]) => {
         if (e.isIntersecting && !userPaused.current) v.play().catch(() => {})
-        else if (!e.isIntersecting) v.pause()
+        // pause() on a clip that never loaded would start loading it (media resource selection)
+        else if (!e.isIntersecting && !v.paused) v.pause()
       },
       { threshold: 0.25 },
     )
-    io.observe(v)
-    return () => io.disconnect()
+    // Loading media before the first paint is on screen puts the page back into a loading state and holds that
+    // paint, so clips wait for the browser's first-contentful-paint entry (or a second where it isn't reported).
+    const start = () => io.observe(v)
+    let po: PerformanceObserver | undefined
+    let timer = 0
+    if (performance.getEntriesByName('first-contentful-paint').length) start()
+    else if (PerformanceObserver.supportedEntryTypes?.includes('paint')) {
+      po = new PerformanceObserver((list) => {
+        if (!list.getEntriesByName('first-contentful-paint').length) return
+        po?.disconnect()
+        start()
+      })
+      po.observe({ type: 'paint', buffered: true })
+    } else timer = window.setTimeout(start, 1000)
+    return () => {
+      po?.disconnect()
+      clearTimeout(timer)
+      io.disconnect()
+    }
   }, [])
 
   const toggle = () => {
@@ -54,17 +80,30 @@ export function ProductVideo({
 
   return (
     <div className={cn('group relative', className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- static export, pre-optimized WebP */}
+      <img
+        src={`/media/${poster}.webp`}
+        srcSet={shotSrcSet(poster)}
+        sizes="(min-width: 1152px) 1024px, 100vw"
+        alt=""
+        aria-hidden
+        width={w}
+        height={h}
+        loading={priority ? 'eager' : 'lazy'}
+        fetchPriority={priority ? 'high' : undefined}
+        decoding="async"
+        className="absolute inset-0 size-full object-cover"
+      />
       <video
         ref={ref}
-        className="block h-auto w-full"
-        poster={poster}
+        className="relative block h-auto w-full"
         muted
         loop
         playsInline
-        preload="metadata"
+        preload="none"
         aria-label={label}
-        width={1440}
-        height={900}
+        width={w}
+        height={h}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
       >

@@ -11,6 +11,7 @@ export function SiteFooter({ locale, t }: { locale: Locale; t: Dict }) {
       title: t.footer.product,
       links: [
         { href: `${base}/#features`, label: t.nav.product },
+        { href: `${base}/scenarios/`, label: t.nav.scenarios },
         { href: `${base}/download/`, label: t.nav.download },
         { href: `${base}/changelog/`, label: t.nav.changelog },
       ],
@@ -23,17 +24,24 @@ export function SiteFooter({ locale, t }: { locale: Locale; t: Dict }) {
         { href: site.repoUrl, label: t.footer.source, external: true },
       ],
     },
+    {
+      title: t.footer.legal,
+      links: [
+        { href: `${base}/privacy/`, label: t.nav.privacy },
+        { href: `mailto:${site.contactEmail}`, label: site.contactEmail, external: true },
+      ],
+    },
   ]
   return (
     <footer className="border-t border-border bg-background">
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr]">
-        <div className="max-w-sm">
+      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:px-8 grid-cols-2 sm:grid-cols-3 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+        <div className="col-span-2 max-w-sm sm:col-span-3 md:col-span-1">
           <div className="flex items-center gap-2.5">
             <BrandMark />
             <BrandName />
           </div>
           <p className="mt-4 text-sm text-muted-foreground">{t.footer.tagline}</p>
-          <p className="mt-2 text-xs text-muted-foreground/80">{t.footer.codename}</p>
+          <p className="mt-2 text-xs text-muted-foreground">{t.footer.codename}</p>
         </div>
         {cols.map((c) => (
           <div key={c.title}>
@@ -42,7 +50,11 @@ export function SiteFooter({ locale, t }: { locale: Locale; t: Dict }) {
               {c.links.map((l) => (
                 <li key={l.href}>
                   {'external' in l ? (
-                    <a href={l.href} className="text-sm text-foreground/80 hover:text-foreground" rel="noreferrer" target="_blank">
+                    <a
+                      href={l.href}
+                      className="text-sm text-foreground/80 hover:text-foreground"
+                      {...(l.href.startsWith('http') ? { rel: 'noreferrer', target: '_blank' } : {})}
+                    >
                       {l.label}
                     </a>
                   ) : (

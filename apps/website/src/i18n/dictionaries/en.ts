@@ -1,16 +1,24 @@
 import type { Site } from '@/config/site'
+import privacyEn from './privacy-en'
+import scenariosEn from './scenarios-en'
 
 export default function en(s: Site) {
   return {
     meta: {
-      title: `${s.name} — a calm canvas for you and your agents`,
-      description: `${s.name} is a local-first whiteboard that feels good by hand and that Claude Code, Cursor and any MCP client can drive. Agent edits land tidy, show up live and wait for your review.`,
+      title: `${s.name} — your agent maps it out, you decide what stays`,
+      description: `${s.name} is a local-first canvas that Claude Code, Cursor and any MCP client can drive. Your agent maps codebases, research and ideas onto the board, live; every change waits for your review.`,
+      ogAlt: `${s.name}: a canvas your agent draws on, and you review`,
       download: 'Download',
       docs: 'Docs',
       changelog: 'Changelog',
+      downloadDescription: `Download ${s.name} for macOS, Windows or Linux. One installer with the canvas, the local core and the MCP server for Claude Code and Cursor.`,
+      docsDescription: `Install ${s.name}, connect Claude Code or Cursor over MCP, and learn the tools and Skills your agent will use.`,
+      changelogDescription: `Everything that has shipped in ${s.name}, newest first.`,
     },
     nav: {
       product: 'Product',
+      scenarios: 'Scenarios',
+      privacy: 'Privacy',
       docs: 'Docs',
       changelog: 'Changelog',
       download: 'Download',
@@ -33,12 +41,12 @@ export default function en(s: Site) {
     },
     home: {
       hero: {
-        eyebrow: 'Desktop beta · local-first · MCP & CLI',
-        titleA: 'A calm canvas',
-        titleB: 'for you and your agents.',
-        lede: `${s.name} is a whiteboard that feels good by hand — and that Claude Code, Cursor and any MCP client can drive. Whatever an agent adds lands tidy, shows up live with its cursor, and waits for you to accept it.`,
+        eyebrow: 'Desktop beta · local-first · for Claude Code & Cursor',
+        titleA: 'Your agent maps it out.',
+        titleB: 'You decide what stays.',
+        lede: `${s.name} is a local canvas that Claude Code, Cursor and any MCP client can drive. Point your agent at a repository, a folder of interviews or a stack of papers: it lays the thinking out in space, live, and every change waits for your review.`,
         primary: 'Download the beta',
-        secondary: 'Read the quick start',
+        secondary: 'See scenarios',
         stickyA: '“A blank canvas makes me freeze” — P3',
         stickyB: 'Tidy by default',
         caption:
@@ -164,7 +172,7 @@ export default function en(s: Site) {
           { title: 'Version history', body: 'Versions are kept before large edits and every ten minutes. Name checkpoints; restoring is itself undoable.' },
           { title: 'Crash-safe saves', body: 'Autosave is atomic and lands within two seconds. A damaged file is set aside and the last good copy opens instead.' },
           { title: 'Loopback only', body: 'The core listens on 127.0.0.1, checks Host and Origin, and requires a per-install access token on every request.' },
-          { title: 'Keys stay in the keychain', body: 'API keys for the optional assistant live in your OS keychain — never in boards or plain files.' },
+          { title: 'Usage stats are opt-in', body: 'The app sends nothing until you turn on the anonymous install count. What it sends, field by field, is on the privacy page.' },
           { title: 'Ask before reaching out', body: 'Agents and Skills ask before touching the network or a secret. Every decision is in the activity log, and grants can be revoked.' },
         ],
         alt: 'Version history with automatic versions, a named checkpoint and a read-only preview',
@@ -239,7 +247,7 @@ export default function en(s: Site) {
         label: 'Work email',
         placeholder: 'you@company.com',
         submit: 'Keep me posted',
-        placeholderNote: `Placeholder form — it isn’t connected to a server yet. Submitting opens an email to ${s.betaEmail} in your mail app.`,
+        placeholderNote: `Placeholder form — it isn’t connected to a server yet. Submitting opens an email to ${s.contactEmail} in your mail app.`,
         thanks: 'Your mail app should open with the message ready. Send it and you’re on the list.',
         invalid: 'Enter an email address like you@company.com.',
         subject: `${s.name} beta`,
@@ -382,7 +390,6 @@ export default function en(s: Site) {
             'Review item by item with J/K, A and R; partly accepted change sets; undo by author',
             'Comments on blocks that agents read, reply to and resolve',
             'MCP over local Streamable HTTP, alongside stdio',
-            'An optional built-in assistant, hidden until you add a provider',
           ],
           image: 'item-review',
         },
@@ -416,7 +423,10 @@ export default function en(s: Site) {
       resources: 'Resources',
       source: 'Source code',
       rights: `© 2026 ${s.name}`,
+      legal: 'Legal',
     },
+    scenarios: scenariosEn(s),
+    privacy: privacyEn(s),
   }
 }
 

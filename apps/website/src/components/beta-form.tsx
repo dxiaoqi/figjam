@@ -21,7 +21,7 @@ export function BetaForm({ t }: { t: Dict['download']['beta'] }) {
       return
     }
     const body = `${t.mailBody}\n\n${email.trim()}`
-    window.location.href = `mailto:${site.betaEmail}?subject=${encodeURIComponent(t.subject)}&body=${encodeURIComponent(body)}`
+    window.location.href = `mailto:${site.contactEmail}?subject=${encodeURIComponent(t.subject)}&body=${encodeURIComponent(body)}`
     setState('sent')
   }
 

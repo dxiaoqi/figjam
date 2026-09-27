@@ -16,6 +16,7 @@ export function switchLocalePath(pathname: string, to: Locale) {
 
 export function LocaleSwitcher({ locale, label }: { locale: Locale; label: string }) {
   const pathname = usePathname() || `/${locale}/`
+  const short = locale === 'zh' ? '中文' : 'EN'
   const go = (to: Locale) => {
     try {
       localStorage.setItem(LOCALE_STORAGE_KEY, to)
@@ -25,9 +26,9 @@ export function LocaleSwitcher({ locale, label }: { locale: Locale; label: strin
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-1.5 px-2.5 text-muted-foreground hover:text-foreground" aria-label={label}>
+        <Button variant="ghost" size="sm" className="gap-1.5 px-2.5 text-muted-foreground hover:text-foreground" aria-label={`${label} (${short})`}>
           <Languages className="size-4" aria-hidden />
-          <span className="text-[13px]">{locale === 'zh' ? '中文' : 'EN'}</span>
+          <span className="text-[13px]">{short}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-36">

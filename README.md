@@ -19,6 +19,9 @@ MCP server for Claude Code and Cursor are inside the app, running on its own Nod
 Download page and [docs/distribution.md](docs/distribution.md#first-launch-on-unsigned-builds) show the one-time
 Gatekeeper / SmartScreen step. After installing, **Help › Connect agent** sets up Claude Code and Cursor.
 
+Questions, beta access or privacy requests: [dwt199718@gmail.com](mailto:dwt199718@gmail.com). What the app and the
+website collect (an opt-in install count and an anonymous download count) is on the website's Privacy page.
+
 ## Quick start (from source)
 
 Requires Node 22+.

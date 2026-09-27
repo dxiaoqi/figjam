@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 type Phase = 'idle' | 'drafting' | 'review' | 'accepted' | 'rejected'
 const accents = ['var(--tk-blue-accent)', 'var(--tk-purple-accent)', 'var(--tk-teal-accent)']
 const AGENT = 'var(--tk-agent-0)'
+const AGENT_LABEL = 'var(--agent-label)'
 
 /** A miniature canvas: an agent drafts three cards into a frame as a change set; you accept or reject it. */
 export function ReviewDemo({ t }: { t: Dict['home']['presence']['demo'] }) {
@@ -147,7 +148,7 @@ export function ReviewDemo({ t }: { t: Dict['home']['presence']['demo'] }) {
         </svg>
         <span
           className="ml-3 -mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[11px] font-medium whitespace-nowrap text-white shadow-sm"
-          style={{ background: AGENT }}
+          style={{ background: AGENT_LABEL }}
         >
           {t.agent}
           <span className="hidden opacity-80 sm:inline">· {t.status}</span>
@@ -158,7 +159,7 @@ export function ReviewDemo({ t }: { t: Dict['home']['presence']['demo'] }) {
         {phase === 'review' && (
           <div className="animate-sticky-in rounded-xl border border-black/[0.08] bg-white p-3.5 shadow-[0_8px_24px_-6px_rgb(28_25_23/0.18)]">
             <div className="flex items-center gap-2">
-              <span className="flex size-5 items-center justify-center rounded-full text-[10px] font-semibold text-white" style={{ background: AGENT }}>
+              <span className="flex size-5 items-center justify-center rounded-full text-[10px] font-semibold text-white" style={{ background: AGENT_LABEL }}>
                 C
               </span>
               <p className="truncate text-[13px] font-semibold text-stone-900">{t.intent}</p>

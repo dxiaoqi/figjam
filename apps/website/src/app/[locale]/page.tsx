@@ -1,17 +1,27 @@
-import { ArrowRight, Archive, FileLock2, HardDrive, History, KeyRound, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Archive, ChartNoAxesColumn, FileLock2, HardDrive, History, ShieldCheck } from 'lucide-react'
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ReviewDemo } from '@/components/home/review-demo'
 import { ShotTabs } from '@/components/home/shot-tabs'
 import { FramedShot, Shot, WindowFrame } from '@/components/product-shot'
 import { ProductVideo } from '@/components/product-video'
 import { Reveal } from '@/components/reveal'
-import { Container, Eyebrow, SectionHeading, StickyList } from '@/components/section'
+import { ScenarioGrid } from '@/components/scenarios/scenario-cards'
+import { Container, Eyebrow, SectionHeading, StickyList, sectionY } from '@/components/section'
 import { Button } from '@/components/ui/button'
 import { site } from '@/config/site'
 import { isLocale } from '@/i18n/config'
 import { getDictionary } from '@/i18n'
+import { pageMetadata } from '@/lib/seo'
 
-const localIcons = [HardDrive, History, Archive, ShieldCheck, KeyRound, FileLock2]
+const localIcons = [HardDrive, History, Archive, ShieldCheck, ChartNoAxesColumn, FileLock2]
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale: raw } = await params
+  const locale = isLocale(raw) ? raw : 'zh'
+  const t = getDictionary(locale)
+  return pageMetadata({ locale, path: '/', title: t.meta.title, description: t.meta.description, og: 'home', absoluteTitle: true })
+}
 
 export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params
@@ -21,28 +31,38 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
   const base = `/${locale}`
   const boardTitle = locale === 'zh' ? `访谈综合 — ${site.name}` : `Onboarding research — ${site.name}`
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: site.name,
+    description: t.meta.description,
+    applicationCategory: 'DesignApplication',
+    operatingSystem: 'macOS, Windows, Linux',
+    softwareVersion: site.version,
+    inLanguage: locale === 'zh' ? 'zh-CN' : 'en',
+    url: new URL(`/${locale}/`, site.url).toString(),
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  }
+
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       {/* Hero */}
       <section className="relative -mt-14 overflow-hidden pt-14">
         <div aria-hidden className="dot-grid absolute inset-0 -z-10 [mask-image:linear-gradient(to_bottom,black_40%,transparent_92%)]" />
-        <Container className="relative pt-16 pb-10 text-center sm:pt-24">
+        <Container className="relative pt-12 pb-10 text-center sm:pt-24">
           <HeroStickies a={h.hero.stickyA} b={h.hero.stickyB} />
-          <Reveal>
-            <p className="chrome mx-auto inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-[12.5px] text-muted-foreground">
-              <span className="size-1.5 rounded-full bg-[#10A37F]" aria-hidden />
-              {h.hero.eyebrow}
-            </p>
-          </Reveal>
-          <Reveal delay={60}>
-            <h1 className="display mx-auto mt-7 max-w-4xl text-[2.6rem] leading-[1.05] font-semibold text-foreground sm:text-6xl lg:text-[4.5rem]">
-              {h.hero.titleA} <span className="marker">{h.hero.titleB}</span>
-            </h1>
-          </Reveal>
-          <Reveal delay={120}>
-            <p className="lede mx-auto mt-7 max-w-2xl text-[17px] leading-relaxed text-muted-foreground sm:text-lg">{h.hero.lede}</p>
-          </Reveal>
-          <Reveal delay={180} className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <p className="chrome mx-auto inline-flex max-w-full items-center gap-2 rounded-full border border-border px-3 py-1 text-[12.5px] text-muted-foreground">
+            <span className="size-1.5 shrink-0 rounded-full bg-[#10A37F]" aria-hidden />
+            {h.hero.eyebrow}
+          </p>
+          <h1 className="display mx-auto mt-6 max-w-4xl text-[2.5rem] leading-[1.06] font-semibold text-foreground sm:mt-7 sm:text-6xl lg:text-[4.5rem]">
+            {h.hero.titleA}
+            <br />
+            <span className="marker">{h.hero.titleB}</span>
+          </h1>
+          <p className="lede mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:mt-7 sm:text-lg">{h.hero.lede}</p>
+          <div className="mx-auto mt-8 flex max-w-xs flex-col items-stretch justify-center gap-3 sm:mt-9 sm:max-w-none sm:flex-row sm:items-center">
             <Button asChild size="lg" className="h-11 rounded-full px-6 text-[15px]">
               <Link href={`${base}/download/`}>
                 {h.hero.primary}
@@ -50,27 +70,26 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="h-11 rounded-full bg-white/70 px-6 text-[15px]">
-              <Link href={`${base}/docs/`}>{h.hero.secondary}</Link>
+              <Link href="#scenarios">{h.hero.secondary}</Link>
             </Button>
-          </Reveal>
-          <Reveal delay={240}>
-            <ul className="mt-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 text-[13px] text-muted-foreground" aria-label={h.hero.worksWith}>
-              <li className="mr-1">{h.hero.worksWith}</li>
-              {['Claude Code', 'Cursor', 'Codex', h.hero.anyMcp, h.hero.terminal].map((a) => (
-                <li key={a} className="rounded-full border border-border bg-white/80 px-2.5 py-0.5 text-foreground/80">
-                  {a}
-                </li>
-              ))}
-            </ul>
-          </Reveal>
+          </div>
+          <ul className="mt-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 text-[13px] text-muted-foreground" aria-label={h.hero.worksWith}>
+            <li className="mr-1">{h.hero.worksWith}</li>
+            {['Claude Code', 'Cursor', 'Codex', h.hero.anyMcp, h.hero.terminal].map((a) => (
+              <li key={a} className="rounded-full border border-border bg-white/80 px-2.5 py-0.5 text-foreground/80">
+                {a}
+              </li>
+            ))}
+          </ul>
         </Container>
-        <Container className="pb-20 sm:pb-28">
-          <Reveal delay={200}>
+        <Container className="pb-16 sm:pb-28">
+          <div>
             <figure>
               <WindowFrame title={boardTitle} className="mx-auto max-w-5xl">
                 <ProductVideo
+                  priority
                   src="/media/hero-agent-run"
-                  poster="/media/hero-agent-run-poster.webp"
+                  poster="hero-agent-run-poster"
                   label={h.hero.videoLabel}
                   playLabel={t.common.play}
                   pauseLabel={t.common.pause}
@@ -80,15 +99,15 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
                 <span className="font-medium text-foreground/80">{t.common.realRecording}</span> · {h.hero.caption}
               </figcaption>
             </figure>
-          </Reveal>
+          </div>
         </Container>
       </section>
 
       {/* How it works */}
-      <section aria-labelledby="how" className="border-t border-border/70 bg-white py-24 sm:py-32">
+      <section aria-labelledby="how" className={`border-y border-border/70 bg-white ${sectionY}`}>
         <Container>
           <SectionHeading id="how" eyebrow={h.steps.eyebrow} title={h.steps.title} lede={h.steps.lede} dot="var(--tk-agent-0)" />
-          <ol className="mt-14 grid gap-5 md:grid-cols-3">
+          <ol className="mt-10 grid gap-5 sm:mt-14 md:grid-cols-3">
             {h.steps.items.map((s, i) => (
               <Reveal as="li" key={s.title} delay={i * 80} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-background">
                 <div className="p-6 pb-5">
@@ -107,37 +126,30 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         </Container>
       </section>
 
-      <div id="features" className="scroll-mt-14" />
-
-      {/* Canvas feel */}
-      <section aria-labelledby="canvas" className="py-24 sm:py-32">
-        <Container className="grid items-center gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
-          <div>
-            <SectionHeading id="canvas" eyebrow={h.canvas.eyebrow} title={h.canvas.title} lede={h.canvas.body} />
-            <Reveal delay={80}>
-              <StickyList items={h.canvas.points} className="mt-8" />
-            </Reveal>
+      {/* Scenarios */}
+      <section id="scenarios" aria-labelledby="scenarios-title" className={`scroll-mt-14 ${sectionY}`}>
+        <Container>
+          <SectionHeading id="scenarios-title" eyebrow={t.scenarios.eyebrow} title={t.scenarios.title} lede={t.scenarios.lede} dot="var(--tk-blue-accent)" />
+          <div className="mt-10 sm:mt-14">
+            <ScenarioGrid locale={locale} t={t.scenarios} />
           </div>
-          <Reveal delay={120}>
-            <WindowFrame title={boardTitle}>
-              <ProductVideo
-                src="/media/canvas-feel"
-                poster="/media/canvas-feel-poster.webp"
-                label={h.canvas.videoLabel}
-                playLabel={t.common.play}
-                pauseLabel={t.common.pause}
-              />
-            </WindowFrame>
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <FramedShot name="canvas-guides" alt={h.canvas.alts.guides} bare />
-              <FramedShot name="canvas-connectors" alt={h.canvas.alts.connectors} bare />
-            </div>
+          <Reveal className="mt-14 sm:mt-20">
+            <figure>
+              <WindowFrame title={`${t.scenarios.eyebrow} — ${site.name}`} className="mx-auto max-w-5xl">
+                <ProductVideo src="/media/scenarios-flow" poster="scenarios-flow-poster" label={t.scenarios.flow.label} playLabel={t.common.play} pauseLabel={t.common.pause} />
+              </WindowFrame>
+              <figcaption className="mx-auto mt-4 max-w-2xl text-center text-[13px] leading-relaxed text-muted-foreground">
+                <span className="font-medium text-foreground/80">{t.common.realRecording}</span> · {t.scenarios.flow.caption}
+              </figcaption>
+            </figure>
           </Reveal>
         </Container>
       </section>
 
+      <div id="features" className="scroll-mt-14" />
+
       {/* Agent presence & review */}
-      <section aria-labelledby="presence" className="border-y border-border/70 bg-white py-24 sm:py-32">
+      <section aria-labelledby="presence" className={`border-y border-border/70 bg-white ${sectionY}`}>
         <Container className="grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16">
           <Reveal className="order-2 lg:order-1">
             <ReviewDemo t={h.presence.demo} />
@@ -156,38 +168,48 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         </Container>
       </section>
 
-      {/* Typed blocks */}
-      <section aria-labelledby="typed" className="py-24 sm:py-32">
-        <Container>
-          <SectionHeading id="typed" align="center" eyebrow={h.typed.eyebrow} title={h.typed.title} lede={h.typed.body} dot="var(--tk-purple-accent)" />
-          <Reveal delay={80} className="mx-auto mt-12 max-w-5xl">
-            <ShotTabs tabs={h.typed.tabs} shots={['typed-board', 'typed-slash', 'typed-filter']} alts={h.typed.alts} />
-          </Reveal>
-        </Container>
-      </section>
-
-      {/* Web snippets */}
-      <section aria-labelledby="snippets" className="border-y border-border/70 bg-white py-24 sm:py-32">
-        <Container className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
+      {/* Canvas feel */}
+      <section aria-labelledby="canvas" className={sectionY}>
+        <Container className="grid items-center gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
           <div>
-            <SectionHeading id="snippets" eyebrow={h.snippets.eyebrow} title={h.snippets.title} lede={h.snippets.body} dot="var(--tk-blue-accent)" />
+            <SectionHeading id="canvas" eyebrow={h.canvas.eyebrow} title={h.canvas.title} lede={h.canvas.body} />
             <Reveal delay={80}>
-              <StickyList items={h.snippets.points} className="mt-8" />
+              <StickyList items={h.canvas.points} className="mt-8" />
             </Reveal>
           </div>
-          <Reveal delay={120} className="mx-auto w-full max-w-md lg:max-w-none">
-            <div className="dot-grid rounded-2xl border border-border p-4 sm:p-6">
-              <FramedShot name="snippet-running" alt={h.snippets.alt} bare className="rounded-lg" />
+          <Reveal delay={120}>
+            <WindowFrame title={boardTitle}>
+              <ProductVideo
+                src="/media/canvas-feel"
+                poster="canvas-feel-poster"
+                label={h.canvas.videoLabel}
+                playLabel={t.common.play}
+                pauseLabel={t.common.pause}
+              />
+            </WindowFrame>
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <FramedShot name="canvas-guides" alt={h.canvas.alts.guides} bare />
+              <FramedShot name="canvas-connectors" alt={h.canvas.alts.connectors} bare />
             </div>
           </Reveal>
         </Container>
       </section>
 
+      {/* Typed blocks */}
+      <section aria-labelledby="typed" className={`border-y border-border/70 bg-white ${sectionY}`}>
+        <Container>
+          <SectionHeading id="typed" align="center" eyebrow={h.typed.eyebrow} title={h.typed.title} lede={h.typed.body} dot="var(--tk-purple-accent)" />
+          <Reveal delay={80} className="mx-auto mt-10 max-w-5xl sm:mt-12">
+            <ShotTabs tabs={h.typed.tabs} shots={['typed-board', 'typed-slash', 'typed-filter']} alts={h.typed.alts} />
+          </Reveal>
+        </Container>
+      </section>
+
       {/* Skills */}
-      <section aria-labelledby="skills" className="py-24 sm:py-32">
+      <section aria-labelledby="skills" className={sectionY}>
         <Container>
           <SectionHeading id="skills" eyebrow={h.skills.eyebrow} title={h.skills.title} lede={h.skills.body} dot="var(--tk-orange-accent)" />
-          <div className="mt-12 grid items-start gap-10 lg:grid-cols-[1fr_0.42fr]">
+          <div className="mt-10 grid items-start gap-10 sm:mt-12 lg:grid-cols-[1fr_0.42fr]">
             <Reveal className="relative">
               <FramedShot name="skills-matrix" alt={h.skills.alts.matrix} title={locale === 'zh' ? `白板市场 — 竞品 — ${site.name}` : `Whiteboard market — competitors — ${site.name}`} />
               <div className="absolute -bottom-8 left-4 hidden w-[46%] sm:block">
@@ -209,30 +231,53 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         </Container>
       </section>
 
+      {/* Web snippets */}
+      <section aria-labelledby="snippets" className={`border-y border-border/70 bg-white ${sectionY}`}>
+        <Container className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
+          <div>
+            <SectionHeading id="snippets" eyebrow={h.snippets.eyebrow} title={h.snippets.title} lede={h.snippets.body} dot="var(--tk-blue-accent)" />
+            <Reveal delay={80}>
+              <StickyList items={h.snippets.points} className="mt-8" />
+            </Reveal>
+          </div>
+          <Reveal delay={120} className="mx-auto w-full max-w-md lg:max-w-none">
+            <div className="dot-grid rounded-2xl border border-border p-4 sm:p-6">
+              <FramedShot name="snippet-running" alt={h.snippets.alt} bare className="rounded-lg" />
+            </div>
+          </Reveal>
+        </Container>
+      </section>
+
       {/* Local-first & security */}
-      <section aria-labelledby="local" className="dot-grid-dark relative py-24 text-white sm:py-32">
+      <section aria-labelledby="local" className={`dot-grid-dark relative text-white ${sectionY}`}>
         <Container>
           <Reveal className="max-w-2xl">
-            <Eyebrow dot="var(--tk-green-accent)" className="text-white/60">
+            <Eyebrow dot="var(--tk-green-accent)" className="text-white/70">
               {h.local.eyebrow}
             </Eyebrow>
-            <h2 id="local" className="headline mt-4 text-3xl font-semibold sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]">
+            <h2 id="local" className="headline mt-4 text-[1.875rem] leading-[1.15] font-semibold sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]">
               {h.local.title}
             </h2>
-            <p className="lede mt-5 text-[17px] leading-relaxed text-white/65">{h.local.lede}</p>
+            <p className="lede mt-4 text-base leading-relaxed text-white/70 sm:mt-5 sm:text-[17px]">{h.local.lede}</p>
           </Reveal>
-          <ul className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-10 sm:mt-14 grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-2 lg:grid-cols-3">
             {h.local.items.map((it, i) => {
               const Icon = localIcons[i]
               return (
                 <Reveal as="li" key={it.title} delay={(i % 3) * 60} className="bg-[#18181B] p-6 sm:p-7">
                   <Icon className="size-5 text-white/70" aria-hidden strokeWidth={1.6} />
                   <h3 className="mt-5 text-[15.5px] font-semibold">{it.title}</h3>
-                  <p className="mt-2 text-[14px] leading-relaxed text-white/60">{it.body}</p>
+                  <p className="mt-2 text-[14px] leading-relaxed text-white/70">{it.body}</p>
                 </Reveal>
               )
             })}
           </ul>
+          <p className="mt-6 text-[14px] text-white/70">
+            <Link href={`${base}/privacy/`} className="inline-flex items-center gap-1.5 font-medium text-white underline-offset-4 hover:underline">
+              {t.nav.privacy}
+              <ArrowRight className="size-3.5" aria-hidden />
+            </Link>
+          </p>
           <Reveal className="mt-14">
             <FramedShot name="version-history" alt={h.local.alt} bare className="mx-auto max-w-5xl border-white/10" />
           </Reveal>
@@ -240,10 +285,10 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       </section>
 
       {/* Templates */}
-      <section aria-labelledby="templates" className="py-24 sm:py-32">
+      <section aria-labelledby="templates" className={sectionY}>
         <Container>
           <SectionHeading id="templates" align="center" eyebrow={h.templates.eyebrow} title={h.templates.title} lede={h.templates.body} dot="var(--tk-teal-accent)" />
-          <Reveal delay={80} className="mx-auto mt-12 max-w-5xl">
+          <Reveal delay={80} className="mx-auto mt-10 max-w-5xl sm:mt-12">
             <ShotTabs
               tabs={h.templates.tabs}
               shots={locale === 'zh' ? ['templates-zh', 'template-research-zh', 'template-brainstorm-zh'] : ['templates-en', 'template-research-en', 'template-brainstorm-en']}
@@ -254,7 +299,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       </section>
 
       {/* CTA */}
-      <section aria-labelledby="cta" className="relative overflow-hidden border-t border-border/70 py-24 sm:py-32">
+      <section aria-labelledby="cta" className={`relative overflow-hidden border-t border-border/70 ${sectionY}`}>
         <div aria-hidden className="dot-grid absolute inset-0 -z-10 [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
         <Container className="text-center">
           <Reveal>
@@ -301,7 +346,7 @@ function HeroStickies({ a, b }: { a: string; b: string }) {
         <svg width="16" height="18" viewBox="0 0 16 18">
           <path d="M1 1l13 6.5-5.6 1.6L6 15z" fill="var(--tk-agent-0)" stroke="white" strokeWidth="1.4" strokeLinejoin="round" />
         </svg>
-        <span className="mt-3 ml-0.5 rounded-full px-2 py-[3px] text-[11px] font-medium text-white" style={{ background: 'var(--tk-agent-0)' }}>
+        <span className="mt-3 ml-0.5 rounded-full px-2 py-[3px] text-[11px] font-medium text-white" style={{ background: 'var(--agent-label)' }}>
           Claude Code
         </span>
       </div>

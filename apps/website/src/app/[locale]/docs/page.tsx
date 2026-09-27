@@ -7,10 +7,13 @@ import { commands } from '@/content/commands'
 import { site } from '@/config/site'
 import { isLocale } from '@/i18n/config'
 import { getDictionary } from '@/i18n'
+import { pageMetadata } from '@/lib/seo'
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
-  const { locale } = await params
-  return { title: getDictionary(isLocale(locale) ? locale : 'zh').meta.docs }
+  const { locale: raw } = await params
+  const locale = isLocale(raw) ? raw : 'zh'
+  const m = getDictionary(locale).meta
+  return pageMetadata({ locale, path: '/docs/', title: m.docs, description: m.docsDescription, og: 'docs' })
 }
 
 function H2({ id, n, children }: { id: string; n: number; children: React.ReactNode }) {
@@ -94,7 +97,7 @@ export default async function DocsPage({ params }: { params: Promise<{ locale: s
       </section>
 
       <Container className="grid gap-10 py-12 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-16 lg:py-16">
-        <aside className="lg:sticky lg:top-24 lg:self-start">
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
           <DocsToc items={toc} title={d.toc} />
         </aside>
 

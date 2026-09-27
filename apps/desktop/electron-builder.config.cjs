@@ -11,6 +11,7 @@ const has = (...keys) => keys.every((k) => !!env[k])
 const macSigned = has('CSC_LINK') || has('CSC_NAME')
 const notarize = macSigned && (has('APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID') || has('APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER'))
 const updateFeed = env.AIFIG_UPDATE_URL || 'https://updates.invalid/ai-figma'
+const contactEmail = require('../../distribution.json').contactEmail || 'dwt199718@gmail.com'
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
@@ -65,7 +66,7 @@ module.exports = {
     icon: 'build/resources/icon.png',
     category: 'Graphics',
     executableName: 'ai-figma',
-    maintainer: 'ai-figma <beta@example.com>',
+    maintainer: `ai-figma <${contactEmail}>`,
     synopsis: 'A local-first infinite canvas shared by you and your AI agents',
     desktop: { entry: { StartupWMClass: 'ai-figma' } },
   },

@@ -20,7 +20,7 @@ export function WindowFrame({
           <span className="size-2.5 rounded-full bg-[#E5625C]/80" />
           <span className="size-2.5 rounded-full bg-[#E8B22E]/80" />
           <span className="size-2.5 rounded-full bg-[#6BB85C]/80" />
-          {title && <span className="mx-auto -translate-x-6 truncate text-[11px] font-medium text-stone-500">{title}</span>}
+          {title && <span className="mx-auto -translate-x-6 truncate text-[11px] font-medium text-stone-600">{title}</span>}
         </div>
       )}
       {children}
@@ -28,12 +28,17 @@ export function WindowFrame({
   )
 }
 
+/** Every screenshot has an 800px variant (scripts/optimize-media.mjs). */
+export function shotSrcSet(name: ShotName) {
+  return `/media/${name}-800.webp 800w, /media/${name}.webp ${shots[name][0]}w`
+}
+
 export function Shot({
   name,
   alt,
   className,
   priority,
-  sizes,
+  sizes = '(min-width: 1152px) 1088px, 100vw',
 }: {
   name: ShotName
   alt: string
@@ -46,6 +51,7 @@ export function Shot({
     // eslint-disable-next-line @next/next/no-img-element -- static export, pre-optimized WebP
     <img
       src={`/media/${name}.webp`}
+      srcSet={shotSrcSet(name)}
       alt={alt}
       width={w}
       height={h}
@@ -65,6 +71,7 @@ export function FramedShot({
   className,
   bare,
   priority,
+  sizes,
 }: {
   name: ShotName
   alt: string
@@ -72,10 +79,11 @@ export function FramedShot({
   className?: string
   bare?: boolean
   priority?: boolean
+  sizes?: string
 }) {
   return (
     <WindowFrame title={title} className={className} bare={bare}>
-      <Shot name={name} alt={alt} priority={priority} />
+      <Shot name={name} alt={alt} priority={priority} sizes={sizes} />
     </WindowFrame>
   )
 }
