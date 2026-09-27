@@ -283,6 +283,32 @@ program
   )
 
 program
+  .command('export-web')
+  .description('a read-only interactive web page of the board (folder, --zip or --single); works from file:// and any static host')
+  .option('-o, --out <path>', 'folder, .zip or .html to write (default: ./<title> (web))')
+  .option('--zip', 'one zip file')
+  .option('--single', 'one self-contained .html (everything inlined)')
+  .option('--no-comments', 'leave comments out')
+  .option('--no-fields', 'hide typed fields by default')
+  .option('--dark', 'dark theme by default')
+  .option('--force', 'replace an earlier export at that path')
+  .action(async (o) => {
+    const mode = o.single ? 'single' : o.zip ? 'zip' : 'folder'
+    let out = o.out
+    if (!out) {
+      const b = await callCore('get_board', { board: program.opts().board }, caller())
+      const title = b.ok ? String((b.result as { markdown: string }).markdown.match(/^# (.+) \(board id/)?.[1] ?? 'board') : 'board'
+      const base = title.replace(/[\\/:*?"<>|]+/g, '-')
+      out = mode === 'single' ? `${base}.html` : mode === 'zip' ? `${base} (web).zip` : `${base} (web)`
+    }
+    return run('export_web', { path: path.resolve(out), mode, include_comments: o.comments !== false, show_fields: o.fields !== false, theme: o.dark ? 'dark' : 'light', overwrite: !!o.force }, (r) => {
+      console.log(`✓ ${r.open} (${mb(r.size)}, ${r.files} files)`)
+      if (r.warning) console.log(`⚠ ${r.warning}`)
+      console.log(`  ${r.publish}`)
+    })
+  })
+
+program
   .command('storage')
   .description('print where the board, its files, history and backups are (--reveal opens the files folder)')
   .option('--reveal', 'show the files folder in the file manager')

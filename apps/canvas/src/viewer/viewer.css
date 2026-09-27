@@ -1,0 +1,121 @@
+@import "tailwindcss" source(none);
+@source "./";
+@source "../canvas/markdown.tsx";
+@import "@aifig/canvas-engine/styles.css";
+@import "../canvas.css";
+
+/* The exported web page: only the Latin subset of Inter is bundled (CJK falls back to system fonts). */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('../../../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overscroll-behavior: none;
+}
+
+/* inline snippets run live; until clicked, the canvas gets the pointer */
+.aifig-viewer-activate {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.aifig-viewer-activate-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: rgb(0 0 0 / 0.55);
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.aifig-viewer-activate:hover .aifig-viewer-activate-hint,
+.aifig-viewer-activate:focus-visible .aifig-viewer-activate-hint {
+  opacity: 1;
+  transform: none;
+}
+.aifig-web.is-running {
+  outline: 2px solid var(--agent, #6e56cf);
+  outline-offset: 2px;
+}
+
+.aifig-viewer-pin {
+  position: relative;
+  display: flex;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--surface);
+  border-radius: 999px 999px 999px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #1c1917;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+.dark .aifig-viewer-pin {
+  background: #e7e5e4;
+  color: #1c1917;
+}
+.aifig-viewer-pin:hover,
+.aifig-viewer-pin.is-open {
+  transform: scale(1.08);
+}
+.aifig-viewer-pin.is-resolved {
+  opacity: 0.55;
+}
+.aifig-viewer-pin em {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-style: normal;
+  line-height: 16px;
+  color: #1c1917;
+  background: #fde68a;
+}
+
+.aifig-viewer-missing {
+  max-width: 420px;
+  margin: 20vh auto;
+  padding: 0 24px;
+  font: 14px/1.5 system-ui, sans-serif;
+  color: #57534e;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aifig-viewer-activate-hint,
+  .aifig-viewer-pin {
+    transition: none;
+  }
+}

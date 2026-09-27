@@ -65,6 +65,8 @@ import { copySnapshot, downloadDocument, downloadSnapshot } from '../lib/export'
 import { runAssistant, useAssistant } from '../lib/assistant'
 import { relationLabel, useT } from '../i18n'
 import { openStorage } from './StoragePanel'
+import { openWebExport } from './WebExport'
+import { openExportPack } from '../lib/packs'
 
 interface MenuState {
   screen: Vec
@@ -463,6 +465,9 @@ export function ContextMenu() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={run(() => downloadDocument(boardId, 'md'))}>{t('menu.exportMd')}</DropdownMenuItem>
                 <DropdownMenuItem onSelect={run(() => downloadDocument(boardId, 'json'))}>{t('menu.exportJson')}</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={run(openWebExport)} data-menu-web>{t('board.exportWeb')}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(openExportPack)}>{t('board.exportPack')}</DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
           </>

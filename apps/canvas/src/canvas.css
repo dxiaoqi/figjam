@@ -1,0 +1,881 @@
+/* Theme, tokens and block styles shared by the canvas app and the exported-page viewer (viewer/viewer.css). */
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Inter Variable", "Inter", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.985 0.001 106.423);
+  --foreground: oklch(0.147 0.004 49.25);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.147 0.004 49.25);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.147 0.004 49.25);
+  --primary: oklch(0.216 0.006 56.043);
+  --primary-foreground: oklch(0.985 0.001 106.423);
+  --secondary: oklch(0.97 0.001 106.424);
+  --secondary-foreground: oklch(0.216 0.006 56.043);
+  --muted: oklch(0.97 0.001 106.424);
+  --muted-foreground: oklch(0.54 0.013 58.071);
+  --accent: oklch(0.97 0.001 106.424);
+  --accent-foreground: oklch(0.216 0.006 56.043);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.923 0.003 48.717);
+  --input: oklch(0.923 0.003 48.717);
+  --ring: oklch(0.62 0.01 56.259);
+  --chrome: color-mix(in oklab, white 88%, transparent);
+  --chrome-shadow: 0 1px 2px rgb(28 25 23 / 0.06), 0 4px 16px rgb(28 25 23 / 0.06);
+}
+
+.dark {
+  --background: oklch(0.2 0.004 285);
+  --foreground: oklch(0.97 0.001 106.424);
+  --card: oklch(0.235 0.005 285);
+  --card-foreground: oklch(0.97 0.001 106.424);
+  --popover: oklch(0.235 0.005 285);
+  --popover-foreground: oklch(0.97 0.001 106.424);
+  --primary: oklch(0.93 0.003 56);
+  --primary-foreground: oklch(0.216 0.006 56.043);
+  --secondary: oklch(0.28 0.005 285);
+  --secondary-foreground: oklch(0.97 0.001 106.424);
+  --muted: oklch(0.28 0.005 285);
+  --muted-foreground: oklch(0.71 0.01 285);
+  --accent: oklch(0.3 0.006 285);
+  --accent-foreground: oklch(0.97 0.001 106.424);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.55 0.01 285);
+  --chrome: color-mix(in oklab, oklch(0.235 0.005 285) 90%, transparent);
+  --chrome-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.3);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+}
+
+/* Floating chrome: quiet, translucent, content stays the hero. */
+.chrome {
+  background: var(--chrome);
+  backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: var(--chrome-shadow);
+  border: 1px solid var(--border);
+}
+
+/* ---------- canvas ---------- */
+
+.ae-block {
+  font-family: var(--font-sans);
+}
+.ae-block.is-entering > * {
+  animation: aifig-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+
+.aifig-sticky,
+.aifig-card,
+.aifig-text,
+.aifig-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.aifig-sticky {
+  --fade-bg: var(--c-bg);
+  border-radius: 4px;
+  background: var(--c-bg);
+  color: var(--c-ink);
+  box-shadow: 0 1px 1px rgb(0 0 0 / 0.04), 0 2px 6px rgb(0 0 0 / 0.05);
+  font-weight: 450;
+  line-height: 1.45;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.dark .aifig-sticky {
+  box-shadow: 0 1px 1px rgb(0 0 0 / 0.3), 0 2px 8px rgb(0 0 0 / 0.25);
+}
+
+.aifig-card {
+  --fade-bg: var(--surface);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border-c);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 8px rgb(0 0 0 / 0.04);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.aifig-card-inner {
+  padding: 20px 16px 16px;
+}
+.aifig-sticky-inner {
+  padding: 16px;
+}
+/* long content: past the max height the block scrolls while editing, and collapses behind "Show more" otherwise */
+.aifig-card.is-editing,
+.aifig-sticky.is-editing {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+.aifig-fade {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 64px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 12px 10px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--fade-bg) 0%, transparent), var(--fade-bg) 62%);
+  border-radius: 0 0 inherit inherit;
+  pointer-events: none;
+}
+.aifig-less {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.ae-block:hover .aifig-less,
+.ae-block.is-selected .aifig-less {
+  opacity: 1;
+}
+.aifig-more-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 8px 0 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: inherit;
+  background: color-mix(in srgb, var(--fade-bg) 70%, currentColor 8%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 12%, transparent);
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+.aifig-more-btn:hover {
+  background: color-mix(in srgb, var(--fade-bg) 60%, currentColor 16%);
+}
+.aifig-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: var(--c-accent);
+}
+.aifig-card .title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+}
+.aifig-card .body {
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted-c);
+  white-space: pre-wrap;
+}
+
+.aifig-text {
+  height: auto;
+  min-height: 1em;
+  color: var(--ink);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding-right: 8px;
+}
+
+.ae-block textarea,
+.ae-block input {
+  all: unset;
+  display: block;
+  width: 100%;
+  height: 100%;
+  font: inherit;
+  color: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  resize: none;
+  pointer-events: all;
+  cursor: text;
+}
+.aifig-card input.title {
+  height: auto;
+}
+.aifig-card textarea.body {
+  height: calc(100% - 32px);
+}
+
+.aifig-placeholder {
+  opacity: 0.45;
+}
+
+/* Suggestion layer: pending agent edits get a dashed identity-color outline. */
+.ae-block.is-pending::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 1.5px dashed var(--agent);
+  border-radius: calc(var(--r, 4px) + 4px);
+  pointer-events: none;
+  animation: aifig-dash-in 160ms ease-out;
+}
+.ae-block.is-accepted::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 1.5px solid var(--agent);
+  border-radius: calc(var(--r, 4px) + 4px);
+  pointer-events: none;
+  animation: aifig-settle 420ms ease-out forwards;
+}
+
+
+@keyframes aifig-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes aifig-dash-in {
+  from {
+    opacity: 0;
+    inset: -9px;
+  }
+}
+@keyframes aifig-settle {
+  0% {
+    inset: -5px;
+    opacity: 1;
+  }
+  100% {
+    inset: 0;
+    opacity: 0;
+  }
+}
+
+/* agent presence */
+.aifig-focus {
+  position: absolute;
+  border-radius: 14px;
+  border: 1.5px solid var(--agent);
+  background: color-mix(in srgb, var(--agent) 5%, transparent);
+  pointer-events: none;
+  animation: aifig-breathe 2.4s ease-in-out infinite;
+  transition: opacity 600ms ease;
+}
+@keyframes aifig-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--agent) 18%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--agent) 0%, transparent);
+  }
+}
+
+/* web snippets: a static preview until you run it */
+.aifig-web {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border-c);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 8px rgb(0 0 0 / 0.05);
+}
+.aifig-web.is-running {
+  box-shadow: 0 0 0 2px var(--ae-accent), 0 8px 24px rgb(0 0 0 / 0.12);
+}
+.aifig-web-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.aifig-web-poster {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  text-align: center;
+  color: var(--ink);
+  background: linear-gradient(160deg, var(--frame-bg), var(--surface));
+}
+.aifig-web-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.aifig-web-sub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted-c);
+}
+.aifig-web-frame,
+.aifig-web-capture {
+  /* flex rather than block so the desktop's <webview> (inline-flex by default) fills the block too */
+  display: flex;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+.aifig-web-capture {
+  position: absolute;
+  inset: 0;
+  opacity: 0.01;
+  pointer-events: none;
+  z-index: -1;
+}
+.aifig-web-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.aifig-web-badge span {
+  max-width: 240px;
+}
+/* third-party embeds can fail inside their own frame (bot checks, region locks) where we can't see it: always offer the original */
+.aifig-web-watch {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #fff;
+  background: rgb(0 0 0 / 0.62);
+  backdrop-filter: blur(6px);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 140ms ease-out, background-color 140ms ease-out;
+}
+.aifig-web-watch.is-running,
+.ae-block:hover .aifig-web-watch,
+.ae-block.is-selected .aifig-web-watch {
+  opacity: 1;
+}
+.aifig-web-watch.is-running {
+  top: 8px;
+  bottom: auto;
+}
+.aifig-web-watch:hover {
+  background: rgb(0 0 0 / 0.8);
+}
+.aifig-web-hint {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #fff;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.5), transparent);
+  opacity: 0;
+  transition: opacity 140ms ease-out;
+  pointer-events: none;
+}
+.ae-block:hover .aifig-web-hint,
+.ae-block.is-selected .aifig-web-hint {
+  opacity: 1;
+}
+.aifig-web-stopped {
+  position: absolute;
+  inset: auto 8px 8px 8px;
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #7c2d12;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
+/* typed blocks: a quiet header (icon + type) and a collapsed one-line field summary */
+.aifig-type-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 16px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  opacity: 0.78;
+}
+/* accents are too light for 11px text on white (WCAG AA); the hue's ink keeps the color identity */
+.aifig-card .aifig-type-header {
+  color: var(--c-ink);
+  opacity: 1;
+}
+.dark .aifig-card .aifig-type-header {
+  color: var(--c-accent);
+}
+.aifig-type-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 550;
+  line-height: 1;
+  opacity: 0.78;
+  overflow: hidden;
+}
+.aifig-type-footer button {
+  cursor: pointer;
+  min-width: 0;
+}
+.aifig-type-footer button:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.aifig-type-rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  padding-top: 4px;
+}
+.aifig-type-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 20px;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.aifig-type-row-label {
+  width: 84px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-c);
+}
+.aifig-sticky .aifig-type-row-label {
+  color: inherit;
+  opacity: 0.62;
+}
+.aifig-type-row-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 550;
+}
+.aifig-type-row:hover .aifig-type-row-value {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.aifig-sticky.is-done .aifig-rich,
+.aifig-card.is-done .title {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  opacity: 0.6;
+}
+.aifig-dim {
+  opacity: 0.22;
+  filter: saturate(0.4);
+  transition: opacity 160ms ease-out, filter 160ms ease-out;
+}
+
+/* agent moves held back while you work settle in once you pause */
+.ae-block.is-settling {
+  transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ae-block.is-held::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: calc(var(--r, 4px) + 2px);
+  border: 1px dashed color-mix(in srgb, var(--agent) 55%, transparent);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ae-block.is-settling {
+    transition: none;
+  }
+  .ae-block.is-entering > *,
+  .ae-block.is-pending::after,
+  .ae-block.is-accepted::after,
+  .aifig-focus {
+    animation: none !important;
+  }
+}
+
+/* frames: a soft container; the title label is drawn by the engine */
+.aifig-frame {
+  border-radius: 12px;
+  background: var(--frame-bg);
+  border: 1px solid var(--border-c);
+}
+
+/* engine theme */
+.aifig-canvas {
+  --ae-accent: #5b5bd6;
+  --ae-connector: #908b88;
+  --ae-grid-dot: rgb(28 25 23 / 0.13);
+  --ae-label-bg: var(--canvas);
+  --ae-label-ink: var(--muted-c);
+  background-color: var(--canvas);
+}
+.dark .aifig-canvas {
+  --ae-accent: #8e8cf0;
+  --ae-connector: #6b6b73;
+  --ae-grid-dot: rgb(255 255 255 / 0.08);
+}
+/* comment mode: a comment cursor everywhere on the canvas, and a quiet hover ring on the block that would get the pin */
+html[data-comment-mode] .aifig-canvas,
+html[data-comment-mode] .aifig-canvas * {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cpath d='M3 23V12a9 9 0 1 1 9 9H3z' fill='%23fff' stroke='%231c1917' stroke-width='1.6' stroke-linejoin='round'/%3E%3Ccircle cx='8.5' cy='12' r='1.2' fill='%231c1917'/%3E%3Ccircle cx='12' cy='12' r='1.2' fill='%231c1917'/%3E%3Ccircle cx='15.5' cy='12' r='1.2' fill='%231c1917'/%3E%3C/svg%3E")
+      3 23,
+    crosshair !important;
+}
+html[data-comment-mode] .aifig-canvas [data-block-id]:hover {
+  outline: 2px solid color-mix(in srgb, var(--ae-accent) 55%, transparent);
+  outline-offset: 2px;
+}
+html[data-comment-mode] .aifig-canvas [data-thread],
+html[data-comment-mode] .aifig-canvas [data-comment-popover] button,
+html[data-comment-mode] .aifig-canvas [data-comment-sidebar] button,
+html[data-comment-mode] .aifig-canvas [data-comment-ui] button {
+  cursor: pointer !important;
+}
+html[data-comment-mode] .aifig-canvas [data-comment-popover] textarea {
+  cursor: text !important;
+}
+.aifig-canvas textarea::placeholder,
+.aifig-canvas input::placeholder {
+  color: currentColor;
+  opacity: 0.45;
+}
+
+/* rich text (Markdown subset rendered / edited with TipTap) */
+.aifig-rich-host,
+.aifig-rich-host .ProseMirror {
+  height: 100%;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.aifig-rich p {
+  margin: 0;
+  min-height: 1.45em;
+}
+.aifig-rich ul,
+.aifig-rich ol {
+  margin: 0.15em 0;
+  padding-left: 1.25em;
+}
+.aifig-rich ul {
+  list-style: disc;
+}
+.aifig-rich ol {
+  list-style: decimal;
+}
+.aifig-rich li p {
+  min-height: 0;
+}
+.aifig-rich strong {
+  font-weight: 650;
+}
+.aifig-rich code {
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.86em;
+  padding: 0.05em 0.3em;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.aifig-rich a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 2px;
+}
+.aifig-rich-host .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  opacity: 0.45;
+  pointer-events: none;
+}
+.aifig-card .body.aifig-rich,
+.aifig-card .body .ProseMirror {
+  margin-top: 6px;
+}
+
+/* images */
+.aifig-image {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--frame-bg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.06);
+}
+.aifig-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.aifig-image-loading {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--muted-c);
+}
+.aifig-missing {
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  text-align: center;
+  line-height: 1.35;
+  background: var(--frame-bg);
+}
+
+/* videos: poster + play button; plays inline with native controls */
+.aifig-video {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #111;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 2px 8px rgb(0 0 0 / 0.08);
+}
+.aifig-video video,
+.aifig-video-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.aifig-video video {
+  object-fit: contain;
+  background: #000;
+  pointer-events: auto;
+}
+.aifig-video-blank {
+  background: radial-gradient(120% 90% at 50% 40%, #2a2724 0%, #121110 70%);
+}
+.aifig-video-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  align-items: center;
+  justify-content: center;
+  padding-left: 3px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: rgb(0 0 0 / 0.5);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease;
+}
+.aifig-video-play:hover {
+  transform: scale(1.06);
+  background: rgb(0 0 0 / 0.66);
+}
+.aifig-video-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  max-width: calc(100% - 16px);
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+.aifig-video.is-playing .aifig-video-badge {
+  opacity: 0;
+}
+.aifig-video-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: rgb(0 0 0 / 0.55);
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aifig-video-play {
+    transition: none;
+  }
+}
+
+/* card bodies size to their content so the card can grow to fit */
+.aifig-card .aifig-rich-host,
+.aifig-card .aifig-rich-host .ProseMirror {
+  height: auto;
+  min-height: 1.45em;
+}
+
+/* ---------- welcome ---------- */
+
+@keyframes aifig-welcome-cursor {
+  0%, 100% { transform: translate(70px, 0); }
+  50% { transform: translate(52px, -44px); }
+}
+@keyframes aifig-welcome-suggest {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@keyframes aifig-welcome-link {
+  to { background-position: 24px 0; }
+}
+.aifig-welcome-cursor {
+  animation: aifig-welcome-cursor 3.2s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+.aifig-welcome-suggest {
+  animation: aifig-welcome-suggest 3.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aifig-welcome-cursor,
+  .aifig-welcome-suggest {
+    animation: none;
+  }
+}
+
+/* ---------- CJK typography ----------
+ * Chinese UI text: system CJK faces first for Han glyphs (Inter still sets Latin and digits), a little more
+ * line-height, and no negative tracking (tight tracking crowds Han characters). */
+:root:lang(zh-CN) {
+  --font-sans: "Inter Variable", "Inter", "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", "WenQuanYi Micro Hei", system-ui, sans-serif;
+}
+:lang(zh-CN) body {
+  line-height: 1.6;
+}
+:lang(zh-CN) .tracking-tight,
+:lang(zh-CN) .tracking-wide {
+  letter-spacing: 0;
+}
+:lang(zh-CN) .leading-snug {
+  line-height: 1.5;
+}
+:lang(zh-CN) .leading-relaxed {
+  line-height: 1.7;
+}
+:lang(zh-CN) .uppercase {
+  text-transform: none;
+}

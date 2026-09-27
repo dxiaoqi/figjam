@@ -1,4 +1,4 @@
-import { Bookmark, Check, ChevronDown, FolderOpen, HardDrive, History, Package, PackageOpen, Pencil, Plus, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
+import { Bookmark, Check, ChevronDown, FolderOpen, Globe, HardDrive, History, Package, PackageOpen, Pencil, Plus, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { FEATURES } from '@aifig/shared'
 import { toast } from 'sonner'
@@ -22,6 +22,7 @@ import { useT } from '../i18n'
 import { openNewBoard } from './new-board'
 import { openStorage } from './StoragePanel'
 import { openExportPack, openImportPack } from '../lib/packs'
+import { openWebExport } from './WebExport'
 
 export function Logo({ className }: { className?: string }) {
   return (
@@ -123,6 +124,9 @@ export function BoardMenu() {
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => openExportPack()} data-menu-export-pack>
             <Package className="size-4" /> {t('board.exportPack')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openWebExport()} data-menu-export-web>
+            <Globe className="size-4" /> {t('board.exportWeb')}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => openImportPack()} data-menu-import-pack>
             <PackageOpen className="size-4" /> {t('board.importPack')}

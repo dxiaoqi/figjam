@@ -288,6 +288,19 @@ export async function startCore(port = CORE_PORT) {
         stream.on('close', () => fs.rmSync(out, { force: true }))
         return stream.pipe(res)
       }
+      const webGet = url.pathname.match(/^\/api\/boards\/([\w-]+)\/web\.(zip|html)$/)
+      if (webGet && req.method === 'GET') {
+        const out = path.join(incomingDir(home), tempName(`.${webGet[2]}`))
+        const r = await core.call({ tool: 'export_web', args: { board: webGet[1], path: out, mode: webGet[2] === 'zip' ? 'zip' : 'single', include_comments: url.searchParams.get('comments') !== '0', show_fields: url.searchParams.get('fields') !== '0', theme: url.searchParams.get('theme') === 'dark' ? 'dark' : 'light' }, caller: PERSON })
+        if (!r.ok) return json(res, 400, r)
+        const base = (core.registry.get(webGet[1])?.title ?? 'board').replace(/[\\/:*?"<>|]+/g, '-')
+        const name = webGet[2] === 'zip' ? `${base} (web).zip` : `${base}.html`
+        const result = r.result as { warning?: string }
+        res.writeHead(200, { 'content-type': webGet[2] === 'zip' ? 'application/zip' : 'text/html; charset=utf-8', 'content-length': fs.statSync(out).size, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`, 'cache-control': 'no-store', ...(result.warning ? { 'x-aifig-warning': encodeURIComponent(result.warning) } : {}) })
+        const stream = fs.createReadStream(out)
+        stream.on('close', () => fs.rmSync(out, { force: true }))
+        return stream.pipe(res)
+      }
       if (url.pathname === '/api/packs' && req.method === 'POST') {
         const file = path.join(incomingDir(home), tempName('.aifigpack'))
         try {

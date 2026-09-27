@@ -45,6 +45,7 @@ export class InputController {
       if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === 'file')) e.preventDefault()
     })
     on(el, 'drop', (e) => {
+      if (this.editor.options.readOnly) return
       const files = [...(e.dataTransfer?.files ?? [])].filter(isMediaFile)
       if (!files.length) return
       e.preventDefault()
@@ -371,7 +372,8 @@ export class InputController {
 
   private onWheel = (e: WheelEvent) => {
     const ed = this.editor
-    if ((e.target as HTMLElement).closest('[data-ui]')) return
+    // `data-wheel-canvas`: a control that takes clicks but lets the canvas pan and zoom under it
+    if ((e.target as HTMLElement).closest('[data-ui]') && !(e.target as HTMLElement).closest('[data-wheel-canvas]')) return
     const scroller = (e.target as HTMLElement).closest<HTMLElement>('[data-scroll]')
     if (scroller && scroller.scrollHeight > scroller.clientHeight && !e.ctrlKey && !e.metaKey) return
     if (ed.editingId && (e.target as HTMLElement).closest('textarea')) {
@@ -432,6 +434,7 @@ export class InputController {
 
   private onKeyDown = (e: KeyboardEvent) => {
     const ed = this.editor
+    if (ed.options.readOnly) return this.viewerKey(e)
     if (e.key === ' ' && !isEditableTarget(e.target)) {
       if (!ed.spaceDown) {
         ed.spaceDown = true
@@ -517,6 +520,32 @@ export class InputController {
     }
   }
 
+  /** Read-only: zoom (⌘/Ctrl +/−/0, +/−, ⇧1) and pan with the arrow keys. */
+  private viewerKey(e: KeyboardEvent) {
+    const ed = this.editor
+    if (isEditableTarget(e.target) || e.altKey) return
+    const k = e.key
+    const step = e.shiftKey ? 240 : 64
+    const pan: Record<string, [number, number]> = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }
+    if (pan[k]) {
+      e.preventDefault()
+      return ed.panBy(pan[k][0], pan[k][1])
+    }
+    if (k === '=' || k === '+') {
+      e.preventDefault()
+      return ed.zoomIn()
+    }
+    if (k === '-' || k === '_') {
+      e.preventDefault()
+      return ed.zoomOut()
+    }
+    if ((e.metaKey || e.ctrlKey) && k === '0') {
+      e.preventDefault()
+      return ed.resetZoom()
+    }
+    if (e.shiftKey && (k === '1' || k === '!')) return ed.zoomToFit()
+  }
+
   private onKeyUp = (e: KeyboardEvent) => {
     if (e.key === ' ' && this.editor.spaceDown) {
       this.editor.spaceDown = false
@@ -539,7 +568,7 @@ export class InputController {
   }
 
   private onPaste = (e: ClipboardEvent) => {
-    if (isEditableTarget(e.target)) return
+    if (isEditableTarget(e.target) || this.editor.options.readOnly) return
     const files = [...(e.clipboardData?.files ?? [])].filter(isMediaFile)
     if (files.length) {
       e.preventDefault()

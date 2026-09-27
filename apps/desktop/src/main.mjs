@@ -435,6 +435,7 @@ function buildMenu() {
             { label: 'JSON…', click: send('export', 'json') },
             { label: 'Markdown…', click: send('export', 'md') },
             { type: 'separator' },
+            { id: 'web-page', label: tr('webPage'), click: send('export-web') },
             { id: 'share-pack', label: tr('sharePack'), click: send('export-pack') },
           ],
         },
