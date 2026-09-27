@@ -36,7 +36,10 @@ module.exports = {
     // the resvg native module (PNG export) for the target platform, staged by scripts/build.mjs
     { from: 'build/native/${os}-${arch}/node_modules', to: 'node_modules' },
   ],
-  fileAssociations: [{ ext: 'aifig', name: 'ai-figma board', role: 'Editor' }],
+  fileAssociations: [
+    { ext: 'aifig', name: 'ai-figma board', role: 'Editor' },
+    { ext: 'aifigpack', name: 'ai-figma share pack', role: 'Viewer', mimeType: 'application/x-aifigpack' },
+  ],
   // generic feed: electron-builder writes latest*.yml next to the installers; the app sets the real URL at runtime
   publish: [{ provider: 'generic', url: updateFeed }],
   mac: {

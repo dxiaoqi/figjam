@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld('aifigDesktop', {
   setLocale(locale, pref) {
     ipcRenderer.send('locale', locale, pref)
   },
+  pickFolder: (defaultPath) => ipcRenderer.invoke('dialog:folder', defaultPath),
+  savePath: (opts) => ipcRenderer.invoke('dialog:save', opts),
+  revealPath: (file) => ipcRenderer.send('shell:reveal', file),
   // the built-in assistant is behind a build-time flag (off by default)
   ...(features.assistant
     ? {

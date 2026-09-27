@@ -145,6 +145,31 @@ because they exist for the day the board's folder is gone.
   updates the canvas live, attributed to *External editor*. An agent that asks for the files (`edit_snippet_files`)
   owns its saves for 30 minutes: each becomes a change set to review, and rejecting it rewrites the files. A save with a
   JS syntax error is reported in the canvas and not applied.
+### Share packs
+
+**Share as pack…** (board menu; desktop *File › Export › Share Pack*) writes one `.aifigpack` for someone else: the
+board, every file it uses, the skills enabled on it, and — if you switch them on — its version history and comment
+threads (comments are on by default, history off). It's a zip:
+
+```
+manifest.json          format "aifigpack", version 1, what's included, and path + size + SHA-256 of every other file
+board.aifig            the board (without comments when they're left out; snippet grants cleared)
+assets/<sha256>.<ext>  the files (unused uploads stay home)
+skills/<name>/…        SKILL.md and canvas/ of each enabled skill (no examples, dotfiles or anything that looks like a key)
+history/v….aifig       versions, if included (without comments when they're left out)
+```
+
+Access tokens, permission grants, secrets, the activity log and anything outside the board are never packed; a board
+that contains the access token itself (pasted into a block) is refused. **Open pack…** (board menu, desktop *File ›
+Open Pack…*, or double-click a `.aifigpack` — the desktop app registers the file type) shows what's inside, asks where to
+save it (default `~/Documents/ai-figma`), and opens `<Title>.aifig` + `<Title>.assets/` there, never replacing existing
+files; skills are only installed when you tick *Install* (built-in ones are never overwritten). Before anything is
+written, every entry is checked: no paths that escape the folder (`..`, absolute, drive letters, backslashes), no
+symlinks, encryption, ZIP64 or duplicate names, only the files a pack can contain (no scripts), sizes within limits
+(2 GB in total, zip bombs stop at their declared size), every CRC, every checksum in the manifest, asset names matching
+their bytes, and the board's own checksum. Agents use `export_pack` / `import_pack`; the CLI `aifig pack` / `aifig
+unpack`.
+
 - Media elements load files from `/api/assets/<board>/<asset>` with an *asset key* (an HMAC of the access token that
   opens nothing but asset files), served with `nosniff`, a sandbox CSP and Range support; snippet source is served as
   plain text, never as a page on the app's origin.
@@ -229,7 +254,7 @@ use the canvas well. Copy it into `~/.claude/skills/` (or your agent's skills fo
 | Collaborate | `set_status`, `begin_change_set`, `commit_change_set`, `list_change_sets` (incl. per-item rejections and reasons), `get_threads`, `reply_thread`, `resolve_thread` |
 | Types | `list_types`, `set_type` (promote / demote with `none` / update fields), `query_blocks` (by type and field); `create_blocks` accepts `type` + `fields`, `connect` accepts `relation`, `tidy` accepts `by: "type" \| "matrix"` |
 | Web snippets | `create_snippet` (https URL embed, or inline `html` / `css` / `js`), `update_snippet` — both through review |
-| Export | `export_board` (Markdown document or JSON structure) |
+| Export | `export_board` (Markdown document or JSON structure), `export_pack` / `import_pack` (`.aifigpack` share packs) |
 | Versions | `list_versions`, `create_version` (named checkpoint), `restore_version` (checkpoints the current state first; from an agent it's a change set to review) |
 
 Also exposed: resource `aifig://design/tokens` and prompt `layout-best-practices`.
@@ -256,6 +281,8 @@ aifig assets --cleanup [--dry-run]                 # remove files no block uses 
 aifig replace <assetId|blockId> ./new.png          # --part poster|html|css|js
 aifig snippet-files <id> [--open]                  # editable index.html / style.css / script.js, live
 aifig storage [--reveal]                           # where the board, its files, history and backups are
+aifig pack -o plan.aifigpack --history [--no-comments]   # share pack: board, files, skills (+ history, comments)
+aifig unpack plan.aifigpack --to ~/Boards [--install-skills]  # check, save as <Title>.aifig + .assets, open
 aifig tidy --frame "Principles"
 aifig lint
 aifig snapshot -o board.png                        # --dark, --frame, --ids a,b,c, .svg
@@ -592,7 +619,7 @@ English ones longer.
 npm run typecheck                                     # every workspace
 npm run test:e2e                                      # canvas engine + app, real pointer/keyboard input (166 checks)
 npm run test:onboarding                               # languages, welcome, templates (UI/CLI/MCP), one-click agent setup; isolated core
-npm run test:sharing                                  # asset files, 1.0 migration, videos, live snippet files, storage panel (isolated core, headless Chrome)
+npm run test:sharing                                  # asset files, 1.0 migration, videos, live snippet files, storage panel, share packs (isolated core, headless Chrome)
 npm run test:aesthetics                               # agent-output aesthetics vs baselines (update: test:aesthetics:update)
 npm run test:data-safety                              # format, migrations, retention, kill -9 / SIGTERM, recovery, versions over MCP + CLI
 node scripts/desktop-e2e.mjs                          # Electron app (window, menus, files, theme, bundled MCP, keychain)

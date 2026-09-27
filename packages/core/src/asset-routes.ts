@@ -121,3 +121,46 @@ export async function receiveUpload(req: http.IncomingMessage, board: Board, url
     return { status: (e as { status?: number }).status ?? 500, body: { ok: false, error: (e as Error).message } }
   }
 }
+
+/** Stream a request body to `file` (at most `max` bytes). */
+export function saveBody(req: http.IncomingMessage, file: string, max: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    let size = 0
+    const out = fs.createWriteStream(file, { mode: 0o600 })
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length
+      if (size > max) {
+        req.destroy()
+        out.destroy()
+        fs.rmSync(file, { force: true })
+        reject(Object.assign(new Error(`The file is larger than ${Math.round(max / 1024 / 1024)} MB`), { status: 413 }))
+        return
+      }
+      if (!out.write(chunk)) {
+        req.pause()
+        out.once('drain', () => req.resume())
+      }
+    })
+    req.on('end', () => out.end())
+    req.on('error', reject)
+    out.on('finish', () => resolve(size))
+    out.on('error', reject)
+  })
+}
+
+/** Uploaded packs wait here (private to the core) until they're imported; stale ones are removed. */
+export function incomingDir(home: string) {
+  const dir = path.join(home, 'incoming')
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
+  for (const f of fs.readdirSync(dir)) {
+    const p = path.join(dir, f)
+    try {
+      if (Date.now() - fs.statSync(p).mtimeMs > 24 * 3_600_000) fs.rmSync(p, { recursive: true, force: true })
+    } catch {
+      // gone
+    }
+  }
+  return dir
+}
+
+export const tempName = (ext: string) => `${Date.now().toString(36)}-${randomBytes(6).toString('hex')}${ext}`

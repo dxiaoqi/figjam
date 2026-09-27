@@ -80,6 +80,8 @@ import { PresenceHub, identify } from './presence'
 import { openInOs } from './os-open'
 import { SnippetFiles } from './snippet-files'
 import { cleanUpAssets, storageInfo } from './storage'
+import { exportPack, importPack, inspectPack, PACK_EXT } from './pack'
+import os from 'node:os'
 import { SkillLibrary, userSkillsDir, writeSkillFolder } from './skills'
 
 /** Axis labels of matrix / timeline layouts: small bold text. */
@@ -90,6 +92,9 @@ import { templateSteps } from './templates'
 import { SCENARIO_IDS, SCENARIOS, TEMPLATE_IDS, TEMPLATES, type ContentLanguage, type TemplateId } from '@aifig/shared'
 
 export class ToolError extends Error {}
+
+/** Where imported packs go unless someone picks a folder. */
+export const defaultPackDir = () => process.env.AIFIG_PACK_DIR ?? path.join(os.homedir(), 'Documents', 'ai-figma')
 
 type Args = Record<string, any>
 
@@ -516,6 +521,18 @@ export class CanvasCore {
         return { board: this.board(a.board).id, ...cleanUpAssets(this.board(a.board), { dryRun: a.dry_run }) }
       case 'reveal_asset':
         return this.revealAsset(a)
+      case 'export_pack':
+        return this.exportPackTool(a)
+      case 'import_pack':
+        return this.importPackTool(a)
+      case 'inspect_pack': {
+        try {
+          const r = inspectPack(path.resolve(String(a.path)))
+          return { path: path.resolve(String(a.path)), size: fs.statSync(path.resolve(String(a.path))).size, manifest: r.manifest, defaultDest: defaultPackDir() }
+        } catch (e) {
+          throw new ToolError(`This pack can’t be opened: ${(e as Error).message}`)
+        }
+      }
       case 'edit_snippet_files': {
         const board = this.board(a.board)
         const b = board.blocks.get(a.id) ?? board.resolve(a.id)
@@ -1990,6 +2007,42 @@ export class CanvasCore {
     if (!info || !IMAGE_MIMES.includes(info.mime)) throw new ToolError('Unsupported image — use PNG, JPEG, GIF or WebP')
     if (bytes.byteLength > ASSET_LIMITS.imageBytes) throw new ToolError(`Images are limited to ${ASSET_LIMITS.imageBytes / 1024 / 1024} MB`)
     return board.putAsset(bytes, { mime: info.mime, ext: extForMime(info.mime), role: like.role, name, w: info.w, h: info.h })
+  }
+
+  private exportPackTool(a: Args) {
+    const board = this.board(a.board)
+    let out = path.resolve(String(a.path))
+    if (!out.toLowerCase().endsWith(PACK_EXT)) out += PACK_EXT
+    if (fs.existsSync(out) && !a.overwrite) throw new ToolError(`${out} already exists — pass overwrite: true or choose another path`)
+    fs.mkdirSync(path.dirname(out), { recursive: true })
+    try {
+      const r = exportPack(board, this.skills, out, { history: a.include_history === true, comments: a.include_comments !== false })
+      return { board: board.id, path: r.file, size: r.size, files: r.manifest.files.length, includes: r.manifest.includes, ...(r.manifest.missing ? { missing: r.manifest.missing } : {}), ...(r.warnings.length ? { notes: r.warnings } : {}) }
+    } catch (e) {
+      throw new ToolError((e as Error).message)
+    }
+  }
+
+  private importPackTool(a: Args) {
+    const file = path.resolve(String(a.path))
+    if (!fs.existsSync(file)) throw new ToolError(`No file at ${file}`)
+    try {
+      const r = importPack(this.registry, this.skills, file, a.dest ? path.resolve(String(a.dest)) : defaultPackDir(), { installSkills: a.install_skills === true })
+      // packs uploaded by the canvas wait in the core's incoming folder until now
+      if (file.startsWith(path.join(aifigHome(), 'incoming') + path.sep)) fs.rmSync(file, { force: true })
+      return {
+        board: r.board.summary(),
+        path: r.path,
+        assets: path.join(path.dirname(r.path), `${path.basename(r.path, '.aifig')}.assets`),
+        history: r.history,
+        comments: r.board.threads.size,
+        skills: r.skills,
+        ...(r.warnings.length ? { notes: r.warnings } : {}),
+        ...(r.skills.available.length ? { next: `The pack also has the skills ${r.skills.available.join(', ')}; import again with install_skills: true to add them to this machine.` } : {}),
+      }
+    } catch (e) {
+      throw new ToolError(`This pack wasn’t imported: ${(e as Error).message}`)
+    }
   }
 
   /** Reveal a board location or asset in the file manager, or open it (snippet source: in a code editor). */
