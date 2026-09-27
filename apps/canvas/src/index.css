@@ -723,6 +723,109 @@ html[data-comment-mode] .aifig-canvas [data-comment-popover] textarea {
   font-size: 12px;
   color: var(--muted-c);
 }
+.aifig-missing {
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  text-align: center;
+  line-height: 1.35;
+  background: var(--frame-bg);
+}
+
+/* videos: poster + play button; plays inline with native controls */
+.aifig-video {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #111;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 2px 8px rgb(0 0 0 / 0.08);
+}
+.aifig-video video,
+.aifig-video-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.aifig-video video {
+  object-fit: contain;
+  background: #000;
+  pointer-events: auto;
+}
+.aifig-video-blank {
+  background: radial-gradient(120% 90% at 50% 40%, #2a2724 0%, #121110 70%);
+}
+.aifig-video-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  align-items: center;
+  justify-content: center;
+  padding-left: 3px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: rgb(0 0 0 / 0.5);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease;
+}
+.aifig-video-play:hover {
+  transform: scale(1.06);
+  background: rgb(0 0 0 / 0.66);
+}
+.aifig-video-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  max-width: calc(100% - 16px);
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+.aifig-video.is-playing .aifig-video-badge {
+  opacity: 0;
+}
+.aifig-video-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: rgb(0 0 0 / 0.55);
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aifig-video-play {
+    transition: none;
+  }
+}
 
 /* card bodies size to their content so the card can grow to fit */
 .aifig-card .aifig-rich-host,

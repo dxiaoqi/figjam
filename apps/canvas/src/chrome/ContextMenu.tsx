@@ -15,7 +15,10 @@ import {
   Copy,
   CopyPlus,
   ExternalLink,
+  FileCode2,
+  FolderOpen,
   Frame,
+  HardDrive,
   Image,
   LayoutGrid,
   Maximize,
@@ -61,6 +64,7 @@ import { callCore } from '../lib/core'
 import { copySnapshot, downloadDocument, downloadSnapshot } from '../lib/export'
 import { runAssistant, useAssistant } from '../lib/assistant'
 import { relationLabel, useT } from '../i18n'
+import { openStorage } from './StoragePanel'
 
 interface MenuState {
   screen: Vec
@@ -148,6 +152,14 @@ export function ContextMenu() {
       toast.error((e as Error).message)
     }
   }
+  const reveal = async (args: Record<string, unknown>) => {
+    try {
+      const r = await callCore<{ opened: boolean; path: string }>('reveal_asset', { board: boardId, ...args })
+      if (!r.opened) toast.message(t('storage.noFileManager'), { description: r.path })
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
   const route = connectors.length ? (connectors[0]!.route ?? 'curved') : 'curved'
 
   return (
@@ -171,9 +183,24 @@ export function ContextMenu() {
                     <ExternalLink /> {t('menu.openBrowser')}
                   </DropdownMenuItem>
                 )}
+                {blocks[0].web?.mode === 'inline' && (
+                  <DropdownMenuItem onSelect={run(() => reveal({ block: ids[0], open: true }))} data-web-editor>
+                    <FileCode2 /> {t('menu.editInEditor')}
+                  </DropdownMenuItem>
+                )}
               </>
             )}
-            {blocks.length === 1 && blocks[0].kind !== 'web' && (
+            {blocks.length === 1 && (blocks[0].kind === 'image' || blocks[0].kind === 'video') && blocks[0].asset && (
+              <>
+                <DropdownMenuItem onSelect={run(() => reveal({ asset: blocks[0].asset }))} data-reveal-file>
+                  <FolderOpen /> {t('menu.revealFile')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={run(openStorage)}>
+                  <HardDrive /> {t('menu.showInStorage')}
+                </DropdownMenuItem>
+              </>
+            )}
+            {blocks.length === 1 && blocks[0].kind !== 'web' && blocks[0].kind !== 'video' && (
               <DropdownMenuItem onSelect={run(() => editor.startEditing(ids[0]))}>
                 <Pencil /> {t('menu.edit')} <DropdownMenuShortcut>↵</DropdownMenuShortcut>
               </DropdownMenuItem>

@@ -65,7 +65,10 @@ export function buildBoard(total: number, seed = 42): FixtureInfo {
     id: nextId(), kind, x, y, w, h, parent, text: '', color: 'yellow', size: 'm', author, createdAt: now + n, updatedAt: now + n, pending: false, changeSet: null,
   })
 
-  const assets = [0, 1, 2].map((i) => ({ id: `abench${i}`, mime: 'image/png', w: 96, h: 64, bytes: png(96, 64, i * 70), name: `bench-${i}.png`, createdAt: now }))
+  const assets = [0, 1, 2].map((i) => {
+    const bytes = png(96, 64, i * 70)
+    return { id: `abench${i}`, hash: board.store.put(bytes, 'png').hash, ext: 'png', mime: 'image/png', size: bytes.byteLength, role: 'image' as const, w: 96, h: 64, name: `bench-${i}.png`, createdAt: now }
+  })
   const imageCount = Math.max(3, Math.round(total * 0.003))
   const snippetCount = Math.max(2, Math.round(total * 0.0006))
   const frameCount = Math.max(4, Math.round(total * 0.006))
@@ -170,7 +173,14 @@ export function buildBoard(total: number, seed = 42): FixtureInfo {
   const snipTop = mediaTop + Math.ceil(imageCount / 20) * 280 + 80
   for (let i = 0; i < snippetCount; i++) {
     const b = base('web', i * 520, snipTop, 480, 320, null)
-    b.web = { mode: 'inline', ...SNIPPET, title: `Pricing calculator ${i + 1}` }
+    const src = Object.fromEntries((['html', 'css', 'js'] as const).map((k) => {
+      const bytes = new TextEncoder().encode(SNIPPET[k])
+      const hash = board.store.put(bytes, k).hash
+      const aid = `abench${k}`
+      assets.push({ id: aid, hash, ext: k, mime: k === 'html' ? 'text/html' : k === 'css' ? 'text/css' : 'text/javascript', size: bytes.byteLength, role: `snippet-${k}` as never, w: 0, h: 0, name: k, createdAt: now })
+      return [k, aid]
+    }))
+    b.web = { mode: 'inline', src, title: `Pricing calculator ${i + 1}` }
     b.text = b.web.title!
     b.color = 'gray'
     blocks.push(b)
@@ -180,7 +190,7 @@ export function buildBoard(total: number, seed = 42): FixtureInfo {
     board.meta.set('title', `Bench ${total.toLocaleString('en')} blocks`)
     board.meta.set('createdAt', now)
     board.meta.set('updatedAt', now)
-    board.meta.set('format', 'aifig/0')
+    board.meta.set('schema', '2.0')
     for (const a of assets) board.assets.set(a.id, a)
     for (const b of blocks) board.blocks.set(b.id, b)
     for (const c of connectors) board.connectors.set(c.id, c)

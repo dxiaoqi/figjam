@@ -124,7 +124,9 @@ export type AssetStatus = 'used' | 'unused' | 'missing'
 /** Everything the storage panel shows. */
 export function storageInfo(board: Board) {
   const used = new Map<string, { id: string; kind: Block['kind']; label: string }[]>()
+  const posters = new Map<string, string>()
   for (const b of board.blocks.values()) {
+    if (b.kind === 'video' && b.asset && b.poster && !posters.has(b.asset)) posters.set(b.asset, b.poster)
     for (const id of blockAssetRefs(b)) {
       const label = (b.kind === 'web' ? b.web?.title : b.title) || b.text || ''
       const list = used.get(id) ?? []
@@ -138,7 +140,7 @@ export function storageInfo(board: Board) {
     .map((a) => {
       const file = board.assetPath(a)
       const status: AssetStatus = !file ? 'missing' : referenced.has(a.id) ? 'used' : 'unused'
-      return { ...a, file: file ?? board.store.file(a.hash, a.ext), status, usedBy: used.get(a.id) ?? [], pendingOnly: !used.has(a.id) && referenced.has(a.id) }
+      return { ...a, file: file ?? board.store.file(a.hash, a.ext), status, usedBy: used.get(a.id) ?? [], pendingOnly: !used.has(a.id) && referenced.has(a.id), ...(posters.has(a.id) ? { poster: posters.get(a.id) } : {}) }
     })
     .sort((p, q) => q.size - p.size)
   const live = new Set(board.assetFiles())

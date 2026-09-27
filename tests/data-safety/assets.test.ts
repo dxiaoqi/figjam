@@ -298,3 +298,20 @@ test('Board.fromBytes of a version preview never writes to the board file', () =
   board.saveNow(true)
   assert.ok(!fs.existsSync(board.file))
 })
+
+test('adding a file from disk copies it: the person’s file stays writable and separate', () => {
+  const home = tempHome()
+  const reg = new BoardRegistry()
+  reg.loadAll()
+  const b = reg.create('Own file')
+  const mine = path.join(home, 'clip.bin')
+  fs.writeFileSync(mine, png(51, 5000))
+  const a = b.importAssetFile(mine, { mime: 'image/png', ext: 'png', role: 'image' })
+  const stored = b.assetPath(a)!
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(mine).nlink, 1, 'not hard-linked to the store')
+    assert.notEqual(fs.statSync(mine).mode & 0o200, 0, 'still writable')
+  }
+  fs.appendFileSync(mine, 'edited later')
+  assert.ok(b.store.verify(a.hash, 'png'), `the stored copy is unaffected (${stored})`)
+})

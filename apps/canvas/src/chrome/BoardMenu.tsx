@@ -1,4 +1,4 @@
-import { Bookmark, Check, ChevronDown, FolderOpen, History, Pencil, Plus, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
+import { Bookmark, Check, ChevronDown, FolderOpen, HardDrive, History, Pencil, Plus, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { FEATURES } from '@aifig/shared'
 import { toast } from 'sonner'
@@ -20,6 +20,7 @@ import { callCore } from '../lib/core'
 import { openBackupFolder, openVersionHistory } from '../lib/versions'
 import { useT } from '../i18n'
 import { openNewBoard } from './new-board'
+import { openStorage } from './StoragePanel'
 
 export function Logo({ className }: { className?: string }) {
   return (
@@ -114,6 +115,9 @@ export function BoardMenu() {
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => openBackupFolder(boardId)}>
             <FolderOpen className="size-4" /> {t('board.openBackups')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openStorage()} data-menu-storage>
+            <HardDrive className="size-4" /> {t('board.storage')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:activity'))}>

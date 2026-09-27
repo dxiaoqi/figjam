@@ -7,7 +7,7 @@ import { COLOR_TOKENS, COLORS } from '@aifig/shared'
 import { useBoard } from '../board-context'
 import { useEditorState } from '../canvas/editor-context'
 import { toggleCommentMode, useCommentPrefs } from '../canvas/comment-prefs'
-import { importImages, nextColor, useNextColor } from '../canvas/shapes'
+import { importFiles, nextColor, useNextColor } from '../canvas/shapes'
 import { useT, type MessageKey } from '../i18n'
 
 const TOOLS: { id: string; label: MessageKey; kbd: string; icon: LucideIcon }[] = [
@@ -22,7 +22,7 @@ const TOOLS: { id: string; label: MessageKey; kbd: string; icon: LucideIcon }[] 
 
 export function Toolbar() {
   const editor = useEditorState()
-  const { theme } = useBoard()
+  const { theme, boardId } = useBoard()
   const color = useNextColor()
   const current = editor.tool
   const showColors = current === 'sticky' || current === 'card'
@@ -30,11 +30,11 @@ export function Toolbar() {
   const { mode: commentMode } = useCommentPrefs()
   const t = useT()
   const onPick = async (files: FileList | null) => {
-    const list = [...(files ?? [])].filter((f) => f.type.startsWith('image/'))
+    const list = [...(files ?? [])]
     if (!list.length) return
     const vp = editor.viewportPageBounds()
     try {
-      await importImages(editor, list, { x: vp.x + vp.w / 2 - 240, y: vp.y + vp.h / 2 })
+      await importFiles(editor, boardId, list, { x: vp.x + vp.w / 2 - 240, y: vp.y + vp.h / 2 })
     } catch {
       toast.error(t('tool.imageError'))
     }
@@ -94,7 +94,7 @@ export function Toolbar() {
               <ImagePlus className="size-[18px]" strokeWidth={1.75} />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="top">{t('tool.imageHint')}</TooltipContent>
+          <TooltipContent side="top">{t('tool.imageHintVideo')}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -133,7 +133,7 @@ export function Toolbar() {
           </TooltipTrigger>
           <TooltipContent side="top">{t('tool.webHint')}</TooltipContent>
         </Tooltip>
-        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => onPick(e.target.files)} />
+        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm" multiple hidden onChange={(e) => onPick(e.target.files)} />
       </div>
     </div>
   )

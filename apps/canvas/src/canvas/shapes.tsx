@@ -1,6 +1,7 @@
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, FileWarning, Film, Play, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
-import { randomId, snapTo, type BlockDraft, type BlockRenderProps, type Editor, type ShapeDef, type Vec } from '@aifig/canvas-engine'
+import { intersects, snapTo, type BlockDraft, type BlockRenderProps, type Editor, type ShapeDef, type Vec } from '@aifig/canvas-engine'
 import {
   cardContentHeight,
   fitHeight,
@@ -24,6 +25,8 @@ import {
 import { cn } from '@/lib/utils'
 import { useBoard } from '../board-context'
 import { reportLayout } from '../lib/layout-report'
+import { assetUrl, blobToDataUrl, capturePoster, uploadAsset } from '../lib/assets'
+import { callCore } from '../lib/core'
 import { RichEditor, RichText } from './rich-editor'
 import { WebBlock as WebBlockLazy } from './web-block'
 import { t } from '../i18n'
@@ -268,80 +271,223 @@ function Frame() {
   return <div className="aifig-frame" />
 }
 
-// ---- images --------------------------------------------------------------------
+// ---- images and videos ----------------------------------------------------------
 
-const assetUrls = new Map<string, string>()
-
-function assetUrl(editor: Editor, id: string | undefined) {
-  if (!id) return null
-  const cached = assetUrls.get(id)
-  if (cached) return cached
-  const a = editor.doc.getMap<Asset>('assets').get(id)
-  if (!a) return null
-  const url = URL.createObjectURL(new Blob([a.bytes as BlobPart], { type: a.mime }))
-  assetUrls.set(id, url)
-  return url
-}
-
-export function useAssetUrl(editor: Editor, id: string | undefined) {
-  const [state, setState] = useState(() => ({ id, url: assetUrl(editor, id) }))
-  const url = state.id === id ? state.url : assetUrl(editor, id)
-  const setUrl = (u: string) => setState({ id, url: u })
+function useAsset(editor: Editor, id: string | undefined): Asset | undefined {
+  const assets = editor.doc.getMap<Asset>('assets')
+  const [, bump] = useState(0)
+  const a = id ? assets.get(id) : undefined
   useEffect(() => {
-    if (url) return
-    const assets = editor.doc.getMap<Asset>('assets')
-    const check = () => {
-      const u = assetUrl(editor, id)
-      if (u) setUrl(u)
-    }
+    if (!id || a) return
+    const check = () => assets.get(id) && bump((n) => n + 1)
     assets.observe(check)
-    check()
     return () => assets.unobserve(check)
-  }, [editor, id, url])
-  return url
+  }, [assets, id, a])
+  return a?.hash ? a : undefined
 }
 
-function ImageBlock({ block, editor }: BlockRenderProps) {
-  const url = useAssetUrl(editor, block.asset)
+/** URL of an asset file served by the core (null until the board has the entry). */
+export function useAssetUrl(editor: Editor, id: string | undefined) {
+  const { boardId } = useBoard()
+  const a = useAsset(editor, id)
+  return a ? assetUrl(boardId, a) : null
+}
+
+function MissingFile({ label }: { label: string }) {
   return (
-    <div className="aifig-image">
-      {url ? <img src={url} alt={block.text || t('block.image')} draggable={false} /> : <div className="aifig-image-loading">{t('block.loadingImage')}</div>}
+    <div className="aifig-image-loading aifig-missing" data-missing-asset>
+      <FileWarning className="size-4 opacity-60" strokeWidth={1.75} />
+      <span>{label}</span>
     </div>
   )
 }
 
+function ImageBlock({ block, editor }: BlockRenderProps) {
+  const url = useAssetUrl(editor, block.asset)
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  const failed = !!url && failedUrl === url
+  return (
+    <div className="aifig-image">
+      {url && !failed ? (
+        <img src={url} alt={block.text || t('block.image')} draggable={false} onError={() => setFailedUrl(url)} />
+      ) : failed ? (
+        <MissingFile label={t('storage.missingFile')} />
+      ) : (
+        <div className="aifig-image-loading">{t('block.loadingImage')}</div>
+      )}
+    </div>
+  )
+}
+
+// one poster capture at a time
+let posterBusy = false
+
+function VideoBlock({ block, editor }: BlockRenderProps) {
+  const { boardId } = useBoard()
+  const video = useAsset(editor, block.asset)
+  const posterUrl = useAssetUrl(editor, block.poster)
+  const url = video ? assetUrl(boardId, video) : null
+  const [playing, setPlaying] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const el = useRef<HTMLVideoElement>(null)
+  const root = useRef<HTMLDivElement>(null)
+
+  // pause when the video scrolls out of view
+  useEffect(() => {
+    if (!playing) return
+    const timer = setInterval(() => {
+      const r = editor.visualRect(block.id)
+      if (r && !intersects(r, editor.viewportPageBounds())) el.current?.pause()
+    }, 600)
+    return () => clearInterval(timer)
+  }, [playing, editor, block.id])
+
+  // an agent added it without a poster: grab a frame once it is on screen
+  useEffect(() => {
+    if (block.poster || !url || failed) return
+    let cancelled = false
+    const tryCapture = async () => {
+      const r = editor.visualRect(block.id)
+      if (posterBusy || !r || !intersects(r, editor.viewportPageBounds())) return
+      posterBusy = true
+      try {
+        const p = await capturePoster(url)
+        if (!cancelled) await callCore('report_video_poster', { board: boardId, id: block.id, png: await blobToDataUrl(p.blob), w: p.w, h: p.h, duration: p.duration })
+      } catch {
+        // keep the dark placeholder
+      } finally {
+        posterBusy = false
+      }
+    }
+    const poll = setInterval(tryCapture, 900)
+    tryCapture()
+    return () => {
+      cancelled = true
+      clearInterval(poll)
+    }
+  }, [block.poster, url, failed, boardId, block.id, editor])
+
+  const label = block.text || video?.name || t('block.video')
+  return (
+    <div ref={root} className={cn('aifig-video', playing && 'is-playing')} data-video-block>
+      {playing && url ? (
+        <video
+          ref={el}
+          data-ui
+          src={url}
+          poster={posterUrl ?? undefined}
+          controls
+          autoPlay
+          playsInline
+          onError={() => {
+            setFailed(true)
+            setPlaying(false)
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <>
+          {posterUrl ? <img className="aifig-video-poster" src={posterUrl} alt="" draggable={false} /> : <div className="aifig-video-poster aifig-video-blank" />}
+          {failed || (!video && block.asset) ? (
+            <MissingFile label={t('storage.missingFile')} />
+          ) : (
+            <button
+              type="button"
+              data-ui
+              data-video-play
+              className="aifig-video-play"
+              aria-label={t('video.play', { name: label })}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => url && setPlaying(true)}
+            >
+              <Play className="size-5" fill="currentColor" strokeWidth={0} />
+            </button>
+          )}
+        </>
+      )}
+      <div className="aifig-video-badge">
+        <Film className="size-3" />
+        <span className="truncate">{label}</span>
+        {video?.duration ? <span className="tabular-nums opacity-70">{formatDuration(video.duration)}</span> : null}
+      </div>
+      {playing && (
+        <button type="button" data-ui className="aifig-video-close" aria-label={t('video.stop')} onPointerDown={(e) => e.stopPropagation()} onClick={() => setPlaying(false)}>
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+const formatDuration = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`
+
 const MAX_SIDE = 2048
 
-/** Import image files into the board: downscale large ones, store bytes in the board's asset map, place blocks. */
-export async function importImages(editor: Editor, files: File[], at: Vec) {
+/** Import image files into the board: downscale large ones, upload them to the board's assets folder, place blocks. */
+export async function importImages(editor: Editor, boardId: string, files: File[], at: Vec) {
   const placed: string[] = []
   let x = at.x
   for (const file of files) {
-    let bytes = new Uint8Array(await file.arrayBuffer())
-    let mime = file.type || 'image/png'
+    let blob: Blob = file
     const bmp = await createImageBitmap(file)
     let w = bmp.width
     let h = bmp.height
-    if (mime !== 'image/gif' && (w > MAX_SIDE || h > MAX_SIDE || bytes.byteLength > 1_500_000)) {
+    if (file.type !== 'image/gif' && (w > MAX_SIDE || h > MAX_SIDE || file.size > 1_500_000)) {
       const k = Math.min(1, MAX_SIDE / Math.max(w, h))
       w = Math.round(w * k)
       h = Math.round(h * k)
       const canvas = new OffscreenCanvas(w, h)
       canvas.getContext('2d')!.drawImage(bmp, 0, 0, w, h)
-      const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.86 })
-      bytes = new Uint8Array(await blob.arrayBuffer())
-      mime = 'image/webp'
+      blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.86 })
     }
     bmp.close()
-    const asset = `a${randomId()}`
-    editor.doc.getMap<Asset>('assets').set(asset, { id: asset, mime, w, h, bytes, name: file.name, createdAt: Date.now() })
+    const asset = await uploadAsset(boardId, blob, 'image', file.name)
     const dw = snapTo(Math.min(480, w), 8)
     const dh = Math.round((dw * h) / w)
-    const id = editor.placeDraft({ kind: 'image', w: dw, h: dh, asset, text: '', color: 'gray', size: 'm' }, { x: x + dw / 2, y: at.y })
+    const id = editor.placeDraft({ kind: 'image', w: dw, h: dh, asset: asset.id, text: '', color: 'gray', size: 'm' }, { x: x + dw / 2, y: at.y })
     placed.push(id)
     x += dw + SPACING.gap
   }
   if (placed.length) editor.select(placed)
+  return placed
+}
+
+/** Import MP4 / WebM files: upload with progress, capture a poster frame, place video blocks. */
+export async function importVideos(editor: Editor, boardId: string, files: File[], at: Vec) {
+  const placed: string[] = []
+  let x = at.x
+  for (const file of files) {
+    const local = URL.createObjectURL(file)
+    const toastId = toast.loading(t('video.uploading', { name: file.name, pct: 0 }))
+    try {
+      const posterP = capturePoster(local).catch(() => null)
+      const asset = await uploadAsset(boardId, file, 'video', file.name, (p) => toast.loading(t('video.uploading', { name: file.name, pct: Math.round(p * 100) }), { id: toastId }))
+      const shot = await posterP
+      const poster = shot ? await uploadAsset(boardId, shot.blob, 'poster', `${file.name.replace(/\.\w+$/, '')}-poster.webp`).catch(() => null) : null
+      const vw = asset.w ?? shot?.w ?? 16
+      const vh = asset.h ?? shot?.h ?? 9
+      const dw = snapTo(Math.min(640, Math.max(240, vw)), 8)
+      const dh = snapTo((dw * vh) / vw, 8)
+      const id = editor.placeDraft({ kind: 'video', w: dw, h: dh, asset: asset.id, ...(poster ? { poster: poster.id } : {}), text: '', color: 'gray', size: 'm' }, { x: x + dw / 2, y: at.y })
+      placed.push(id)
+      x += dw + SPACING.gap
+      toast.success(t('video.added', { name: file.name }), { id: toastId })
+    } catch (e) {
+      toast.error(t('video.error', { name: file.name }), { id: toastId, description: (e as Error).message })
+    } finally {
+      URL.revokeObjectURL(local)
+    }
+  }
+  if (placed.length) editor.select(placed)
+  return placed
+}
+
+/** Dropped / pasted files: images and videos (other files are ignored). */
+export async function importFiles(editor: Editor, boardId: string, files: File[], at: Vec) {
+  const images = files.filter((f) => f.type.startsWith('image/'))
+  const videos = files.filter((f) => f.type === 'video/mp4' || f.type === 'video/webm' || /\.(mp4|webm|m4v)$/i.test(f.name))
+  const placed = [...(images.length ? await importImages(editor, boardId, images, at) : [])]
+  if (videos.length) placed.push(...(await importVideos(editor, boardId, videos, { x: at.x, y: at.y + (placed.length ? 360 : 0) })))
   return placed
 }
 
@@ -361,6 +507,7 @@ export const shapeDefs: ShapeDef[] = [
   { kind: 'text', resize: 'x', canEdit: true, rotatable: true, radius: 4, minW: 48, render: Text, fit: (b, w) => ({ w, h: textHeight(b.text, b.size, w) }), isEmpty: (b) => !b.text.trim() },
   { kind: 'frame', resize: 'xy', canEdit: true, container: true, radius: RADII.frame, minW: 160, minH: 120, render: Frame },
   { kind: 'image', resize: 'xy', canEdit: false, rotatable: true, lockAspect: true, radius: 6, minW: 48, minH: 32, render: ImageBlock },
+  { kind: 'video', resize: 'xy', canEdit: false, rotatable: false, lockAspect: true, radius: 8, minW: 160, minH: 90, render: VideoBlock },
   { kind: 'web', resize: 'xy', canEdit: true, rotatable: false, radius: 8, minW: 160, minH: 120, render: (p) => <WebBlockLazy {...p} /> },
 ]
 

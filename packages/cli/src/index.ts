@@ -166,6 +166,103 @@ program
   })
 
 program
+  .command('video <file>')
+  .description('add a local MP4 / WebM video, e.g. aifig video ./demo.mp4 --poster ./demo.png')
+  .option('--poster <image>', 'poster image (otherwise the canvas captures a frame)')
+  .option('--width <px>', 'display width', (v) => Number(v))
+  .option('--caption <text>')
+  .option('--inside <frame>')
+  .option('--right-of <id>')
+  .option('--below <id>')
+  .option('-i, --intent <text>')
+  .action((file: string, o) =>
+    run('add_video', { path: fs.realpathSync(file), poster: o.poster ? fs.realpathSync(o.poster) : undefined, width: o.width, caption: o.caption, inside: o.inside, right_of: o.rightOf, below: o.below, intent: o.intent }, (r) => {
+      console.log(`✓ added video ${r.id}${r.duration ? ` (${Math.round(r.duration)} s)` : ''} → ${r.file}`)
+      const l = csLine(r)
+      if (l) console.log(l)
+    }),
+  )
+
+const mb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
+
+program
+  .command('assets')
+  .description('files the board keeps next to it: type, size, path, which blocks use them (--cleanup removes unused ones)')
+  .option('--cleanup', 'remove files no block uses (history and backups keep what they need)')
+  .option('--dry-run', 'with --cleanup: only show what would go')
+  .action(async (o) => {
+    if (o.cleanup) {
+      const r = await callCore('cleanup_assets', { board: program.opts().board, dry_run: !!o.dryRun }, { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' })
+      if (!r.ok) {
+        console.error(`✗ ${r.error}`)
+        process.exit(1)
+      }
+      const x = r.result as { removedEntries: { name: string }[]; deleted: { name: string; size: number }[]; freed: number; keptForHistory: number; skipped?: string }
+      if (program.opts().json) return console.log(JSON.stringify(x, null, 2))
+      console.log(`${o.dryRun ? 'would remove' : '✓ removed'} ${x.removedEntries.length} unused file(s) from the board; ${o.dryRun ? 'would delete' : 'deleted'} ${x.deleted.length} (${mb(x.freed)})`)
+      if (x.keptForHistory) console.log(`  ${x.keptForHistory} kept for version history`)
+      if (x.skipped) console.log(`  ${x.skipped}`)
+      return
+    }
+    return run('list_assets', {}, (r) => {
+      console.log(`${r.board.title}: ${mb(r.totals.total)} (board ${mb(r.totals.boardFile)}, ${r.totals.assetFiles} files ${mb(r.totals.assetBytes)})`)
+      console.log(`  board   ${r.board.externalPath ?? r.board.file}`)
+      console.log(`  files   ${r.board.externalAssetsDir ?? r.board.assetsDir}`)
+      console.log(`  history ${r.history.dir} (${r.history.versions} versions, ${mb(r.history.bytes)})`)
+      console.log(`  backups ${r.backups.dir} (${r.backups.count}, ${mb(r.backups.bytes)})`)
+      for (const a of r.assets) console.log(`${a.status === 'used' ? ' ' : a.status === 'missing' ? '!' : '·'} ${a.id}  ${a.role.padEnd(12)} ${mb(a.size).padStart(8)}  ${a.name ?? ''}  ${a.usedBy.length ? `used by ${a.usedBy.map((u: { id: string }) => u.id).join(', ')}` : a.status}`)
+    })
+  })
+
+program
+  .command('replace <target> <file>')
+  .description('replace a file the board uses (asset id, or block id; --part poster|html|css|js)')
+  .option('--part <part>', 'file (default) | poster | html | css | js')
+  .option('-i, --intent <text>')
+  .action((target: string, file: string, o) =>
+    run('replace_asset', { ...(target.startsWith('a') && target.length === 17 ? { asset: target } : { block: target }), part: o.part, path: fs.realpathSync(file), intent: o.intent }, (r) => {
+      console.log(`✓ replaced in ${r.blocks.length} block(s) → ${r.file ?? r.with}`)
+      const l = csLine(r)
+      if (l) console.log(l)
+    }),
+  )
+
+program
+  .command('snippet-files <id>')
+  .description('editable index.html / style.css / script.js for an inline web snippet; saves update the canvas live')
+  .option('--open', 'open them in your code editor')
+  .action(async (id: string, o) => {
+    if (o.open) {
+      const r = await callCore('reveal_asset', { board: program.opts().board, block: id, open: true }, { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' })
+      if (!r.ok) {
+        console.error(`✗ ${r.error}`)
+        process.exit(1)
+      }
+    }
+    return run('edit_snippet_files', { id }, (r) => {
+      console.log(r.dir)
+      for (const f of Object.values(r.files)) console.log(`  ${f}`)
+      console.log(r.note)
+    })
+  })
+
+program
+  .command('storage')
+  .description('print where the board, its files, history and backups are (--reveal opens the files folder)')
+  .option('--reveal', 'show the files folder in the file manager')
+  .action(async (o) => {
+    const who = { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' } as const
+    const r = await callCore(o.reveal ? 'reveal_asset' : 'get_storage', { board: program.opts().board, ...(o.reveal ? { what: 'assets' } : {}) }, who)
+    if (!r.ok) {
+      console.error(`✗ ${r.error}`)
+      process.exit(1)
+    }
+    const x = r.result as any
+    if (o.reveal) return console.log(x.path)
+    console.log(JSON.stringify({ board: x.board, totals: x.totals, history: x.history, backups: x.backups }, null, 2))
+  })
+
+program
   .command('delete <ids...>')
   .description('delete blocks or connectors')
   .option('-i, --intent <text>')

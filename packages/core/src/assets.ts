@@ -40,15 +40,21 @@ function makeReadOnly(file: string) {
   }
 }
 
-/** Put `src` at `dest` via a temp file: a hard link when both are on one volume, otherwise a copy. */
-export function linkOrCopy(src: string, dest: string) {
+/**
+ * Put `src` at `dest` via a temp file. Between asset folders (whose files never change) a hard link when both
+ * are on one volume; a file from outside is always copied (a copy-on-write clone where the file system can),
+ * so the person's own file is never tied to — or made read-only with — the stored one.
+ */
+export function linkOrCopy(src: string, dest: string, opts: { link?: boolean } = {}) {
   const dir = path.dirname(dest)
   fs.mkdirSync(dir, { recursive: true })
   const tmp = path.join(dir, `.${path.basename(dest)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`)
   try {
+    if (!opts.link) throw new Error('copy')
     fs.linkSync(src, tmp)
   } catch {
-    fs.copyFileSync(src, tmp)
+    fs.copyFileSync(src, tmp, fs.constants.COPYFILE_FICLONE)
+    fs.chmodSync(tmp, 0o644)
     const fd = fs.openSync(tmp, 'r+')
     try {
       fs.fsyncSync(fd)
@@ -125,7 +131,7 @@ export class AssetStore {
   copyTo(other: AssetStore, hash: string, ext: string) {
     if (other.has(hash, ext)) return true
     if (!this.has(hash, ext)) return false
-    linkOrCopy(this.file(hash, ext), other.file(hash, ext))
+    linkOrCopy(this.file(hash, ext), other.file(hash, ext), { link: true })
     return true
   }
 

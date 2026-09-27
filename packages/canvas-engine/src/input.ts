@@ -1,6 +1,9 @@
 import type { Editor, HandleId } from './editor'
 import type { Vec } from './geometry'
 
+/** Images and MP4 / WebM videos: what the canvas can place. */
+const isMediaFile = (f: File) => f.type.startsWith('image/') || f.type === 'video/mp4' || f.type === 'video/webm'
+
 const DRAG_PX = 3
 
 function isEditableTarget(t: EventTarget | null) {
@@ -42,7 +45,7 @@ export class InputController {
       if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === 'file')) e.preventDefault()
     })
     on(el, 'drop', (e) => {
-      const files = [...(e.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith('image/'))
+      const files = [...(e.dataTransfer?.files ?? [])].filter(isMediaFile)
       if (!files.length) return
       e.preventDefault()
       this.editor.options.onFiles?.(files, this.page(e))
@@ -537,7 +540,7 @@ export class InputController {
 
   private onPaste = (e: ClipboardEvent) => {
     if (isEditableTarget(e.target)) return
-    const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'))
+    const files = [...(e.clipboardData?.files ?? [])].filter(isMediaFile)
     if (files.length) {
       e.preventDefault()
       this.editor.options.onFiles?.(files, this.lastPointer ?? this.editor.screenToPage({ x: this.editor.viewport.w / 2, y: this.editor.viewport.h / 2 }))
