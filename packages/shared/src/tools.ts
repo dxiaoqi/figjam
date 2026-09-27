@@ -36,11 +36,25 @@ const relation = z.string().optional().describe(`Optional meaning (${RELATIONS.j
 
 const blockInput = z.object({
   kind: z
-    .enum(['sticky', 'card', 'text'])
+    .enum(['sticky', 'card', 'text', 'image', 'video', 'web'])
     .optional()
-    .describe('sticky (default): short thought. card: title + body, for structured items. text: headings and labels.'),
+    .describe('sticky (default): short thought. card: title + body. text: headings. image / video / web: pass `asset` (and `poster` / `web.src`) to place a file that already exists on this or another board.'),
   text: z.string().optional().describe('Sticky/text content, or the card body. Markdown subset allowed: **bold**, *italic*, `code`, [link](url), "- " and "1. " lists.'),
   title: z.string().optional().describe('Card title.'),
+  asset: z.string().optional().describe('Asset id (from list_assets, including on another board). Copies the file by content hash.'),
+  poster: z.string().optional().describe('Video poster asset id.'),
+  w: z.number().optional().describe('Display width for image / video / web.'),
+  h: z.number().optional().describe('Display height for image / video / web.'),
+  web: z
+    .object({
+      mode: z.enum(['url', 'inline']).optional(),
+      src: z.object({ html: z.string().optional(), css: z.string().optional(), js: z.string().optional() }).optional(),
+      url: z.string().optional(),
+      title: z.string().optional(),
+      thumb: z.string().optional(),
+    })
+    .optional()
+    .describe('Web snippet: `src` holds asset ids of html/css/js when moving a snippet from another board.'),
   color,
   size,
   type: blockType.optional().describe('Optional built-in type (see list_types): insight, question, quote, hypothesis, idea, todo. Sets the color and icon.'),

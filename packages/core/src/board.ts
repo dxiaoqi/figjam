@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { customAlphabet } from 'nanoid'
 import * as Y from 'yjs'
-import { assetFileName, assetIdFor, skillTypeRegistry, type AssetRole, type WebSnippet } from '@aifig/shared'
+import { assetFileName, assetIdFor, blockAssetRefs, skillTypeRegistry, type AssetRole, type WebSnippet } from '@aifig/shared'
 import type { Asset, Block, BoardSkill, BoardSummary, ChangeSet, Connector, Rect, Thread, TypeRegistry } from '@aifig/shared'
 import { AssetStore, siblingAssetsDir } from './assets'
 import { cleanStaleTemps, writeFileAtomic } from './atomic'
@@ -629,8 +629,45 @@ export class BoardRegistry {
   add(b: Board) {
     this.boards.set(b.id, b)
     this.safety.attach(b)
+    // copy/paste and duplicate write blocks (and maybe not the assets map) onto this board
+    b.blocks.observe((e) => {
+      if (e.transaction.origin === 'load') return
+      if (![...e.changes.keys.values()].some((c) => c.action === 'add' || c.action === 'update')) return
+      queueMicrotask(() => {
+        if (this.boards.get(b.id) === b && !b.deleted) this.adoptMissingAssets(b)
+      })
+    })
     this.onBoardAdded?.(b)
     return b
+  }
+
+  /**
+   * A block that names an asset this board doesn't have (pasted, duplicated, or created by an agent from
+   * another board) gets that map entry and file. Same hash is one file (hard-linked when it can).
+   */
+  adoptMissingAssets(board: Board, extraIds: Iterable<string> = []) {
+    const needed = new Set(extraIds)
+    for (const b of board.blocks.values()) for (const id of blockAssetRefs(b)) needed.add(id)
+    let n = 0
+    board.doc.transact(() => {
+      for (const id of needed) {
+        if (!id) continue
+        let asset = board.assets.get(id)
+        if (!asset) {
+          for (const other of this.boards.values()) {
+            if (other === board) continue
+            const found = other.assets.get(id)
+            if (!found?.hash) continue
+            board.assets.set(id, { ...found })
+            asset = found
+            n++
+            break
+          }
+        }
+        if (asset) board.assetPath(asset)
+      }
+    }, 'api')
+    return n
   }
 
   create(title: string) {

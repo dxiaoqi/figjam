@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react'
 import * as Y from 'yjs'
-import { distanceToRoute, estimateLabelSize, placeLabel, rotatePoint, rotatedBounds, routeConnector, type Author, type Block, type Connector, type Route, type RouteStyle } from '@aifig/shared'
+import { blockAssetRefs, distanceToRoute, estimateLabelSize, placeLabel, rotatePoint, rotatedBounds, routeConnector, type Asset, type Author, type Block, type Connector, type Route, type RouteStyle } from '@aifig/shared'
 import {
   box,
   boxFromPoints,
@@ -1240,7 +1240,9 @@ export class Editor {
       return b
     })
     const connectors = this.connectors().filter((c) => c.from && c.to && set.has(c.from) && set.has(c.to))
-    return `aifig:${JSON.stringify({ blocks, connectors })}`
+    const assetsMap = this.doc.getMap<Asset>('assets')
+    const assets = [...new Set(blocks.flatMap((b) => blockAssetRefs(b)))].map((id) => assetsMap.get(id)).filter((a): a is Asset => !!a?.hash)
+    return `aifig:${JSON.stringify({ blocks, connectors, assets })}`
   }
 
   copy() {
@@ -1251,7 +1253,7 @@ export class Editor {
   /** Paste serialized blocks, either offset from their origin or centered at a page point. */
   pasteSerialized(text: string, place: Vec | { at: Vec }) {
     if (!text.startsWith('aifig:')) return false
-    let data: { blocks: Block[]; connectors: Connector[] }
+    let data: { blocks: Block[]; connectors: Connector[]; assets?: Asset[] }
     try {
       data = JSON.parse(text.slice(6))
     } catch {
@@ -1265,6 +1267,10 @@ export class Editor {
     const now = Date.now()
     this.undoManager.stopCapturing()
     this.transact(() => {
+      const assetsMap = this.doc.getMap<Asset>('assets')
+      for (const a of data.assets ?? []) {
+        if (a?.id && a.hash && !assetsMap.has(a.id)) assetsMap.set(a.id, a)
+      }
       data.blocks.forEach((b, i) => {
         const id = idMap.get(b.id)!
         const top = !b.parent

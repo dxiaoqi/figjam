@@ -1625,11 +1625,13 @@ export class CanvasCore {
       const extra = type ? typeChrome({ type, typeData: { [type]: fields ?? {} } }, reg) : 0
       let dims: { w: number; h: number; size?: SizeToken }
       if (kind === 'sticky') dims = measureSticky(text, size, false, extra)
-      else if (kind === 'image' || kind === 'web' || kind === 'video') dims = { w: b.w, h: b.h }
+      else if (kind === 'image' || kind === 'web' || kind === 'video') dims = { w: Number(b.w) || 320, h: Number(b.h) || (kind === 'web' ? 320 : 200) }
       else if (kind === 'card') dims = measureCard(title ?? '', text, size, false, extra)
       else dims = measureBlock({ kind, text, title, size, w: 0, h: 0 })
       return { key: `k${i}`, ref: b.ref, kind, text, title, color: tdef ? tdef.color : color, size: dims.size ?? size, w: dims.w, h: dims.h, group: b.group, parentRef: b.parent, asset: b.asset as string | undefined, poster: b.poster as string | undefined, type, fields, extra, web: kind === 'web' ? (b.web as WebSnippet) : undefined, row: b.row, col: b.col, date: b.date }
     })
+    const borrowed = drafts.flatMap((d) => blockAssetRefs({ asset: d.asset, poster: d.poster, web: d.web }))
+    if (borrowed.length) this.registry.adoptMissingAssets(board, borrowed)
     // same kind in one batch → same size
     const stickies = drafts.filter((d) => d.kind === 'sticky')
     if (stickies.length > 1) {

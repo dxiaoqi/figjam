@@ -221,8 +221,13 @@ export async function startCore(port = CORE_PORT) {
         const denied = keyOk && policy.hostOk(req.headers.host) && policy.originOk(req.headers.origin) ? null : gate(req, 'api')
         if (denied) return json(res, denied.status, { ok: false, error: denied.error })
         const board = core.registry.get(assetGet[1])
-        const asset = board?.assets.get(assetGet[2])
-        if (!board || !asset?.hash) return json(res, 404, { ok: false, error: 'No such asset' })
+        if (!board) return json(res, 404, { ok: false, error: 'No such asset' })
+        let asset = board.assets.get(assetGet[2])
+        if (!asset?.hash) {
+          core.registry.adoptMissingAssets(board, [assetGet[2]])
+          asset = board.assets.get(assetGet[2])
+        }
+        if (!asset?.hash) return json(res, 404, { ok: false, error: 'No such asset' })
         return serveAsset(req, res, board, asset)
       }
       if (url.pathname.startsWith('/api/')) {

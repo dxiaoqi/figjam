@@ -7,6 +7,7 @@ import * as Y from 'yjs'
 import { assetFileName, snippetThumbKey, type Asset, type Block } from '../../packages/shared/src'
 import { AssetStore, sha256Hex, siblingAssetsDir } from '../../packages/core/src/assets'
 import { backupPools, listBackups } from '../../packages/core/src/backups'
+import { CanvasCore } from '../../packages/core/src/api'
 import { Board, BoardRegistry, boardsDir } from '../../packages/core/src/board'
 import { decodeContainer, encodeContainer, readHeader } from '../../packages/core/src/fileformat'
 import { cleanUpAssets, collectBoardAssets, storageInfo, unusedEntries } from '../../packages/core/src/storage'
@@ -314,4 +315,68 @@ test('adding a file from disk copies it: the person’s file stays writable and 
   }
   fs.appendFileSync(mine, 'edited later')
   assert.ok(b.store.verify(a.hash, 'png'), `the stored copy is unaffected (${stored})`)
+})
+
+test('copy, paste and MCP-create onto another board bring image, video and snippet files (deduped by hash)', async () => {
+  tempHome()
+  const reg = new BoardRegistry()
+  reg.loadAll()
+  const src = reg.create('From')
+  const dest = reg.create('To')
+  const img = png(71, 80)
+  const posterBytes = png(72)
+  let image: Asset, video: Asset, poster: Asset, htmlA: Asset, cssA: Asset, jsA: Asset
+  src.doc.transact(() => {
+    image = src.putAsset(img, { mime: 'image/png', ext: 'png', role: 'image', name: 'pic.png', w: 8, h: 6 })
+    video = src.putAsset(Buffer.from('webm-bytes'), { mime: 'video/webm', ext: 'webm', role: 'video', name: 'clip.webm' })
+    poster = src.putAsset(posterBytes, { mime: 'image/png', ext: 'png', role: 'poster', w: 5, h: 3 })
+    htmlA = src.putAsset(Buffer.from('<h1>Hi</h1>'), { mime: 'text/html', ext: 'html', role: 'snippet-html' })
+    cssA = src.putAsset(Buffer.from('h1{color:teal}'), { mime: 'text/css', ext: 'css', role: 'snippet-css' })
+    jsA = src.putAsset(Buffer.from('/* ok */'), { mime: 'text/javascript', ext: 'js', role: 'snippet-js' })
+    src.blocks.set('img', imageBlock('img', image.id))
+    src.blocks.set('vid', { ...sticky('vid'), kind: 'video', asset: video.id, poster: poster.id, w: 320, h: 180, text: '' } as Block)
+    src.blocks.set('web', { ...sticky('web'), kind: 'web', w: 240, h: 160, text: 'Hi', web: { mode: 'inline', src: { html: htmlA.id, css: cssA.id, js: jsA.id }, title: 'Hi' } } as Block)
+  })
+
+  // paste-like: only the blocks (the canvas clipboard also sends assets; this is the worst case)
+  dest.doc.transact(() => {
+    dest.blocks.set('img2', { ...src.blocks.get('img')!, id: 'img2' })
+    dest.blocks.set('vid2', { ...src.blocks.get('vid')!, id: 'vid2' })
+    dest.blocks.set('web2', { ...src.blocks.get('web')!, id: 'web2' })
+  })
+  await new Promise((r) => setImmediate(r))
+  assert.ok(dest.assets.has(image!.id), 'image entry arrived on the other board')
+  assert.ok(dest.assets.has(video!.id) && dest.assets.has(poster!.id))
+  assert.ok(dest.assets.has(htmlA!.id) && dest.assets.has(cssA!.id) && dest.assets.has(jsA!.id))
+  assert.deepEqual(new Uint8Array(dest.readAsset(image!.id)!), img)
+  assert.deepEqual(dest.readAsset(video!.id)!.toString(), 'webm-bytes')
+  assert.equal(dest.snippetSource(dest.blocks.get('web2')!.web).html, '<h1>Hi</h1>')
+  assert.ok(dest.store.has(image!.hash, 'png'))
+  const files = dest.store.list().length
+  dest.doc.transact(() => dest.blocks.set('img3', { ...src.blocks.get('img')!, id: 'img3' }))
+  await new Promise((r) => setImmediate(r))
+  assert.equal(dest.store.list().length, files, 'the same hash is one file')
+
+  src.saveNow(true)
+  dest.saveNow(true)
+  const core = new CanvasCore()
+  core.init()
+  const HUMAN = { id: 'human:test', name: 'You', client: 'test', kind: 'human' as const }
+  const third = ((await core.call({ tool: 'create_board', args: { title: 'Third' }, caller: HUMAN })).result as { board: { id: string } }).board.id
+  const r = await core.call({
+    tool: 'create_blocks',
+    args: {
+      board: third,
+      blocks: [
+        { kind: 'image', asset: image!.id, w: 64, h: 48 },
+        { kind: 'web', web: { mode: 'inline', src: { html: htmlA!.id, css: cssA!.id, js: jsA!.id } }, w: 200, h: 160 },
+      ],
+    },
+    caller: HUMAN,
+  })
+  assert.equal(r.ok, true, (r as { error?: string }).error)
+  const t = core.registry.find('Third')!
+  assert.ok(t.assets.has(image!.id))
+  assert.deepEqual(new Uint8Array(t.readAsset(image!.id)!), img)
+  assert.equal(t.snippetSource([...t.blocks.values()].find((b) => b.kind === 'web')!.web).html, '<h1>Hi</h1>')
 })
