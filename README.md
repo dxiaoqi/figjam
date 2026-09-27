@@ -555,6 +555,16 @@ npm run telemetry:dev                                 # counter service with moc
 npm run ci                                            # all of the above in one run (see CI)
 ```
 
+### App icon
+
+The icon (a sticky with an agent's cursor on it) lives in `assets/brand/` as three hand-written SVGs built from the
+design tokens: `icon.svg` (the master, on Apple's 1024 grid), `icon-small.svg` (the 16/32 px tile for favicons and the
+tray) and `mark.svg` (monochrome, `currentColor`, for the canvas header). After editing them, run
+`node scripts/brand-icons.mjs` to regenerate every raster (desktop `.icns`, `.ico`, Linux PNGs 16–1024 and tray
+images, plus the canvas and website favicons, apple-touch icons and PWA icons), then
+`npx tsx apps/website/scripts/og-images.mts` for the OG images. The React copies of the small tile and mark are in
+`apps/canvas/src/chrome/BoardMenu.tsx` and `apps/website/src/components/brand.tsx`.
+
 ### Feature flags
 
 Build-time flags live in `packages/shared/src/features.ts` and are off by default. `AIFIG_FEATURE_ASSISTANT=1`

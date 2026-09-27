@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- master app icon: macOS grid (824 body on 1024, continuous corners). scripts/brand-icons.mjs derives every raster from this file -->
+  <defs>
+    <path id="body" d="M383.4 100H640.6C722.2 100 763 100 806.9 113.9C854.9 131.3 892.7 169.1 910.1 217.1C924 261 924 301.8 924 383.4V640.6C924 722.2 924 763 910.1 806.9C892.7 854.9 854.9 892.7 806.9 910.1C763 924 722.2 924 640.6 924H383.4C301.8 924 261 924 217.1 910.1C169.1 892.7 131.3 854.9 113.9 806.9C100 763 100 722.2 100 640.6V383.4C100 301.8 100 261 113.9 217.1C131.3 169.1 169.1 131.3 217.1 113.9C261 100 301.8 100 383.4 100Z"/>
+    <linearGradient id="tile" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2B2724"/>
+      <stop offset="1" stop-color="#1C1917"/>
+    </linearGradient>
+    <pattern id="grid" width="64" height="64" x="-32" y="-32" patternUnits="userSpaceOnUse">
+      <circle cx="32" cy="32" r="5" fill="#FFFFFF" fill-opacity=".07"/>
+    </pattern>
+    <clipPath id="clip"><use href="#body"/></clipPath>
+    <filter id="drop-shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+    <filter id="lift" x="-20%" y="-20%" width="140%" height="150%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+  <use id="drop" href="#body" y="10" fill="#000000" fill-opacity=".3" filter="url(#drop-shadow)"/>
+  <use href="#body" fill="url(#tile)"/>
+  <g clip-path="url(#clip)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#grid)"/>
+    <use href="#body" fill="none" stroke="#FFFFFF" stroke-opacity=".08" stroke-width="6"/>
+  </g>
+  <rect x="248" y="266" width="360" height="360" rx="32" fill="#000000" fill-opacity=".35" filter="url(#lift)"/>
+  <rect x="248" y="248" width="360" height="360" rx="32" fill="#FFF1B8"/>
+  <path d="M312 336H512M312 400H440" stroke="#E8B22E" stroke-width="32" stroke-linecap="round"/>
+  <path d="M552 552L764 632L644 644L632 764Z" fill="#D97757" stroke="#1C1917" stroke-width="64" stroke-linejoin="round"/>
+  <path d="M552 552L764 632L644 644L632 764Z" fill="#D97757" stroke="#D97757" stroke-width="20" stroke-linejoin="round"/>
+</svg>

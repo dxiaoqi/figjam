@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <path id="body" d="M383.4 100H640.6C722.2 100 763 100 806.9 113.9C854.9 131.3 892.7 169.1 910.1 217.1C924 261 924 301.8 924 383.4V640.6C924 722.2 924 763 910.1 806.9C892.7 854.9 854.9 892.7 806.9 910.1C763 924 722.2 924 640.6 924H383.4C301.8 924 261 924 217.1 910.1C169.1 892.7 131.3 854.9 113.9 806.9C100 763 100 722.2 100 640.6V383.4C100 301.8 100 261 113.9 217.1C131.3 169.1 169.1 131.3 217.1 113.9C261 100 301.8 100 383.4 100Z"/>
+    <linearGradient id="tile" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F4F4F2"/>
+    </linearGradient>
+    <pattern id="grid" width="64" height="64" x="-32" y="-32" patternUnits="userSpaceOnUse">
+      <circle cx="32" cy="32" r="5" fill="#1C1917" fill-opacity=".1"/>
+    </pattern>
+    <clipPath id="clip"><use href="#body"/></clipPath>
+    <filter id="drop-shadow" x="-10%" y="-10%" width="120%" height="125%"><feGaussianBlur stdDeviation="12"/></filter>
+    <filter id="lift" x="-20%" y="-20%" width="140%" height="150%"><feGaussianBlur stdDeviation="16"/></filter>
+  </defs>
+  <use href="#body" y="10" fill="#000000" fill-opacity=".3" filter="url(#drop-shadow)"/>
+  <use href="#body" fill="url(#tile)"/>
+  <rect x="100" y="100" width="824" height="824" fill="url(#grid)" clip-path="url(#clip)"/>
+  <!-- B · connected cards: two stickies joined by a canvas connector -->
+  <path d="M424 328C520 328 560 384 560 480" fill="none" stroke="#908B88" stroke-width="24" stroke-linecap="round"/>
+  <rect x="232" y="244" width="200" height="200" rx="28" fill="#1C1917" fill-opacity=".14" filter="url(#lift)"/>
+  <rect x="232" y="232" width="200" height="200" rx="28" fill="#FFF1B8"/>
+  <rect x="440" y="492" width="240" height="240" rx="28" fill="#1C1917" fill-opacity=".14" filter="url(#lift)"/>
+  <rect x="440" y="480" width="240" height="240" rx="28" fill="#CDF1EC"/>
+  <path d="M488 544H624M488 600H576" stroke="#3FB3AA" stroke-width="24" stroke-linecap="round"/>
+  <path d="M680 600C752 600 792 640 792 712" fill="none" stroke="#908B88" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="792" cy="728" r="32" fill="#E8DEFF" stroke="#9577E0" stroke-width="16"/>
+</svg>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="5 5 22 22" fill="currentColor">
+  <!-- monochrome mark (in-app header, tray templates): the sticky with the cursor knocked out of it -->
+  <mask id="knockout" maskUnits="userSpaceOnUse" x="5" y="5" width="22" height="22">
+    <rect x="5" y="5" width="22" height="22" fill="#FFFFFF"/>
+    <path d="M14 14L26 18.5L20 20L18.5 26Z" stroke="#000000" stroke-width="4" stroke-linejoin="round"/>
+  </mask>
+  <rect x="6" y="6" width="12" height="12" rx="2" mask="url(#knockout)"/>
+  <path d="M14 14L26 18.5L20 20L18.5 26Z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+</svg>
