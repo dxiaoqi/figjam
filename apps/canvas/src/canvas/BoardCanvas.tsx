@@ -35,7 +35,7 @@ import { EditorContext } from './editor-context'
 import { desktop } from '../lib/desktop'
 import { downloadDocument, downloadSnapshot } from '../lib/export'
 import { openVersionHistory } from '../lib/versions'
-import { draftForPastedText, draftForTool, importFiles, nextColor, shapeDefs } from './shapes'
+import { draftForConnectorDrop, draftForPastedText, draftForTool, importFiles, shapeDefs } from './shapes'
 import { toast } from 'sonner'
 import { relationLabel, t, useT } from '../i18n'
 
@@ -72,10 +72,7 @@ function createEditor(doc: Editor['doc'], boardId: string) {
     lodStyle,
     relationLabel,
     createForTool: (tool) => draftForTool(tool),
-    createForConnectorDrop: (from) => {
-      const d = draftForTool('sticky')!
-      return from.kind === 'sticky' ? { ...d, color: from.color } : { ...d, color: nextColor.get() }
-    },
+    createForConnectorDrop: (from) => draftForConnectorDrop(from),
     onDoubleClickCanvas: (at) => editor.createWithTool('sticky', at),
     onFiles: (files, at) => {
       importFiles(editor, boardId, files, at).catch(() => toast.error(t('tool.imageError')))

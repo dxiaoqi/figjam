@@ -61,7 +61,7 @@ export interface EditorOptions {
   gridSize?: number
   /** Returns the block a creation tool should place at `at` (center point, page space). */
   createForTool?: (tool: string, at: Vec) => BlockDraft | null
-  /** Block created when a connector is dropped on empty canvas. */
+  /** Block created when a connector is dropped on empty canvas. The app supplies the draft (typically matching the source kind and type). */
   createForConnectorDrop?: (from: Block, at: Vec) => BlockDraft | null
   onDoubleClickCanvas?: (at: Vec) => void
   onPasteText?: (text: string, at: Vec) => void

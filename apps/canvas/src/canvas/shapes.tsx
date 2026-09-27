@@ -519,6 +519,28 @@ export function draftForTool(tool: string): BlockDraft | null {
   return null
 }
 
+/**
+ * Empty sibling created when a connector is dropped on empty canvas.
+ * Stickies, cards and headings (text) match the source kind, size, color and type.
+ * Frames / images / videos / snippets fall back to a sticky — they need an asset
+ * or a container role, and dropping from a video should not invent another video.
+ */
+export function draftForConnectorDrop(from: Block): BlockDraft {
+  if (from.kind === 'sticky') {
+    const side = STICKY_SIZES[from.size] ?? STICKY_SIZES.m
+    return { kind: 'sticky', w: side, h: side, size: from.size, color: from.color, text: '', ...(from.type ? { type: from.type } : {}) }
+  }
+  if (from.kind === 'card') {
+    const m = measureCard('', '', from.size)
+    return { kind: 'card', w: m.w, h: m.h, size: from.size, color: from.color, title: '', text: '', ...(from.type ? { type: from.type } : {}) }
+  }
+  if (from.kind === 'text') {
+    const m = measureText('', from.size)
+    return { kind: 'text', w: m.w, h: m.h, size: from.size, color: from.color, text: '' }
+  }
+  return draftForTool('sticky')!
+}
+
 export function draftForPastedText(text: string): BlockDraft {
   const clean = text.trim()
   if (/^https:\/\/\S+$/.test(clean)) {
