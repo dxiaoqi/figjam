@@ -56,7 +56,10 @@ board last active in the canvas, which is the default for tools called without `
 
 - **Autosave** is atomic (temp file, fsync, rename) and coalesced: a burst of edits is written once, at most 2 s after
   the first unsaved edit. Ctrl-C, SIGTERM (quitting the desktop app), SIGHUP and crashes flush unsaved edits first;
-  `kill -9` or a power cut can lose at most that last 2 s window, never corrupt the file.
+  `kill -9` or a power cut can lose at most that last 2 s window, never corrupt the file. The readable `<id>.json`
+  copy is only a convenience: it is rebuilt in a worker thread from the saved state, at most 10 s behind (and on
+  exit), so saving a 10k-block board doesn't stall the core. `AIFIG_JSON_COPY=off` turns it off (`sync` builds it
+  on the main thread).
 - **Version history** (board menu › *Version history…*, or the history button): a version is kept from just before
   any large edit (5+ items removed, or 25+ changed at once), every 10 minutes while a board changes, when a board is
   opened with unversioned edits, and before every restore or agent undo. Name a checkpoint any time. Versions are
@@ -132,12 +135,14 @@ the app, and requires the token on every request. Keep configs with the token ou
 
 **One-click setup.** The **Connect agent** dialog (and the last step of the welcome tour) detects Claude Code and
 Cursor on this machine and adds ai-figma to their MCP settings — `~/.claude.json` (user MCP servers) and
-`~/.cursor/mcp.json` — after you confirm. It writes a stdio entry for the right CLI (in the desktop app, the bundled
-one), backs the existing file up next to it (`*.aifig-backup-<time>`), keeps every other setting and the file's
-indentation, writes atomically, never touches a file it can't parse, and does nothing when the entry is already
-there. **Test connection** launches the configured command and does a real MCP handshake (`initialize` →
-`tools/list`). The endpoints (`/api/agents…`) only answer the app itself on this machine (loopback Host and
-Origin). `AIFIG_AGENT_CONFIG_HOME` / `AIFIG_AGENT_PATH` point detection at another home folder / PATH (tests).
+`~/.cursor/mcp.json` — after you confirm. Choose how the agent connects: a stdio entry for the right CLI (in the
+desktop app, the bundled one; works while the app is closed) or a local HTTP entry (`url` plus an
+`Authorization: Bearer <token>` header; the file is then kept at `0600`). It backs the existing file up next to it
+(`*.aifig-backup-<time>`), keeps every other setting and the file's indentation, writes atomically, never touches a
+file it can't parse, and does nothing when the entry is already there; **Change…** switches an existing entry.
+**Test connection** connects exactly as configured (launches the command, or calls the URL with its headers) and does
+a real MCP handshake (`initialize` → `tools/list`). The endpoints (`/api/agents…`) require the access token and only
+answer the app itself on this machine (loopback Host and Origin). `AIFIG_AGENT_CONFIG_HOME` / `AIFIG_AGENT_PATH` point detection at another home folder / PATH (tests).
 
 The same dialog keeps the copy-paste fallback: all of these configs with the correct paths and the token filled in (in the
 desktop app, for its bundled CLI). The agent's name
@@ -504,7 +509,33 @@ node scripts/mvp-run.mjs <out-dir>                    # the recorded Phase 0 val
 node scripts/shot.mjs out.png [--dark] [--w=390]      # screenshot the running canvas (headless Chrome)
 npm run test:contrast                                 # WCAG AA contrast of tokens and theme, light and dark
 npm run bench                                         # performance report + budgets (see below)
+npm run test:skills                                   # skill format, L0/L1, permissions, CLI, save as block type
+npm run ci                                            # all of the above in one run (see CI)
 ```
+
+### CI
+
+`npm run ci` runs typecheck, lint, every suite above, the bench budgets and the desktop e2e, one after another
+against a temporary `AIFIG_HOME` (it starts `npm run dev` for the suites that need it, on ports 47820/47821). It writes
+`ci-results/<step>.log`, `results.json` and `summary.md` and exits 1 when any step fails. `--only=` / `--skip=` take
+step ids (`typecheck, lint, api, security, data-safety, skills, contrast, onboarding, e2e, aesthetics, mcp-stdio,
+mcp-http, bench, desktop`). It needs Node 22+, `npm ci` and Chrome at `/usr/local/bin/google-chrome`; the desktop step
+and the bench's desktop cold start need a display (`DISPLAY`, e.g. Xvfb) and are skipped without one.
+
+Origin has no hosted runner: CI results are check runs that an Origin App reports on a commit, and they show up in the
+pull request's **Checks** tab (where they can be required before merging). With `ORIGIN_CHECKS_TOKEN` set (or
+`--report=origin`), `npm run ci` reports one check run per step in an "ai-figma CI" suite — queued, in progress, then
+passed / failed with the failing checks and the end of the log. To set it up:
+
+1. Create a private Origin App with the `repository:checks:write` scope and install it on this repository; mint an
+   installation token and add it as the `ORIGIN_CHECKS_TOKEN` secret (Cursor Dashboard › Cloud Agents › Secrets).
+2. Create a Cursor Automation for this repository with the triggers *Pull request opened* and *Pull request pushed*
+   (and *Push to branch* `main`), using an environment with Chrome, Xvfb and `npm ci`, and this prompt:
+   *Check out the pull request's head commit, run `ORIGIN_REPO=we-ding/genesis npm run ci`, and reply with
+   `ci-results/summary.md`. Don't change any files.*
+
+Other variables: `ORIGIN_REPO` (default: from the `origin` remote), `ORIGIN_SHA` (default `HEAD`), `CI_RUN_ID`,
+`CI_DETAILS_URL`, `ORIGIN_API_URL`.
 
 ### Performance and quality budgets
 
@@ -517,7 +548,7 @@ snippets, connectors) in a temporary home, builds the app and measures:
 - 10k board in headless Chrome: fps and main-thread time for pan (100% / 40% / fit) and zoom through the level of
   detail; input→frame latency for hover, select, drag, frame drag and marquee
 - Canvas API over MCP (HTTP): `create_blocks` ×10 / ×100 on an empty and a 10k board, `get_board`, `lint_layout`,
-  `render_snapshot`, and how responsive the core stays during a large PNG snapshot
+  `render_snapshot`, and how responsive the core stays during a large PNG snapshot and while the 10k board autosaves
 
 It writes `bench-results/latest.json` (`--out=…`) and exits 1 when a metric misses its budget in
 `scripts/bench/budgets.json`. Options: `--quick`, `--only=core,web,frames,mcp,desktop`, `--skip-desktop`,

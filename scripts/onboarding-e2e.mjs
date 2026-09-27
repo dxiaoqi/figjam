@@ -78,6 +78,10 @@ const cla = detected.agents.find((a) => a.id === 'claude')
 check('detects installed agents (Cursor here, no Claude Code)', cur.installed && cur.state === 'missing' && !cla.installed, JSON.stringify(detected.agents.map((a) => [a.id, a.installed, a.state])))
 const evil = await post('/cursor/install', { origin: 'https://evil.example' })
 check('agent setup refuses other sites', evil.status === 403 && !JSON.parse(fs.readFileSync(cursorFile, 'utf8')).mcpServers['ai-figma'])
+const anon = (p, init = {}) => fetch(`${base}/api/agents${p}`, init).then((r) => r.status)
+const noToken = [await anon(''), await anon('/cursor/install', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }), await anon('/cursor/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })]
+const wrongToken = await anon('/cursor/install', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer nope' }, body: '{}' })
+check('agent setup needs the access token (detect, install, test)', noToken.every((s) => s === 401) && wrongToken === 401 && !JSON.parse(fs.readFileSync(cursorFile, 'utf8')).mcpServers['ai-figma'], `${noToken.join(', ')} · wrong token ${wrongToken}`)
 
 // ---- browser --------------------------------------------------------------------------------
 const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--no-sandbox'] })
@@ -302,6 +306,64 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   await shot(page, 'connect-agent-zh-dark.png')
   check('[zh] Connect agent is translated, including agent status', ((await page.locator('[data-connect-dialog]').textContent()) ?? '').includes('一键设置') && ((await page.locator('[data-agent-setup="cursor"]').textContent()) ?? '').includes('已连接'))
   await ctx.close()
+}
+
+// security, data safety and skills surfaces in Chinese
+{
+  const gateCtx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'zh-CN' })
+  const gate = await gateCtx.newPage()
+  await gate.goto(base)
+  await gate.waitForSelector('[data-token-gate]', { timeout: 15000 }).catch(() => {})
+  check('[zh] the sign-in screen is translated', ((await gate.locator('[data-token-gate]').textContent()) ?? '').includes('将此浏览器连接到 ai-figma'))
+  await gateCtx.close()
+  const zhBoard = (await call('create_board', { title: '版本' })).result.board.id
+  await call('create_version', { board: zhBoard, name: '第一版' })
+  const { ctx, page } = await open('zh-CN', { url: `/?board=${zhBoard}` })
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('aifig:versions', { detail: {} })))
+  await page.waitForSelector('[data-version-history] [data-version]')
+  const versionsText = (await page.locator('[data-version-history]').textContent()) ?? ''
+  await page.keyboard.press('Escape')
+  await page.evaluate(() => window.dispatchEvent(new Event('aifig:skills')))
+  await page.waitForSelector('[data-skills-panel]')
+  const skillsText = (await page.locator('[data-skills-panel]').textContent()) ?? ''
+  await page.keyboard.press('Escape')
+  await page.evaluate(() => window.dispatchEvent(new Event('aifig:activity')))
+  await page.waitForSelector('[data-activity-dialog]')
+  const activityText = (await page.locator('[data-activity-dialog]').textContent()) ?? ''
+  check('[zh] version history, skills and activity are translated', versionsText.includes('版本历史') && versionsText.includes('恢复此版本') && skillsText.includes('此画板') && activityText.includes('已记住的权限'), [versionsText, skillsText, activityText].map((s) => s.slice(0, 40)).join(' | '))
+  await ctx.close()
+}
+
+// switching Cursor to local HTTP from Connect agent: url + Authorization header, private file, HTTP handshake
+{
+  const httpBoard = (await call('create_board', { title: 'HTTP setup' })).result.board.id
+  const { ctx, page } = await open('en-US', { url: `/?board=${httpBoard}` })
+  await page.getByRole('button', { name: 'Connect agent' }).click()
+  await page.waitForSelector('[data-agent-setup="cursor"][data-agent-state="configured"]')
+  await page.click('[data-agent-setup="cursor"] [data-agent-change]')
+  await page.click('[data-agent-setup="cursor"] [data-agent-transport="http"]')
+  await page.click('[data-agent-confirm-write]')
+  await page.waitForFunction(() => /HTTP/.test(document.querySelector('[data-agent-setup="cursor"][data-agent-state="configured"]')?.textContent ?? ''), null, { timeout: 10000 })
+  const entry = JSON.parse(fs.readFileSync(cursorFile, 'utf8')).mcpServers['ai-figma']
+  const mode = fs.statSync(cursorFile).mode & 0o777
+  check('one-click setup can write an HTTP entry with the Authorization header', entry.url === `${base}/mcp` && entry.headers?.Authorization === `Bearer ${tokenFor(env.AIFIG_HOME)}` && !entry.command, JSON.stringify({ ...entry, headers: Object.keys(entry.headers ?? {}) }))
+  check('a config holding the token is readable by this user only', process.platform === 'win32' || (mode & 0o077) === 0, mode.toString(8))
+  await page.click('[data-agent-setup="cursor"] [data-agent-test]')
+  await page.waitForFunction(() => /tools/.test(document.querySelector('[data-agent-setup="cursor"] [data-agent-result]')?.textContent ?? '') || document.querySelector('[data-agent-setup="cursor"] [data-agent-result="error"]'), null, { timeout: 25000 })
+  const httpTest = (await page.locator('[data-agent-setup="cursor"] [data-agent-result]').textContent()) ?? ''
+  check('“Test connection” does the MCP handshake over HTTP with the configured token', (await page.locator('[data-agent-setup="cursor"] [data-agent-result="ok"]').count()) === 1 && /\d+ tools/.test(httpTest), httpTest)
+  await shot(page, 'connect-agent-http-en.png')
+  await ctx.close()
+
+  fs.mkdirSync(path.join(agentHome, '.claude'), { recursive: true })
+  fs.writeFileSync(path.join(agentHome, '.claude.json'), JSON.stringify({ projects: {}, mcpServers: {} }))
+  const cl = await agentsApi('/claude/install', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ transport: 'http' }) })
+  const clEntry = JSON.parse(fs.readFileSync(path.join(agentHome, '.claude.json'), 'utf8')).mcpServers['ai-figma']
+  check('Claude Code gets a type "http" entry', cl.ok && cl.status.transport === 'http' && cl.status.state === 'configured' && clEntry.type === 'http' && clEntry.url === `${base}/mcp` && /^Bearer /.test(clEntry.headers?.Authorization ?? ''))
+  const clTest = await agentsApi('/claude/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+  check('the Claude Code HTTP entry passes the connection test', clTest.ok === true && clTest.tools > 20, JSON.stringify(clTest))
+  const badTransport = await agentsApi('/claude/install', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ transport: 'sse' }) })
+  check('unknown transports are refused', badTransport.status === 400)
 }
 
 // a broken config is reported, not overwritten

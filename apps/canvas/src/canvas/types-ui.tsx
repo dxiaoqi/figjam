@@ -186,7 +186,7 @@ export function TypeFooter({ block, editor }: { block: Block; editor: Editor }) 
         {showSummary && (
           <div className="aifig-type-footer" data-type-footer>
             <button data-ui onPointerDown={stop} onClick={open} className={cn('truncate', !sum && 'opacity-50')}>
-              {sum || `Add ${def.fields.map((d) => d.label.toLowerCase()).slice(0, 2).join(' & ')}`}
+              {sum || t('types.addFields', { fields: new Intl.ListFormat(getLocale(), { type: 'conjunction' }).format(def.fields.slice(0, 2).map((d) => fieldLabel(def, d.key, d.label).toLowerCase())) })}
             </button>
           </div>
         )}

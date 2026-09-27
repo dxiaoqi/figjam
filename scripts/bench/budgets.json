@@ -48,6 +48,7 @@
     "mcp.renderSnapshotPng.frame.ms": { "max": 1000 },
     "mcp.renderSnapshotPng.board1k.ms": { "max": 3000 },
     "mcp.renderSnapshotPng.board10k.ms": { "max": 4000 },
-    "mcp.coreResponsiveDuringSnapshot.maxMs": { "max": 250 }
+    "mcp.coreResponsiveDuringSnapshot.maxMs": { "max": 250 },
+    "mcp.coreResponsiveDuringAutosave.board10k.maxMs": { "max": 75 }
   }
 }

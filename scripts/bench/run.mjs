@@ -350,6 +350,30 @@ if (want('mcp')) {
   M['mcp.renderSnapshotSvg.board10k.ms'] = await time('render_snapshot', { board, format: 'svg' }, 2)
   M['mcp.renderSnapshotPng.frame.ms'] = await time('render_snapshot', { board, format: 'png', frame: fx[10000].firstFrame }, 2)
   M['mcp.renderSnapshotPng.board1k.ms'] = await time('render_snapshot', { board: fx[1000].id, format: 'png' }, 2)
+  // small edits to a 10k board autosave every ~250 ms; saving (and the readable JSON copy) must not stall the core
+  {
+    const pings = []
+    const t0 = performance.now()
+    let i = 0
+    let done = false
+    const edits = (async () => {
+      // long enough to cover a rebuild of the readable copy (JSON_COPY_MAX_WAIT_MS)
+      while (performance.now() - t0 < 12_000) {
+        await call('update_blocks', { board, updates: [{ id: fx[10000].firstFrame, title: `Frame edit ${i++}` }] })
+        await sleep(300)
+      }
+    })().finally(() => (done = true))
+    while (!done) {
+      const p0 = performance.now()
+      await authedFetch(`${core.base}/api/health`, {}, home)
+      pings.push(performance.now() - p0)
+      await sleep(10)
+    }
+    await edits
+    M['mcp.coreResponsiveDuringAutosave.board10k.maxMs'] = round(Math.max(...pings))
+    M['mcp.coreResponsiveDuringAutosave.board10k.p95Ms'] = round(pct(pings, 95))
+    log(`autosave of the 10k board (${i} edits): core health max ${M['mcp.coreResponsiveDuringAutosave.board10k.maxMs']} ms, p95 ${M['mcp.coreResponsiveDuringAutosave.board10k.p95Ms']} ms`)
+  }
   // the core must keep serving sync and other agents while it rasterizes a huge board
   {
     const t0 = performance.now()

@@ -89,7 +89,7 @@ check('memory / mock stores say they are not persistent', !sec.memoryStore().per
 const home = path.join(tmp, 'home')
 const port = 48200 + Math.floor(Math.random() * 40) * 2
 const base = `http://127.0.0.1:${port}`
-const env = { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: String(port), AIFIG_SECRET_STORE: 'mock', AIFIG_PERMISSION_TIMEOUT_MS: '4000' }
+const env = { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: String(port), AIFIG_SECRET_STORE: 'mock', AIFIG_PERMISSION_TIMEOUT_MS: '4000', AIFIG_AGENT_CONFIG_HOME: path.join(tmp, 'agent-home') }
 delete env.AIFIG_TOKEN
 const core = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
 for (let i = 0; i < 100 && !(await fetch(`${base}/api/health`).then((r) => r.ok, () => false)); i++) await sleep(100)
@@ -114,6 +114,8 @@ const unauth = await fetch(`${base}/api/call`, { method: 'POST', headers: { 'con
 check('an unauthenticated API request is rejected (401)', unauth.status === 401 && unauth.headers.get('www-authenticate')?.startsWith('Bearer'), `HTTP ${unauth.status}`)
 const wrong = await fetch(`${base}/api/boards`, { headers: { authorization: `Bearer ${'x'.repeat(43)}` } })
 check('a wrong token is rejected (401)', wrong.status === 401)
+const setupNoToken = await Promise.all([fetch(`${base}/api/agents`), fetch(`${base}/api/agents/cursor/install`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })])
+check('one-click agent setup (/api/agents…) needs the token', setupNoToken.every((r) => r.status === 401), setupNoToken.map((r) => r.status).join(', '))
 check('the X-Aifig-Token header works too', (await fetch(`${base}/api/boards`, { headers: { 'x-aifig-token': token } })).status === 200)
 const pub = await (await fetch(`${base}/api/health`)).json()
 check('health without the token only says the core is up (no paths, token or MCP launch)', pub.ok && pub.authenticated === false && !pub.home && !pub.token && !pub.mcp, JSON.stringify(pub))

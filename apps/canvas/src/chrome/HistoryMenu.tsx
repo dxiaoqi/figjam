@@ -118,7 +118,7 @@ export function HistoryMenu() {
         <DropdownMenuSeparator className="my-0" />
         <div className="p-1">
           <DropdownMenuItem onSelect={() => openVersionHistory()} className="text-xs text-muted-foreground" data-history-versions>
-            <Layers className="size-3.5" /> Version history…
+            <Layers className="size-3.5" /> {t('board.versionHistory')}
           </DropdownMenuItem>
         </div>
       </DropdownMenuContent>

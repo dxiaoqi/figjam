@@ -30,6 +30,7 @@ import { FieldsPopover, TypeFilterBar, TypePalette, useRelationSuggestions } fro
 import { EditorContext } from './editor-context'
 import { desktop } from '../lib/desktop'
 import { downloadDocument, downloadSnapshot } from '../lib/export'
+import { openVersionHistory } from '../lib/versions'
 import { draftForPastedText, draftForTool, importImages, nextColor, shapeDefs } from './shapes'
 import { toast } from 'sonner'
 import { relationLabel, t, useT } from '../i18n'
@@ -161,6 +162,8 @@ export function BoardCanvas() {
           return window.dispatchEvent(new Event('aifig:assistant-settings'))
         case 'activity':
           return window.dispatchEvent(new Event('aifig:activity'))
+        case 'version-history':
+          return openVersionHistory()
         case 'export':
           if (payload === 'png' || payload === 'svg') return downloadSnapshot(boardId, document.title.replace(/ — ai-figma$/, ''), payload, { ids: ids.length ? ids : undefined, theme: themeMode })
           return downloadDocument(boardId, payload === 'json' ? 'json' : 'md')

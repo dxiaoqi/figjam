@@ -6,11 +6,13 @@ import { cn } from '@/lib/utils'
 import { useBoard } from '../board-context'
 import { callCore } from '../lib/core'
 import { openBackupFolder, openVersionHistory } from '../lib/versions'
+import { useT } from '../i18n'
 
 /** Recoveries, unreadable boards and failing saves — shown until the person dismisses them. */
 export function DataNotices() {
   const { boardId } = useBoard()
   const [notices, setNotices] = useState<DataNotice[]>([])
+  const t = useT()
 
   const load = useCallback(async () => {
     try {
@@ -48,17 +50,17 @@ export function DataNotices() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {n.kind === 'recovered' && n.boardId === boardId && (
                   <Button size="sm" variant="secondary" className="h-7 gap-1.5 text-xs" onClick={() => openVersionHistory()}>
-                    <History className="size-3.5" /> Version history
+                    <History className="size-3.5" /> {t('versions.title')}
                   </Button>
                 )}
                 {n.kind !== 'save-failed' && (
                   <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={() => openBackupFolder(n.boardId === boardId ? boardId : undefined)}>
-                    <FolderOpen className="size-3.5" /> Open backup folder
+                    <FolderOpen className="size-3.5" /> {t('board.openBackups')}
                   </Button>
                 )}
               </div>
             </div>
-            <button onClick={() => dismiss(n.id)} className="size-7 shrink-0 rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" aria-label="Dismiss">
+            <button onClick={() => dismiss(n.id)} className="size-7 shrink-0 rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" aria-label={t('notices.dismiss')}>
               <X className="mx-auto size-3.5" />
             </button>
           </div>
