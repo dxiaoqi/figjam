@@ -75,6 +75,8 @@ export interface EditorOptions {
   toolKeys?: Record<string, string>
   /** Display text for a connector's relation (e.g. translated); defaults to the relation id. */
   relationLabel?: (relation: string) => string
+  /** A viewer: pan and zoom only (the hand tool, no selection, editing, clipboard or drops). */
+  readOnly?: boolean
 }
 
 export type HandleId = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se'
@@ -199,6 +201,7 @@ export class Editor {
     this.connectorsMap = this.doc.getMap<Connector>('connectors')
     this.shapes = new Map(options.shapes.map((s) => [s.kind, s]))
     this.grid = options.gridSize ?? 8
+    if (options.readOnly) this.tool = 'hand'
     this.undoManager = new Y.UndoManager([this.blocksMap, this.connectorsMap], {
       trackedOrigins: new Set([this.origin]),
       captureTimeout: 400,
@@ -948,6 +951,7 @@ export class Editor {
   // ---- tools, selection, editing -------------------------------------------
 
   setTool(tool: string) {
+    if (this.options.readOnly) return
     this.tool = tool
     if (tool !== 'select') this.stopEditing()
     this.bump()
@@ -981,6 +985,7 @@ export class Editor {
   }
 
   startEditing(id: string) {
+    if (this.options.readOnly) return
     const b = this.blocksMap.get(id)
     const c = this.connectorsMap.get(id)
     if (b && !this.shape(b.kind)?.canEdit) return
@@ -1286,6 +1291,7 @@ export class Editor {
   }
 
   paste(text: string | null, at?: Vec) {
+    if (this.options.readOnly) return
     const pt = at ?? center(this.viewportPageBounds())
     const t = text ?? this.clipboard
     if (!t) return

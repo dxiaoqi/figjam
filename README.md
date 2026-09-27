@@ -170,6 +170,39 @@ symlinks, encryption, ZIP64 or duplicate names, only the files a pack can contai
 their bytes, and the board's own checksum. Agents use `export_pack` / `import_pack`; the CLI `aifig pack` / `aifig
 unpack`.
 
+### Export as a web page
+
+**Export as web page…** (board menu, right-click › Export board, desktop *File › Export › Web Page…*) writes a read-only,
+interactive page of the board that anyone can open — no ai-figma needed:
+
+```
+Board (web)/
+  index.html      the page (a CSP meta tag: its own files only, no fetches)
+  viewer.js/.css  the viewer: canvas-engine rendering in read-only mode, prebuilt with the app (no core code)
+  board.js        the board as data (a classic script, so it also works from file://)
+  assets/         images, videos and posters
+  snippets/       each inline web snippet as its own document
+  PUBLISHING.md   how to host it
+```
+
+Readers pan and zoom (trackpad, drag, pinch, arrow keys), and every block renders as on the canvas: stickies, cards and
+typed fields, frames, routed connectors and labels, images, videos (inline player), and web snippets. Inline snippets
+**run**: each is loaded into a `sandbox="allow-scripts"` frame (opaque origin) whose document starts with a CSP that
+allows no network at all (`connect-src 'none'`, no remote images, fonts, scripts or frames); `aifig.getState()` returns
+the saved state and `setState` keeps changes in memory. A snippet takes the pointer when clicked and gives it back on
+Esc or a click elsewhere, so the canvas still pans over it. URL embeds (YouTube, Figma, …) are kept and load only when
+the reader clicks them — until then the page makes no request at all. Comments (pins with their threads) and typed
+fields can be toggled; there is a light/dark switch. Formats: a **folder**, the same as a **zip** (one top-level
+folder), or a **single file** (`.html` with the viewer, data, files as data: URIs and snippets as `srcdoc` inlined — with
+a warning above 20 MB). No token, grant or secret is included (an export whose data looks like it holds a key is
+refused). The viewer is about 515 KB of JS (167 KB gzipped) and 104 KB of CSS, mostly the embedded Latin Inter font.
+
+*Publish-ready:* upload the folder (or the unzipped zip) to any static host — Netlify Drop, GitHub Pages, Cloudflare
+Pages, Vercel, an S3/R2 bucket with website hosting, or any web server (`npx serve .` previews it). Videos seek best
+on hosts with HTTP range requests (all of these). `PUBLISHING.md` in every export repeats this; anyone with the link can
+see the board and download its files, so remove it from the host to take it down. Agents use `export_web`; the CLI
+`aifig export-web [-o dir] [--zip | --single] [--no-comments] [--dark]`.
+
 - Media elements load files from `/api/assets/<board>/<asset>` with an *asset key* (an HMAC of the access token that
   opens nothing but asset files), served with `nosniff`, a sandbox CSP and Range support; snippet source is served as
   plain text, never as a page on the app's origin.
@@ -254,7 +287,7 @@ use the canvas well. Copy it into `~/.claude/skills/` (or your agent's skills fo
 | Collaborate | `set_status`, `begin_change_set`, `commit_change_set`, `list_change_sets` (incl. per-item rejections and reasons), `get_threads`, `reply_thread`, `resolve_thread` |
 | Types | `list_types`, `set_type` (promote / demote with `none` / update fields), `query_blocks` (by type and field); `create_blocks` accepts `type` + `fields`, `connect` accepts `relation`, `tidy` accepts `by: "type" \| "matrix"` |
 | Web snippets | `create_snippet` (https URL embed, or inline `html` / `css` / `js`), `update_snippet` — both through review |
-| Export | `export_board` (Markdown document or JSON structure), `export_pack` / `import_pack` (`.aifigpack` share packs) |
+| Export | `export_board` (Markdown document or JSON structure), `export_pack` / `import_pack` (`.aifigpack` share packs), `export_web` (read-only interactive web page: folder, zip or single file) |
 | Versions | `list_versions`, `create_version` (named checkpoint), `restore_version` (checkpoints the current state first; from an agent it's a change set to review) |
 
 Also exposed: resource `aifig://design/tokens` and prompt `layout-best-practices`.
@@ -283,6 +316,7 @@ aifig snippet-files <id> [--open]                  # editable index.html / style
 aifig storage [--reveal]                           # where the board, its files, history and backups are
 aifig pack -o plan.aifigpack --history [--no-comments]   # share pack: board, files, skills (+ history, comments)
 aifig unpack plan.aifigpack --to ~/Boards [--install-skills]  # check, save as <Title>.aifig + .assets, open
+aifig export-web -o site/ [--zip | --single]       # read-only web page: works from file:// and any static host
 aifig tidy --frame "Principles"
 aifig lint
 aifig snapshot -o board.png                        # --dark, --frame, --ids a,b,c, .svg
@@ -547,7 +581,8 @@ packages/
   canvas-engine/  @aifig/canvas-engine — Editor, CanvasView, input, geometry (React, Yjs)
   cli/            @aifig/cli — aifig CLI, MCP stdio server, HTTP client with core auto-start
 apps/
-  canvas/         @aifig/canvas — the canvas app: block renderers, agent layer, review UI, chrome (shadcn/ui)
+  canvas/         @aifig/canvas — the canvas app: block renderers, agent layer, review UI, chrome (shadcn/ui);
+                  src/viewer is the read-only viewer of exported web pages (vite.viewer.config.ts → dist/viewer)
 bin/aifig.mjs     entry point for the CLI, `aifig core` and `aifig mcp`
 ```
 
@@ -619,7 +654,7 @@ English ones longer.
 npm run typecheck                                     # every workspace
 npm run test:e2e                                      # canvas engine + app, real pointer/keyboard input (166 checks)
 npm run test:onboarding                               # languages, welcome, templates (UI/CLI/MCP), one-click agent setup; isolated core
-npm run test:sharing                                  # asset files, 1.0 migration, videos, live snippet files, storage panel, share packs (isolated core, headless Chrome)
+npm run test:sharing                                  # asset files, 1.0 migration, videos, live snippet files, storage panel, share packs, web export from file:// (isolated core, headless Chrome)
 npm run test:aesthetics                               # agent-output aesthetics vs baselines (update: test:aesthetics:update)
 npm run test:data-safety                              # format, migrations, retention, kill -9 / SIGTERM, recovery, versions over MCP + CLI
 node scripts/desktop-e2e.mjs                          # Electron app (window, menus, files, theme, bundled MCP, keychain)

@@ -263,6 +263,20 @@ export const toolDefs = {
       install_skills: z.boolean().optional(),
     },
   },
+  export_web: {
+    title: 'Export as web page',
+    description:
+      'Write the board as a read-only interactive web page anyone can open: pan/zoom, every block rendered, inline web snippets running sandboxed with no network, URL embeds, playable videos, and comments and typed fields the reader can toggle. `folder` (index.html + files) or `zip` work from file:// and any static host; `single` inlines everything into one .html. No tokens or secrets are included.',
+    input: {
+      board,
+      path: z.string().describe('Absolute path: a new folder (folder), a .zip file (zip) or a .html file (single).'),
+      mode: z.enum(['folder', 'zip', 'single']).optional().describe('Default folder.'),
+      include_comments: z.boolean().optional().describe('Default true (readers can hide them).'),
+      show_fields: z.boolean().optional().describe('Typed fields shown by default (default true; readers can hide them).'),
+      theme: z.enum(['light', 'dark']).optional(),
+      overwrite: z.boolean().optional(),
+    },
+  },
   group_into_frame: {
     title: 'Group into frame',
     description: 'Wrap existing top-level blocks in a new titled frame, keeping their arrangement.',
@@ -542,6 +556,7 @@ export const humanToolDefs = {
   dismiss_notice: { input: { id: z.string() } },
   get_storage: { input: { board } },
   inspect_pack: { input: { path: z.string() } },
+  estimate_web: { input: { board } },
   cleanup_assets: { input: { board, dry_run: z.boolean().optional() } },
   reveal_asset: {
     input: {

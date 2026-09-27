@@ -15,6 +15,7 @@ import { DataNotices } from '../chrome/DataNotices'
 import { VersionHistory } from '../chrome/VersionHistory'
 import { openStorage, StoragePanel } from '../chrome/StoragePanel'
 import { ExportPackDialog, ImportPackDialog } from '../chrome/SharePack'
+import { openWebExport, WebExportDialog } from '../chrome/WebExport'
 import { openExportPack, openImportPack } from '../lib/packs'
 import { StylePanel } from '../chrome/StylePanel'
 import { Toolbar } from '../chrome/Toolbar'
@@ -186,6 +187,8 @@ export function BoardCanvas() {
           return openStorage()
         case 'export-pack':
           return openExportPack()
+        case 'export-web':
+          return openWebExport()
         case 'open-pack':
           return openImportPack(typeof payload === 'string' ? payload : undefined)
         case 'export':
@@ -234,6 +237,7 @@ export function BoardCanvas() {
           <StoragePanel />
           <ExportPackDialog />
           <ImportPackDialog />
+          <WebExportDialog />
         </EditorContext.Provider>
       ) : (
         <div className="absolute inset-0 z-[1000] flex items-center justify-center">

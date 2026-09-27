@@ -55,13 +55,13 @@ export function contrast(a: RGB, b: RGB) {
   return (x + 0.05) / (y + 0.05)
 }
 
-// ---- app theme (shadcn variables in index.css) ---------------------------------------------------------------
+// ---- app theme (shadcn variables in canvas.css) ---------------------------------------------------------------
 
 function themeVars(): Record<Theme, Record<string, string>> {
-  const css = fs.readFileSync(path.join(root, 'apps/canvas/src/index.css'), 'utf8')
+  const css = fs.readFileSync(path.join(root, 'apps/canvas/src/canvas.css'), 'utf8')
   const block = (sel: RegExp) => {
     const m = css.match(sel)
-    if (!m) throw new Error(`theme block ${sel} not found in index.css`)
+    if (!m) throw new Error(`theme block ${sel} not found in canvas.css`)
     return Object.fromEntries([...m[1].matchAll(/--([a-z-]+):\s*([^;]+);/g)].map((x) => [x[1], x[2].trim()]))
   }
   return { light: block(/:root\s*{([^}]*)}/), dark: block(/\.dark\s*{([^}]*)}/) }
@@ -79,13 +79,13 @@ interface Check {
   kind: 'text' | 'large' | 'graphic'
 }
 
-/** `opacity` of the first rule for `selector` in index.css (type headers, fields, done items fade their text). */
+/** `opacity` of the first rule for `selector` in canvas.css (type headers, fields, done items fade their text). */
 function cssOpacity(selector: string) {
-  const css = fs.readFileSync(path.join(root, 'apps/canvas/src/index.css'), 'utf8')
+  const css = fs.readFileSync(path.join(root, 'apps/canvas/src/canvas.css'), 'utf8')
   const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const m = css.match(new RegExp(`(?:^|\\n|,)\\s*${esc}\\s*{([^}]*)}`))
   const v = m?.[1].match(/opacity:\s*([\d.]+)/)?.[1]
-  if (!v) throw new Error(`no opacity for ${selector} in index.css`)
+  if (!v) throw new Error(`no opacity for ${selector} in canvas.css`)
   return Number(v)
 }
 

@@ -4,6 +4,8 @@
 //             panel and an inline video in headless Chrome
 //   packs     .aifigpack export over MCP / CLI / the canvas (download), import with a folder choice, history
 //             and comments, skills; a malicious pack is refused in the import dialog
+//   web page  export as a folder, zip and single file (MCP, CLI, canvas); opened from file:// in headless Chrome:
+//             every block renders, snippets run with no network, videos play, comments and fields toggle
 // usage: node scripts/sharing-e2e.mjs [media-dir] [--skip-build]
 //   With a media dir it saves screenshots and short clips there.
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
@@ -264,6 +266,148 @@ await stopPackClip?.(path.join(mediaDir, 'pack-import.mp4'))
   if (mediaDir) await page.screenshot({ path: path.join(mediaDir, 'pack-refused.png') })
   await page.keyboard.press('Escape')
 }
+
+// ---- web page export ------------------------------------------------------------------------------------------
+const web = (await call(HUMAN, 'create_board', { title: 'Pricing experiment' })).result.board.id
+const made = (await call(HUMAN, 'create_blocks', { board: web, frame: 'Hypotheses', layout: 'row', blocks: [
+  { text: 'Annual plans lift conversion', type: 'hypothesis', fields: { status: 'supported', confidence: 'high' } },
+  { text: 'Seat pricing confuses teams under 5', type: 'hypothesis', fields: { status: 'unverified' } },
+  { kind: 'card', title: 'Decision', text: 'Ship **annual** by default; keep monthly one click away.' },
+] })).result
+const [h1, h2, card] = made.created.filter((c) => c.kind !== 'frame').map((c) => c.id)
+await call(HUMAN, 'connect', { board: web, connectors: [{ from: h1, to: card, label: 'informs' }, { from: h2, to: card }] })
+const calc = (await call(HUMAN, 'create_snippet', { board: web, below: card, title: 'Seat calculator',
+  html: '<main><h1>Seats</h1><button id=b>Seats: 1</button><p id=net>checking network…</p></main>',
+  css: 'main{padding:16px;font:15px system-ui}button{font:inherit;padding:6px 12px}',
+  js: "let n=1;const b=document.getElementById('b');b.onclick=()=>{n++;b.textContent='Seats: '+n;aifig.setState({n})};fetch('https://example.com/ping').then(()=>net.textContent='network: open',()=>net.textContent='network: blocked');const i=new Image();i.onerror=()=>document.body.dataset.img='blocked';i.src='https://example.com/p.png'" })).result
+await call(HUMAN, 'add_video', { board: web, path: media.mp4, poster: media.png, right_of: calc.id, caption: 'Checkout walkthrough' })
+await call(HUMAN, 'add_image', { board: web, path: media.png, below: calc.id, caption: 'Whiteboard' })
+const embed = (await call(HUMAN, 'create_snippet', { board: web, url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', below: card })).result
+await call(HUMAN, 'add_comment', { board: web, target: card, text: 'Legal wants the monthly price visible too.' })
+await call(HUMAN, 'tidy', { board: web })
+const webOut = path.join(tmp, 'web', 'Pricing experiment')
+const wx = cli('--board', web, 'export-web', '-o', webOut)
+check('aifig export-web writes index.html, the viewer, board.js, files, snippet documents and PUBLISHING.md', wx.status === 0 && ['index.html', 'viewer.js', 'viewer.css', 'board.js', 'PUBLISHING.md', `snippets/${calc.id}.html`].every((f) => fs.existsSync(path.join(webOut, f))) && fs.readdirSync(path.join(webOut, 'assets')).length >= 2, wx.stdout.trim() || wx.stderr.trim())
+const boardJs = fs.readFileSync(path.join(webOut, 'board.js'), 'utf8')
+check('the page carries no token, no grants and no core code', !boardJs.includes(tokenFor(home)) && !/"grants"/.test(boardJs) && !fs.readFileSync(path.join(webOut, 'viewer.js'), 'utf8').includes('writeFileAtomic'))
+const snippetDoc = fs.readFileSync(path.join(webOut, 'snippets', `${calc.id}.html`), 'utf8')
+check('each snippet document starts with a CSP that blocks all network', /^<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none';[^"]*connect-src 'none'/.test(snippetDoc))
+
+const wctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 })
+const net = []
+const blockedByCsp = []
+wctx.on('request', (r) => !/^(file|data|blob|about):/.test(r.url()) && net.push(r.url()))
+// a request the CSP refuses is reported, then fails in the browser before any connection is made
+wctx.on('requestfailed', (r) => {
+  if (/csp/i.test(r.failure()?.errorText ?? '')) {
+    blockedByCsp.push(r.url())
+    net.splice(net.indexOf(r.url()), 1)
+  }
+})
+const wp = await wctx.newPage()
+const werrors = []
+wp.on('pageerror', (e) => werrors.push(e.message))
+const stopWebClip = mediaDir ? await startClip(wp, tmp) : null
+await wp.goto(`file://${path.join(webOut, 'index.html')}`)
+await wp.waitForSelector('[data-viewer] .ae-block', { timeout: 15000 })
+await wp.waitForTimeout(2200)
+const rendered = await wp.evaluate(() => ({ dataConnectors: window.__AIFIG_BOARD__.connectors.length, paths: document.querySelectorAll('.ae-connectors path').length, blocks: document.querySelectorAll('.ae-block').length, kinds: [...new Set([...document.querySelectorAll('.ae-block')].map((b) => [...b.classList].find((c) => c.startsWith('ae-kind-'))))],  title: document.querySelector('[data-viewer-title]')?.textContent, images: [...document.querySelectorAll('.aifig-image img')].map((i) => i.naturalWidth) }))
+check('from file://, every block renders (frame, typed stickies, card, snippet, video, image, embed) with connectors', ['ae-kind-frame', 'ae-kind-sticky', 'ae-kind-card', 'ae-kind-web', 'ae-kind-video', 'ae-kind-image'].every((k) => rendered.kinds.includes(k)) && rendered.dataConnectors >= 2 && rendered.paths >= rendered.dataConnectors && rendered.title === 'Pricing experiment', JSON.stringify(rendered))
+check('images load', rendered.images.length >= 1 && rendered.images.every((w) => w > 0), rendered.images.join(','))
+const frame = wp.frames().find((f) => f.url().endsWith(`snippets/${calc.id}.html`))
+await frame?.waitForFunction(() => document.getElementById('net')?.textContent !== 'checking network…', null, { timeout: 5000 }).catch(() => {})
+const netText = await frame?.evaluate(() => ({ net: document.getElementById('net')?.textContent, img: document.body.dataset.img }))
+check('inline snippets run, and their network requests are blocked', netText?.net === 'network: blocked' && netText?.img === 'blocked', JSON.stringify(netText))
+await wp.evaluate((id) => {
+  const r = window.editor.pageRect(id)
+  window.editor.zoomToBounds({ x: r.x - 40, y: r.y - 40, w: r.w + 80, h: r.h + 80 }, { maxZoom: 1, animate: false })
+}, calc.id)
+await wp.waitForTimeout(300)
+await wp.click(`[data-viewer-snippet="${calc.id}"] [data-snippet-activate]`)
+await frame.click('#b')
+await frame.click('#b')
+check('clicking a snippet lets the reader use it', (await frame.textContent('#b')) === 'Seats: 3')
+await wp.keyboard.press('Escape')
+const camBefore = await wp.evaluate(() => ({ ...window.editor.camera }))
+await wp.mouse.move(720, 450)
+await wp.mouse.wheel(0, 300)
+await wp.waitForTimeout(200)
+const camPanned = await wp.evaluate(() => ({ ...window.editor.camera }))
+await wp.mouse.move(200, 700)
+await wp.mouse.down()
+await wp.mouse.move(420, 600, { steps: 6 })
+await wp.mouse.up()
+const camDragged = await wp.evaluate(() => ({ ...window.editor.camera }))
+const zoomBefore = await wp.textContent('[data-viewer-zoom]')
+await wp.keyboard.press('Minus')
+await wp.waitForTimeout(350)
+check('pan (wheel, also over a snippet; drag) and zoom work', !(await wp.locator('.aifig-web.is-running').count()) && camPanned.y !== camBefore.y && camDragged.x !== camPanned.x && (await wp.textContent('[data-viewer-zoom]')) !== zoomBefore, `${JSON.stringify([camBefore, camPanned, camDragged])} ${zoomBefore} → ${await wp.textContent('[data-viewer-zoom]')}`)
+await wp.evaluate(() => window.editor.zoomToFit(false))
+await wp.waitForTimeout(300)
+await wp.click('[data-video-block] [data-video-play]')
+await wp.waitForTimeout(1500)
+const vid = await wp.evaluate(() => { const v = document.querySelector('[data-video-block] video'); return v && { t: v.currentTime, paused: v.paused, error: v.error?.code ?? null } })
+check('videos play', !!vid && vid.t > 0.3 && !vid.paused && !vid.error, JSON.stringify(vid))
+const pins = await wp.locator('[data-viewer-pin]').count()
+await wp.locator('[data-viewer-pin]').first().click()
+await wp.waitForSelector('[data-viewer-thread]')
+const threadText = await wp.textContent('[data-viewer-thread]')
+if (mediaDir) await wp.screenshot({ path: path.join(mediaDir, 'web-page.png') })
+await wp.click('[data-toggle-comments]')
+const pinsOff = await wp.locator('[data-viewer-pin]').count()
+check('comments are viewable and toggleable', pins === 1 && /Legal wants/.test(threadText ?? '') && pinsOff === 0, `${pins} → ${pinsOff}`)
+const fieldsOn = await wp.locator('[data-viewer-fields]').count()
+await wp.click('[data-toggle-fields]')
+const fieldsOff = await wp.locator('[data-viewer-fields]').count()
+check('typed fields are viewable and toggleable', fieldsOn >= 2 && fieldsOff === 0, `${fieldsOn} → ${fieldsOff}`)
+await wp.click('[data-toggle-fields]')
+await wp.click('[data-toggle-comments]')
+await wp.click('[data-toggle-theme]')
+await wp.waitForTimeout(400)
+if (mediaDir) await wp.screenshot({ path: path.join(mediaDir, 'web-page-dark.png') })
+check('no network at all until a URL embed is clicked (the snippet’s tries are refused by its CSP)', net.length === 0 && blockedByCsp.some((u) => u.includes('example.com')), `${net.join(', ')} | blocked: ${blockedByCsp.join(', ')}`)
+await wp.click('[data-embed-load]')
+const embedFrame = await wp.waitForSelector(`iframe[src="${embed.embedUrl}"]`, { timeout: 5000 }).catch(() => null)
+check('URL embeds are kept and load when clicked (sandboxed, no top navigation)', !!embedFrame && !/allow-top-navigation/.test((await embedFrame.getAttribute('sandbox')) ?? ''))
+await stopWebClip?.(path.join(mediaDir, 'web-page.mp4'))
+check('no errors on the page', !werrors.length, werrors.join(' | '))
+
+// single file and zip
+await wp.close()
+const single = JSON.parse(cli('--json', '--board', web, 'export-web', '--single', '-o', path.join(tmp, 'web', 'pricing.html')).stdout)
+const sp = await wctx.newPage()
+net.length = 0
+await sp.goto(`file://${single.path}`)
+await sp.waitForSelector('[data-viewer] .ae-block', { timeout: 15000 })
+await sp.waitForTimeout(1500)
+let sNet
+for (const f of sp.frames()) if (f !== sp.mainFrame()) sNet ??= await f.evaluate(() => document.getElementById('net')?.textContent).catch(() => undefined)
+check('the single-file page is self-contained: snippets run (srcdoc), images inline, no network', single.files === 1 && sNet === 'network: blocked' && (await sp.evaluate(() => [...document.querySelectorAll('.aifig-image img')].every((i) => i.naturalWidth > 0 && i.src.startsWith('data:')))) && net.length === 0, `${sNet}, ${net.join(',')}`)
+const { readZipIndex } = await import('../packages/core/src/unzip.ts')
+const zipped = JSON.parse(cli('--json', '--board', web, 'export-web', '--zip', '-o', path.join(tmp, 'web', 'pricing.zip')).stdout)
+const zfd = fs.openSync(zipped.path, 'r')
+const znames = readZipIndex(zfd, { maxEntries: 1000, maxTotal: 2 ** 31, maxEntry: () => 2 ** 30, maxRatio: 1000 }).map((i) => i.name)
+fs.closeSync(zfd)
+check('the zip unpacks to one folder with index.html', znames.includes('Pricing experiment/index.html') && znames.some((n) => n.startsWith('Pricing experiment/assets/')), znames.slice(0, 4).join(', '))
+const mcpWeb = new Client({ name: 'cursor', version: 'sharing' })
+await mcpWeb.connect(new StdioClientTransport({ command: process.execPath, args: [bin, 'mcp'], env, stderr: 'ignore' }))
+const mw = JSON.parse((await mcpWeb.callTool({ name: 'export_web', arguments: { board: web, path: path.join(tmp, 'web', 'from-mcp'), mode: 'folder' } })).content[0].text)
+check('MCP export_web works for agents', fs.existsSync(mw.open) && /static host/.test(mw.publish))
+await mcpWeb.close()
+
+// the export dialog in the canvas (browser: zip / single file download)
+await page.goto(`${base}/?board=${web}`)
+await page.waitForSelector('.ae-block', { timeout: 15000 })
+await page.evaluate(() => window.dispatchEvent(new Event('aifig:export-web')))
+await page.waitForSelector('[data-web-export] [data-web-mode="zip"]')
+await page.waitForTimeout(600)
+if (mediaDir) await page.screenshot({ path: path.join(mediaDir, 'web-export-dialog.png') })
+const wdl = page.waitForEvent('download', { timeout: 20000 })
+await page.click('[data-web-export-run]')
+const wfile = path.join(tmp, 'downloads', await (await wdl).suggestedFilename())
+await (await wdl).saveAs(wfile)
+check('“Export as web page” downloads a zip in the browser', wfile.endsWith('.zip') && fs.statSync(wfile).size > 100_000, path.basename(wfile))
+await wctx.close()
 
 check('no page errors', !errors.length, errors.join(' | '))
 await ctx.close()

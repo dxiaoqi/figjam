@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --clearScreen false",
     "dev:clean": "rm -rf node_modules/.vite ../../node_modules/.vite && vite --force --clearScreen false",
-    "build": "vite build"
+    "build": "vite build && vite build --config vite.viewer.config.ts",
+    "build:viewer": "vite build --config vite.viewer.config.ts"
   },
   "dependencies": {
     "@aifig/canvas-engine": "*",

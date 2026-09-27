@@ -202,3 +202,43 @@ export async function startSnippetHost(registry: BoardRegistry, port = SNIPPET_P
   await listen('::1')
   return { port, ok, close: () => servers.forEach((s) => s.close()) }
 }
+
+/**
+ * CSP for snippets in an exported web page, set with a <meta> tag (static hosts and file:// can't send
+ * headers): nothing leaves the frame. The frame itself is sandboxed (`allow-scripts`, opaque origin).
+ */
+export const STATIC_SNIPPET_CSP = [
+  "default-src 'none'",
+  "script-src 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'unsafe-inline'",
+  'img-src data: blob:',
+  'font-src data:',
+  'media-src data: blob:',
+  "connect-src 'none'",
+  "frame-src 'none'",
+  "worker-src 'none'",
+  "form-action 'none'",
+  "base-uri 'none'",
+].join('; ')
+
+/** The bridge in an exported page: the saved state, kept in memory; permissions are denied. */
+const staticBridge = (state: unknown) => `(() => {
+  let s = ${JSON.stringify(state ?? null).replace(/</g, '\\u003c')}
+  const ls = []
+  Object.defineProperty(window, 'aifig', {
+    value: Object.freeze({
+      getState: async () => s,
+      setState: async (v) => { s = JSON.parse(JSON.stringify(v === undefined ? null : v)); for (const f of ls) try { f(s) } catch (e) { console.error(e) } return true },
+      onState: (f) => { if (typeof f === 'function') ls.push(f) },
+      requestPermission: async (name) => ({ permission: String(name), status: 'denied' }),
+    }),
+  })
+  // Esc hands the pointer back to the page (the viewer listens for this one message)
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && parent !== window) parent.postMessage({ aifig: 1, type: 'exit' }, '*') }, true)
+})()`
+
+/** A self-contained document for an inline snippet in an exported page. */
+export function staticSnippetDocument(web: NonNullable<Block['web']>, src: { html: string; css: string; js: string }) {
+  const code = checkSnippetJs(src.js).mode === 'async' ? asyncWrap(src.js) : src.js
+  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${STATIC_SNIPPET_CSP}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><style>${BASE_CSS}</style><style>${safeRaw(src.css, 'style')}</style><script>${staticBridge(web.state)}</script></head><body>${src.html}<script>${safeRaw(code, 'script')}</script></body></html>`
+}

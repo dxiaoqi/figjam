@@ -37,7 +37,7 @@ module.exports = {
     { from: 'build/native/${os}-${arch}/node_modules', to: 'node_modules' },
   ],
   fileAssociations: [
-    { ext: 'aifig', name: 'ai-figma board', role: 'Editor' },
+    { ext: 'aifig', name: 'ai-figma board', role: 'Editor', mimeType: 'application/x-aifig' },
     { ext: 'aifigpack', name: 'ai-figma share pack', role: 'Viewer', mimeType: 'application/x-aifigpack' },
   ],
   // generic feed: electron-builder writes latest*.yml next to the installers; the app sets the real URL at runtime

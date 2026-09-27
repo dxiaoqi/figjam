@@ -81,6 +81,7 @@ import { openInOs } from './os-open'
 import { SnippetFiles } from './snippet-files'
 import { cleanUpAssets, storageInfo } from './storage'
 import { exportPack, importPack, inspectPack, PACK_EXT } from './pack'
+import { estimateWeb, exportWeb, type WebExportMode } from './web-export'
 import os from 'node:os'
 import { SkillLibrary, userSkillsDir, writeSkillFolder } from './skills'
 
@@ -523,6 +524,10 @@ export class CanvasCore {
         return this.revealAsset(a)
       case 'export_pack':
         return this.exportPackTool(a)
+      case 'export_web':
+        return this.exportWebTool(a)
+      case 'estimate_web':
+        return { board: this.board(a.board).id, ...estimateWeb(this.board(a.board)) }
       case 'import_pack':
         return this.importPackTool(a)
       case 'inspect_pack': {
@@ -2018,6 +2023,25 @@ export class CanvasCore {
     try {
       const r = exportPack(board, this.skills, out, { history: a.include_history === true, comments: a.include_comments !== false })
       return { board: board.id, path: r.file, size: r.size, files: r.manifest.files.length, includes: r.manifest.includes, ...(r.manifest.missing ? { missing: r.manifest.missing } : {}), ...(r.warnings.length ? { notes: r.warnings } : {}) }
+    } catch (e) {
+      throw new ToolError((e as Error).message)
+    }
+  }
+
+  private exportWebTool(a: Args) {
+    const board = this.board(a.board)
+    const mode: WebExportMode = a.mode ?? 'folder'
+    let out = path.resolve(String(a.path))
+    if (mode === 'zip' && !out.toLowerCase().endsWith('.zip')) out += '.zip'
+    if (mode === 'single' && !/\.html?$/i.test(out)) out += '.html'
+    if (fs.existsSync(out) && !a.overwrite && !(mode === 'folder' && fs.statSync(out).isDirectory() && !fs.readdirSync(out).length)) throw new ToolError(`${out} already exists — pass overwrite: true or choose another path`)
+    if (a.overwrite && mode === 'folder' && fs.existsSync(out)) {
+      if (!fs.existsSync(path.join(out, 'index.html')) || !fs.existsSync(path.join(out, 'viewer.js'))) throw new ToolError(`${out} isn’t an earlier web export — refusing to replace it`)
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+    try {
+      const r = exportWeb(board, { out, mode, comments: a.include_comments !== false, fields: a.show_fields !== false, theme: a.theme })
+      return { board: board.id, ...r, open: mode === 'folder' ? path.join(r.path, 'index.html') : r.path, publish: 'Upload the folder (or the unzipped zip) to any static host — Netlify Drop, GitHub Pages, Cloudflare Pages, S3 — see PUBLISHING.md inside.' }
     } catch (e) {
       throw new ToolError((e as Error).message)
     }
