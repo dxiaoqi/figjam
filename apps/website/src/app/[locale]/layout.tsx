@@ -25,7 +25,14 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
     applicationName: site.name,
     title: { default: t.meta.title, template: `%s — ${site.name}` },
     description: t.meta.description,
-    icons: { icon: '/favicon.svg' },
+    icons: {
+      icon: [
+        { url: '/favicon.ico', sizes: '48x48' },
+        { url: '/favicon.svg', type: 'image/svg+xml' },
+      ],
+      apple: '/apple-touch-icon.png',
+    },
+    manifest: '/manifest.webmanifest',
     formatDetection: { telephone: false, email: false, address: false },
   }
 }

@@ -19,6 +19,8 @@ const types = {
   '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
   '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json',
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
   '.woff2': 'font/woff2',
@@ -26,7 +28,7 @@ const types = {
   '.xml': 'application/xml',
 }
 
-const compressible = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.xml'])
+const compressible = new Set(['.html', '.js', '.css', '.json', '.webmanifest', '.svg', '.ico', '.txt', '.xml'])
 const packed = new Map()
 
 function compressed(file, br) {
@@ -42,7 +44,7 @@ function compressed(file, br) {
 
 function cacheControl(path) {
   if (path.startsWith('/_next/static/')) return 'public, max-age=31536000, immutable'
-  if (/^\/(media|og)\//.test(path) || path === '/favicon.svg') return 'public, max-age=604800'
+  if (/^\/(media|og)\//.test(path) || /^\/(favicon\.(svg|ico)|apple-touch-icon\.png|icon-\d+\.png|manifest\.webmanifest)$/.test(path)) return 'public, max-age=604800'
   return 'public, max-age=0, must-revalidate'
 }
 

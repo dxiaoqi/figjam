@@ -6,6 +6,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import sharp from 'sharp'
+import { flat } from '../../../assets/brand/variants.mjs'
 import { COLORS } from '../../../packages/shared/src/tokens'
 import { site } from '../src/config/site'
 import { scenarioSlugs, scenarios, type TokenColor } from '../src/content/scenarios'
@@ -59,6 +60,8 @@ function cards(t: ReturnType<typeof en>, locale: 'zh' | 'en'): Record<string, Ca
   return base
 }
 
+const brandIcon = Buffer.from(flat()).toString('base64')
+
 const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
 async function html(c: Card, lang: string) {
@@ -83,7 +86,7 @@ p{position:absolute;left:72px;bottom:64px;font-size:22px;color:#57534e}
 .shot{position:absolute;left:620px;top:110px;width:720px;border-radius:14px;border:1px solid rgb(0 0 0/.08);box-shadow:0 1px 1px rgb(0 0 0/.04),0 12px 40px rgb(0 0 0/.12)}
 .sticky{position:absolute;width:250px;min-height:170px;padding:22px;border-radius:6px;font-size:24px;line-height:1.3;font-weight:500;box-shadow:0 1px 1px rgb(0 0 0/.04),0 10px 30px rgb(0 0 0/.08)}
 </style></head><body>
-<div class="brand"><svg width="44" height="44" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#1C1917"/><rect x="7" y="7" width="11" height="11" rx="2" fill="${COLORS.yellow.light.bg}"/><rect x="14" y="14" width="11" height="11" rx="3" fill="${COLORS.purple.light.bg}"/></svg>${esc(site.name)}</div>
+<div class="brand"><img width="48" height="48" src="data:image/svg+xml;base64,${brandIcon}">${esc(site.name)}</div>
 <div class="eyebrow"><i></i>${esc(c.eyebrow)}</div>
 <h1>${esc(c.title)}</h1>
 <p>${esc(c.body)}</p>

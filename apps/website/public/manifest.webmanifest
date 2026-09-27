@@ -1,0 +1,14 @@
+{
+  "name": "ai-figma",
+  "short_name": "ai-figma",
+  "description": "A local-first infinite canvas shared by you and your AI agents",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#FAFAF9",
+  "theme_color": "#FAFAF9",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512" }
+  ]
+}
