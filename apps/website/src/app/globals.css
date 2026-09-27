@@ -81,7 +81,7 @@
   --animate-sticky-in: sticky-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-/* Same values as the canvas app (apps/canvas/src/index.css). */
+/* Same values as the canvas app (apps/canvas/src/canvas.css). */
 :root {
   --radius: 0.625rem;
   --background: oklch(0.985 0.001 106.423);
