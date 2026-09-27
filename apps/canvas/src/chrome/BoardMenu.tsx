@@ -1,5 +1,5 @@
 import { Bookmark, Check, ChevronDown, FolderOpen, History, Pencil, Plus, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { FEATURES } from '@aifig/shared'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -21,12 +21,31 @@ import { openBackupFolder, openVersionHistory } from '../lib/versions'
 import { useT } from '../i18n'
 import { openNewBoard } from './new-board'
 
+const CURSOR = 'M14 14L26 18.5L20 20L18.5 26Z'
+
+/** The app icon's small tile (assets/brand/icon-small.svg): a sticky with an agent cursor on it. */
 export function Logo({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="8" className="fill-foreground" />
-      <rect x="7" y="7" width="11" height="11" rx="2" fill="#FFF1B8" />
-      <rect x="14" y="14" width="11" height="11" rx="3" fill="#E8DEFF" />
+      <rect width="32" height="32" rx="7.5" fill="#1C1917" />
+      <rect x="6" y="6" width="12" height="12" rx="2" fill="#FFF1B8" />
+      <path d={CURSOR} fill="#D97757" stroke="#1C1917" strokeWidth="3" strokeLinejoin="round" />
+      <path d={CURSOR} fill="#D97757" stroke="#D97757" strokeWidth="1" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** The monochrome mark (assets/brand/mark.svg), drawn in the current text color. */
+export function Mark({ className }: { className?: string }) {
+  const id = useId()
+  return (
+    <svg viewBox="5 5 22 22" fill="currentColor" className={className} aria-hidden>
+      <mask id={id} maskUnits="userSpaceOnUse" x="5" y="5" width="22" height="22">
+        <rect x="5" y="5" width="22" height="22" fill="#FFFFFF" />
+        <path d={CURSOR} stroke="#000000" strokeWidth="4" strokeLinejoin="round" />
+      </mask>
+      <rect x="6" y="6" width="12" height="12" rx="2" mask={`url(#${id})`} />
+      <path d={CURSOR} stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -74,7 +93,7 @@ export function BoardMenu() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button className="chrome flex h-10 items-center gap-2.5 rounded-xl pr-3 pl-2 text-sm font-medium transition-colors hover:bg-accent/60">
-            <Logo className="size-6" />
+            <Mark className="size-5" />
             <span className="max-w-[40vw] truncate">{title || t('board.untitled')}</span>
             <ChevronDown className="size-3.5 text-muted-foreground" />
           </button>
