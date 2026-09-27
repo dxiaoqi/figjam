@@ -119,6 +119,23 @@ check('the CLI, UI and skills are copied to a stable runtime folder', fs.existsS
 check('agents are pointed at the AppImage file and the stable CLI, not the temporary mount', h.mcp.command === (appEnv.APPIMAGE ?? appImage) && h.mcp.args[0].startsWith(runtimeDir) && h.mcp.args.includes('--no-sandbox'), `${h.mcp.command} ${h.mcp.args.join(' ')}`)
 check('the MCP env needs no Node install', h.mcp.env?.ELECTRON_RUN_AS_NODE === '1' && !/\bnode$/.test(h.mcp.command))
 
+// the readable <id>.json copy is built by a worker thread; a packaged app has no node_modules, so the worker is bundled
+const HUMAN = { id: 'human:pkg', name: 'You', client: 'test', kind: 'human' }
+const readableCopyBuilt = async () => {
+  const made = await api('/api/call', { method: 'POST', body: JSON.stringify({ tool: 'create_board', args: { title: `Readable ${Date.now()}` }, caller: HUMAN }) })
+  const id = made.result?.board?.id
+  await api('/api/call', { method: 'POST', body: JSON.stringify({ tool: 'create_blocks', args: { board: id, blocks: [{ text: 'one' }, { text: 'two' }] }, caller: HUMAN }) })
+  const file = path.join(home, 'boards', `${id}.json`)
+  for (let i = 0; i < 75 && !(fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8')).blocks.length === 2); i++) await sleep(200)
+  const st = (await health())?.readableCopy
+  return { ok: fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8')).blocks.length === 2 && st?.written.worker > 0 && st.written.inline === 0 && !st.workerError, st }
+}
+{
+  const r = await readableCopyBuilt()
+  check('autosave builds the readable JSON copy in its worker thread (bundled, off the main thread)', r.ok, JSON.stringify(r.st))
+  check('the readable-copy worker is copied to the stable runtime folder', fs.existsSync(path.join(runtimeDir, fs.readdirSync(runtimeDir)[0] ?? '-', 'readable-copy-worker.mjs')))
+}
+
 // ---- the window: canvas loaded, bridge present, telemetry consent ------------------------------------------
 const page = await app.firstWindow({ timeout: 60000 }).catch(() => null)
 for (let i = 0; i < 100 && page && !page.url().startsWith(coreUrl); i++) await sleep(200)
@@ -176,6 +193,8 @@ try {
   check('MCP handshake with the configured command (no Node on PATH, AppRun adds --no-sandbox)', tools.length > 20, `${tools.length} tools`)
   const board = await client.callTool({ name: 'get_board', arguments: {} })
   check('the MCP server started its own core and answers tool calls', !board.isError, board.content?.[0]?.text?.slice(0, 80))
+  const agentCopy = await readableCopyBuilt()
+  check('the agent-started core (runtime folder) builds the readable copy in its worker too', agentCopy.ok, JSON.stringify(agentCopy.st))
   const snap = await client.callTool({ name: 'render_snapshot', arguments: {} })
   check('PNG export works (bundled resvg native module)', snap.content?.some((c) => c.type === 'image'), snap.isError ? snap.content?.[0]?.text : '')
   const ui = await fetch(`${coreUrl}/`, { headers: { authorization: `Bearer ${token()}` } }).then((r) => r.text())

@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 import { Worker } from 'node:worker_threads'
 import { writeFileAtomic } from './atomic'
 
@@ -38,42 +38,9 @@ interface Pending {
   firstAt: number
 }
 
-// Inline so the bundled desktop core needs no extra file; yjs is loaded by absolute path. Keep the shape in
-// sync with Board.toJSON() (tests/data-safety/readable-copy.test.ts compares them).
-const WORKER_SRC = `
-const { parentPort, workerData } = require('node:worker_threads')
-const fs = require('node:fs')
-const path = require('node:path')
-const Y = require(workerData)
-let n = 0
-parentPort.on('message', ({ id, file, payload, board, title, schema }) => {
-  try {
-    const doc = new Y.Doc()
-    Y.applyUpdate(doc, payload)
-    const meta = doc.getMap('meta')
-    const values = (name) => [...doc.getMap(name).values()]
-    const json = {
-      id: board,
-      title: meta.get('title') ?? title,
-      schema,
-      createdAt: meta.get('createdAt'),
-      updatedAt: meta.get('updatedAt'),
-      blocks: values('blocks'),
-      connectors: values('connectors'),
-      changeSets: values('changeSets'),
-      assets: values('assets').map(({ bytes, ...rest }) => ({ ...rest, size: bytes.byteLength })),
-      threads: values('threads'),
-    }
-    const dir = path.dirname(file)
-    const tmp = path.join(dir, '.' + path.basename(file) + '.' + process.pid + '.w' + ++n + '.tmp')
-    fs.writeFileSync(tmp, JSON.stringify(json, null, 2))
-    fs.renameSync(tmp, file)
-    doc.destroy()
-    parentPort.postMessage({ id })
-  } catch (e) {
-    parentPort.postMessage({ id, error: String((e && e.message) || e) })
-  }
-})`
+// A sibling module: packages/core/src/readable-copy-worker.mjs from source, or the copy the desktop build bundles
+// (with yjs inlined) next to aifig.mjs — a packaged app has no node_modules to resolve yjs from.
+const WORKER_URL = new URL('./readable-copy-worker.mjs', import.meta.url)
 
 const WORKER_IDLE_MS = 15_000
 
@@ -84,6 +51,8 @@ class ReadableCopies {
   private worker: Worker | null | undefined
   private idleTimer: NodeJS.Timeout | undefined
   private seq = 0
+  private workerError: string | null = null
+  private written = { worker: 0, inline: 0 }
   private jobs = new Map<number, { resolve: () => void; reject: (e: Error) => void }>()
 
   /** A save wrote `payload` (the board's Yjs state); refresh the readable copy soon. */
@@ -130,9 +99,16 @@ class ReadableCopies {
     }
   }
 
+  /** Which path builds the copies, for /api/health and the packaging smoke test. */
+  status() {
+    const mode = readableCopyMode()
+    return { mode, worker: mode !== 'worker' ? 'off' : this.worker ? 'running' : this.worker === null ? 'unavailable' : 'idle', workerError: this.workerError, written: { ...this.written } }
+  }
+
   private writeSync(source: ReadableSource) {
     try {
       writeFileAtomic(source.jsonFile, JSON.stringify(source.toJSON(), null, 2))
+      this.written.inline++
     } catch (e) {
       console.error(`[core] could not write ${source.jsonFile}:`, e)
     }
@@ -167,6 +143,7 @@ class ReadableCopies {
         w.ref()
         w.postMessage({ id, file: source.jsonFile, payload, board: source.id, title: source.title, schema: source.schemaLabel })
       })
+      this.written.worker++
     } catch (e) {
       console.error(`[core] could not write ${source.jsonFile} in the background, writing it inline:`, (e as Error).message)
       this.writeSync(source)
@@ -176,7 +153,8 @@ class ReadableCopies {
   private getWorker(): Worker | null {
     if (this.worker !== undefined) return this.worker
     try {
-      const w = new Worker(WORKER_SRC, { eval: true, workerData: createRequire(import.meta.url).resolve('yjs') })
+      if (!fs.existsSync(fileURLToPath(WORKER_URL))) throw new Error(`${fileURLToPath(WORKER_URL)} is missing`)
+      const w = new Worker(WORKER_URL)
       w.unref()
       w.on('message', (m: { id: number; error?: string }) => {
         const job = this.jobs.get(m.id)
@@ -194,12 +172,15 @@ class ReadableCopies {
         else job?.resolve()
       })
       w.on('error', (e) => {
+        this.workerError = e.message
         for (const j of this.jobs.values()) j.reject(e)
         this.jobs.clear()
         this.worker = undefined
       })
       this.worker = w
-    } catch {
+    } catch (e) {
+      this.workerError = (e as Error).message
+      console.error(`[core] the readable-copy worker is unavailable, writing copies inline: ${this.workerError}`)
       this.worker = null
     }
     return this.worker

@@ -28,6 +28,7 @@ module.exports = {
   npmRebuild: false,
   extraResources: [
     { from: 'build/aifig.mjs', to: 'aifig.mjs' },
+    { from: 'build/readable-copy-worker.mjs', to: 'readable-copy-worker.mjs' },
     { from: 'build/features.json', to: 'features.json' },
     { from: '../canvas/dist', to: 'ui' },
     { from: '../../skills/builtin', to: 'skills' },

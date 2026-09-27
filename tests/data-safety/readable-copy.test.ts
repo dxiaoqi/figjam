@@ -23,6 +23,8 @@ test('the readable copy is built in the background, debounced, with the same sha
   await readableCopies.idle()
   assert.deepEqual(readJson(b), JSON.parse(JSON.stringify(b.toJSON())))
   assert.equal(readJson(b).assets[0].size, 3)
+  const st = readableCopies.status()
+  assert.ok(st.written.worker > 0 && st.workerError === null, `built by the worker thread: ${JSON.stringify(st)}`)
 
   b.doc.transact(() => b.blocks.delete('s0'))
   b.saveNow()

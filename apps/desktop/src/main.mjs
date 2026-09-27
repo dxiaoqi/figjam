@@ -88,7 +88,7 @@ function adoptStableRuntime() {
     const tmp = `${dir}.tmp-${process.pid}`
     fs.rmSync(tmp, { recursive: true, force: true })
     fs.mkdirSync(tmp, { recursive: true })
-    for (const f of ['aifig.mjs', 'ui', 'skills', 'node_modules']) {
+    for (const f of ['aifig.mjs', 'readable-copy-worker.mjs', 'ui', 'skills', 'node_modules']) {
       const from = path.join(process.resourcesPath, f)
       if (fs.existsSync(from)) fs.cpSync(from, path.join(tmp, f), { recursive: true })
     }

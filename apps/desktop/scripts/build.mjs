@@ -65,6 +65,13 @@ await build({
 })
 fs.writeFileSync(path.join(desktop, 'build/features.json'), `${JSON.stringify(features)}\n`)
 
+// the readable-copy worker thread is loaded from next to aifig.mjs; there is no node_modules to find yjs in
+await build({
+  ...esm,
+  entryPoints: [path.join(root, 'packages/core/src/readable-copy-worker.mjs')],
+  outfile: path.join(out, 'readable-copy-worker.mjs'),
+})
+
 console.log('› bundling the main process')
 await build({
   ...esm,

@@ -22,6 +22,7 @@ import { aifigHome, type Board } from './board'
 import { PermissionBroker } from './permissions'
 import { auditedStore, openSecretStore } from './secrets'
 import { installFlushOnExit } from './safety'
+import { readableCopies } from './readable-copy'
 import { detectAgents, installAgent, isAgentId, isTransport, testAgent } from './agent-setup'
 
 const MSG_SYNC = 0
@@ -212,7 +213,7 @@ export async function startCore(port = CORE_PORT) {
         if (denied) return json(res, denied.status, { ok: false, error: denied.error }, denied.status === 401 ? { 'www-authenticate': 'Bearer realm="ai-figma"' } : {})
       }
       if (url.pathname === '/api/health') {
-        return json(res, 200, { ok: true, name: 'aifig-core', auth: 'token', authenticated: true, home, bin: binPath, mcp: mcpLaunch, mcpUrl: `http://127.0.0.1:${port}/mcp`, token: guard.token, snippetOrigin: snippets.ok ? snippetOrigin(snippets.port) : null, boards: core.registry.all().length, pid: process.pid, secrets: { backend: secrets.backend, persistent: secrets.persistent, osBacked: secrets.osBacked } })
+        return json(res, 200, { ok: true, name: 'aifig-core', auth: 'token', authenticated: true, home, bin: binPath, mcp: mcpLaunch, mcpUrl: `http://127.0.0.1:${port}/mcp`, token: guard.token, snippetOrigin: snippets.ok ? snippetOrigin(snippets.port) : null, boards: core.registry.all().length, pid: process.pid, secrets: { backend: secrets.backend, persistent: secrets.persistent, osBacked: secrets.osBacked }, readableCopy: readableCopies.status() })
       }
       if (url.pathname === '/api/activity' && req.method === 'GET') {
         const category = url.searchParams.get('category') ?? undefined
