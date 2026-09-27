@@ -11,6 +11,7 @@ import {
   typeDef,
   typeFields,
   typePatch,
+  typeText,
   type Block,
   type BlockTypeDef,
   type FieldValue,
@@ -24,12 +25,12 @@ import { useEditor } from './editor-context'
 import { currentTypes, typeIcon, useTypes } from './type-registry'
 import { getLocale, t, useT, type MessageKey } from '../i18n'
 
-// Built-in types are translated; skill types show the labels their skill declares.
+// Built-in types are translated here; skill types show the labels their skill declares (and its `i18n`, if any).
 const builtin = (d: BlockTypeDef) => !d.skill && `type.${d.id}.label` in LABEL_KEYS
-export const typeLabel = (d: BlockTypeDef) => (builtin(d) ? t(`type.${d.id}.label` as MessageKey) : d.label)
-export const typePlural = (d: BlockTypeDef) => (builtin(d) ? t(`type.${d.id}.plural` as MessageKey) : d.plural)
-const fieldLabel = (d: BlockTypeDef, key: string, fallback: string) => (builtin(d) && `field.${key}` in LABEL_KEYS ? t(`field.${key}` as MessageKey) : fallback)
-const optionLabel = (d: BlockTypeDef, o: string) => (builtin(d) && `option.${o}` in LABEL_KEYS ? t(`option.${o}` as MessageKey) : o)
+export const typeLabel = (d: BlockTypeDef) => (builtin(d) ? t(`type.${d.id}.label` as MessageKey) : typeText(d, getLocale()).label)
+export const typePlural = (d: BlockTypeDef) => (builtin(d) ? t(`type.${d.id}.plural` as MessageKey) : typeText(d, getLocale()).plural)
+const fieldLabel = (d: BlockTypeDef, key: string, fallback: string) => (builtin(d) && `field.${key}` in LABEL_KEYS ? t(`field.${key}` as MessageKey) : typeText(d, getLocale()).field(key, fallback))
+const optionLabel = (d: BlockTypeDef, o: string) => (builtin(d) && `option.${o}` in LABEL_KEYS ? t(`option.${o}` as MessageKey) : typeText(d, getLocale()).option(o))
 const fieldPlaceholder = (d: BlockTypeDef, key: string, fallback?: string) => (builtin(d) && `field.placeholder.${key}` in LABEL_KEYS ? t(`field.placeholder.${key}` as MessageKey) : fallback)
 
 export { typeIcon }
@@ -168,8 +169,8 @@ export function TypeFooter({ block, editor }: { block: Block; editor: Editor }) 
       </button>
     )
   } else {
-    const rows = templateRows(block, reg)
-    const sum = fieldSummary(block, reg)
+    const rows = templateRows(block, reg, getLocale())
+    const sum = fieldSummary(block, reg, getLocale())
     const showSummary = !!sum || !rows.length
     return (
       <>

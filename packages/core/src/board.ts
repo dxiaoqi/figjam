@@ -328,6 +328,19 @@ export class BoardRegistry {
     return b
   }
 
+  /** A new board with a copy of a file's content (the file itself is not linked or changed). */
+  importCopy(file: string, title?: string): Board {
+    const { board: b } = Board.fromBytes(`b${newId()}`, fs.readFileSync(path.resolve(file)), path.resolve(file))
+    b.doc.transact(() => {
+      if (title) b.meta.set('title', title)
+      b.meta.set('createdAt', Date.now())
+      b.meta.set('updatedAt', Date.now())
+    })
+    b.saveNow(true)
+    this.add(b)
+    return b
+  }
+
   /** Save As: write the board to a file and keep mirroring saves there. */
   saveAs(b: Board, file: string) {
     b.externalPath = path.resolve(file)

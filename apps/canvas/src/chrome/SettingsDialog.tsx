@@ -1,5 +1,6 @@
 import { Languages, Monitor, Moon, Sparkles, Sun, WandSparkles } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
+import { FEATURES } from '@aifig/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -102,6 +103,7 @@ export function SettingsDialog({ themePref, setTheme, onShowWelcome }: { themePr
               {t('settings.welcomeShow')}
             </Button>
           </Row>
+          {FEATURES.assistant && (
           <Row icon={<Sparkles className="size-4" />} title={t('settings.assistant')} hint={t('settings.assistantHint')}>
             <Button
               variant="outline"
@@ -115,6 +117,7 @@ export function SettingsDialog({ themePref, setTheme, onShowWelcome }: { themePr
               {t('settings.assistantOpen')}
             </Button>
           </Row>
+          )}
         </div>
       </DialogContent>
     </Dialog>

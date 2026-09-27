@@ -1,5 +1,6 @@
 import { Bookmark, Check, ChevronDown, FolderOpen, History, Pencil, Plus, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { FEATURES } from '@aifig/shared'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -18,7 +19,7 @@ import { useBoard, useBoardTitle, useProviderState } from '../board-context'
 import { callCore } from '../lib/core'
 import { openBackupFolder, openVersionHistory } from '../lib/versions'
 import { useT } from '../i18n'
-import { openNewBoard } from './NewBoardDialog'
+import { openNewBoard } from './new-board'
 
 export function Logo({ className }: { className?: string }) {
   return (
@@ -118,9 +119,11 @@ export function BoardMenu() {
           <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:activity'))}>
             <ShieldCheck className="size-4" /> {t('board.activity')}
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:assistant-settings'))}>
-            <Sparkles className="size-4" /> {t('board.assistantSettings')}
-          </DropdownMenuItem>
+          {FEATURES.assistant && (
+            <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:assistant-settings'))}>
+              <Sparkles className="size-4" /> {t('board.assistantSettings')}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
             <Trash2 className="size-4" /> {t('board.delete')}

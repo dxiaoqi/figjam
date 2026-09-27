@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { COLOR_TOKENS, SIZE_TOKENS } from './tokens'
 import { RELATIONS } from './types'
-import { CONTENT_LANGUAGES, TEMPLATE_IDS } from './templates'
+import { CONTENT_LANGUAGES, TEMPLATE_IDS, TEMPLATES } from './templates'
 
 /**
  * Canvas API contract. Every surface (MCP, CLI, UI) calls the core with one of these tools.
@@ -64,7 +64,7 @@ export const toolDefs = {
   },
   create_board: {
     title: 'Create board',
-    description: `Create a new board — empty, or from a template (${TEMPLATE_IDS.join(', ')}; see list_templates). Template content is laid out by the engine with typed blocks and applies directly (no review), so you can build on it right away.`,
+    description: `Create a new board — empty, or from a template (${TEMPLATE_IDS.join(', ')}; see list_templates). Template content is laid out by the engine with typed blocks and applies directly (no review), so you can build on it right away. Scenario templates (${TEMPLATE_IDS.filter((id) => TEMPLATES[id].skill).join(', ')}) also enable their skill — then read get_skill and follow its workflow.`,
     input: {
       title: z.string().optional().describe('Board title. Defaults to the template name, or "Untitled board".'),
       template: z.enum(TEMPLATE_IDS).optional().describe('Start from a template.'),
@@ -465,6 +465,8 @@ export const humanToolDefs = {
     },
   },
   rename_board: { input: { board, title: z.string() } },
+  add_comment: { input: { board, target: z.string().describe('Block id'), text: z.string().min(1) } },
+  open_sample: { input: { skill: z.string().describe('Built-in skill with a sample board, e.g. arch-kit'), language: z.enum(CONTENT_LANGUAGES).optional() } },
   open_file: { input: { path: z.string() } },
   save_file: { input: { board: z.string(), path: z.string() } },
   delete_board: { input: { board: z.string() } },

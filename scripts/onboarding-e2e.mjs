@@ -48,8 +48,10 @@ for (const t of list) {
   for (const language of ['en', 'zh-CN']) {
     const r = await call('create_board', { template: t.id, language })
     const lint = r.ok ? (await call('lint_layout', { board: r.result.board.id })).result : null
-    let typed = 0
-    for (const type of ['insight', 'question', 'quote', 'hypothesis', 'idea', 'todo']) typed += r.ok ? ((await call('query_blocks', { board: r.result.board.id, type })).result.blocks?.length ?? 0) : 0
+    // built-in or skill types (scenario templates use their skill's types)
+    const g = r.ok ? (await call('get_board', { board: r.result.board.id, format: 'json' })).result : null
+    const typed = g ? [...g.blocks, ...g.frames.flatMap((f) => f.children)].filter((b) => b.type).length : 0
+    if (t.skill && r.ok && !(await call('list_skills', { board: r.result.board.id })).result.skills.some((s) => s.name === t.skill && s.enabled)) lintResults.push({ id: t.id, language, ok: false, why: `${t.skill} not enabled` })
     lintResults.push({ id: t.id, language, ok: r.ok && lint?.issues.length === 0 && r.result.board.blockCount >= 8 && typed > 0, title: r.result?.board.title, blocks: r.result?.board.blockCount, typed, issues: lint?.issues.length })
   }
 }
@@ -225,6 +227,23 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   await page.click('button:has(svg.lucide-chevron-down)')
   await page.click('[data-menu-new-board]')
   await page.waitForSelector('[data-new-board-dialog]')
+  check(`[${sfx}] the new-board dialog opens on Scenarios`, (await page.locator('[data-new-board-dialog] [data-scenario]').count()) === 5 && (await page.getAttribute('[data-new-board-dialog]', 'data-new-board-tab')) === 'scenarios')
+  await page.click('[data-new-board-dialog] [data-scenario="research"]')
+  await page.waitForTimeout(150)
+  await shot(page, `new-board-scenarios-${sfx}.png`)
+  const prompt = await page.locator('[data-scenario-prompt]').textContent()
+  check(`[${sfx}] a scenario shows its workflow, the skill it enables and a prompt for the agent`, prompt.includes('research-kit') && (await page.locator('[data-scenario-detail="research"] ol li').count()) === 4)
+  check(`[${sfx}] the scenarios tab has no overflowing text`, !(await overflowX(page, '[data-new-board-dialog] [data-scenario] span, [data-scenario-detail] button')))
+  const beforeScenario = (await call('list_boards')).result.boards.length
+  await page.click('[data-new-board-create]')
+  await page.waitForTimeout(1500)
+  const scenarioBoard = new URL(page.url()).searchParams.get('board')
+  const scenarioSkills = (await call('list_skills', { board: scenarioBoard })).result.skills
+  check(`[${sfx}] Scenarios ▸ User research creates a board with research-kit enabled`, (await call('list_boards')).result.boards.length === beforeScenario + 1 && scenarioSkills.some((x) => x.name === 'research-kit' && x.enabled))
+  await page.click('button:has(svg.lucide-chevron-down)')
+  await page.click('[data-menu-new-board]')
+  await page.waitForSelector('[data-new-board-dialog]')
+  await page.click('[data-new-board-tab-trigger="templates"]')
   await page.click('[data-new-board-dialog] [data-template="research-synthesis"]')
   await page.waitForTimeout(150)
   await shot(page, `new-board-dialog-${sfx}.png`)

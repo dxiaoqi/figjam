@@ -1,6 +1,7 @@
 import { Fragment, createElement, useSyncExternalStore, type ReactNode } from 'react'
 import { en, type Plural } from './en'
 import { zhCN } from './zh-CN'
+import { currentTypes } from '../canvas/type-registry'
 
 export type Locale = 'en' | 'zh-CN'
 export type LocalePref = 'system' | Locale
@@ -83,7 +84,15 @@ export function t(key: MessageKey, vars?: Vars): string {
 }
 
 /** Label of a connector relation: built-in relations are translated, skill relations show as declared. */
-export const relationLabel = (r: string) => (`relation.${r}` in en ? t(`relation.${r}` as MessageKey) : r)
+/** Built-in relations are translated here; a skill's own verbs come from its types' `i18n.<locale>.relations`. */
+export const relationLabel = (r: string) => {
+  if (`relation.${r}` in en) return t(`relation.${r}` as MessageKey)
+  for (const d of Object.values(currentTypes())) {
+    const l = d.locales?.[getLocale()]?.relations?.[r]
+    if (l) return l
+  }
+  return r
+}
 
 /** Like `t`, but placeholders may be React nodes (e.g. `<code>`), for sentences with inline markup. */
 export function tn(key: MessageKey, vars: Record<string, ReactNode>): ReactNode {

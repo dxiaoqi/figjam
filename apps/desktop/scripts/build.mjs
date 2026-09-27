@@ -9,6 +9,8 @@ import { build } from 'esbuild'
 const desktop = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const root = path.resolve(desktop, '../..')
 const run = (cmd, args, cwd = root) => execFileSync(cmd, args, { cwd, stdio: 'inherit' })
+// build-time feature flags, baked into the UI (Vite reads the same env), the core bundle and the shell
+const features = { assistant: process.env.AIFIG_FEATURE_ASSISTANT === '1' }
 
 console.log('› building the canvas UI')
 run('npm', ['run', 'build', '-w', '@aifig/canvas'])
@@ -24,8 +26,10 @@ await build({
   target: 'node20',
   external: ['@resvg/resvg-js', 'bufferutil', 'utf-8-validate'],
   banner: { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" },
+  define: { __AIFIG_FEATURES__: JSON.stringify(features) },
   logLevel: 'info',
 })
+fs.writeFileSync(path.join(desktop, 'build/features.json'), `${JSON.stringify(features)}\n`)
 
 console.log('› packaging with electron-builder')
 const args = ['electron-builder', '--projectDir', desktop, '--config.electronVersion', JSON.parse(fs.readFileSync(path.join(root, 'node_modules/electron/package.json'), 'utf8')).version]

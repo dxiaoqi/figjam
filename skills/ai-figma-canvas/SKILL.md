@@ -23,6 +23,14 @@ or rejects. The layout engine does positioning — you describe content and stru
 5. `commit_change_set`, then `lint_layout`. If there are issues, `tidy` the frame. Use `render_snapshot` to look.
 6. Tell the user what you added and that it's waiting for their review in the canvas.
 
+## Scenarios
+
+For architecture maps, interview synthesis, product discovery, prototype walls and literature reviews, use the
+matching scenario skill instead of improvising: `create_board { template: "architecture-map" | "incident-review" |
+"interview-synthesis" | "product-discovery" | "prototype-wall" | "literature-review", language }` enables its skill
+(`arch-kit`, `research-kit`, `product-kit`, `prototype-kit`, `lit-kit`); then `get_skill` and follow its workflow.
+On an existing board, `list_skills` shows what the person has enabled.
+
 ## Choosing blocks
 
 - **sticky** — one short thought, under ~12 words. Use for brainstorming, notes, quotes.

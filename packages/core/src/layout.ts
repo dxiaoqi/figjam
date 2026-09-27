@@ -19,6 +19,12 @@ export interface LayoutItem {
   date?: string
 }
 
+/** Preferred order of matrix rows / columns (e.g. an enum's options); values not listed keep their order, after these. */
+export interface MatrixOrder {
+  rows?: readonly string[]
+  cols?: readonly string[]
+}
+
 export interface Placed {
   x: number
   y: number
@@ -180,12 +186,22 @@ export function compareDates(a?: string, b?: string) {
 }
 
 /** Rows × columns with small axis labels; several blocks in a cell stack. */
-function matrix(items: LayoutItem[], labelSize: (g: string) => { w: number; h: number }): LayoutResult {
-  const rows = [...new Set(items.map((i) => i.row?.trim() || '—'))]
-  const cols = [...new Set(items.map((i) => i.col?.trim() || '—'))]
+function matrix(items: LayoutItem[], labelSize: (g: string) => { w: number; h: number }, order?: MatrixOrder): LayoutResult {
+  const ranked = (values: string[], pref?: readonly string[]) => {
+    if (!pref?.length) return values
+    const rank = (v: string) => {
+      const i = pref.findIndex((p) => p.toLowerCase() === v.toLowerCase())
+      return i < 0 ? pref.length : i
+    }
+    return values.map((v, i) => ({ v, i })).sort((a, b) => rank(a.v) - rank(b.v) || a.i - b.i).map((x) => x.v)
+  }
+  const rows = ranked([...new Set(items.map((i) => i.row?.trim() || '—'))], order?.rows)
+  const cols = ranked([...new Set(items.map((i) => i.col?.trim() || '—'))], order?.cols)
   const rowOf = (i: LayoutItem) => i.row?.trim() || '—'
   const colOf = (i: LayoutItem) => i.col?.trim() || '—'
-  const labelW = snap(Math.max(80, ...rows.map((r) => labelSize(r).w)) + GAP)
+  // a single unlabeled row (a cluster: columns only) needs no row labels
+  const rowLabels = !(rows.length === 1 && rows[0] === '—')
+  const labelW = rowLabels ? snap(Math.max(80, ...rows.map((r) => labelSize(r).w)) + GAP) : 0
   const headH = snap(Math.max(...cols.map((c) => labelSize(c).h)) + 12)
   const colW = cols.map((c) => Math.max(labelSize(c).w, ...items.filter((i) => colOf(i) === c).map((i) => i.w)))
   const colX: number[] = []
@@ -198,7 +214,7 @@ function matrix(items: LayoutItem[], labelSize: (g: string) => { w: number; h: n
   const headings: LayoutResult['headings'] = cols.map((c, i) => ({ group: c, x: colX[i], y: 0, small: true }))
   let y = headH
   for (const r of rows) {
-    headings.push({ group: r, x: 0, y, small: true })
+    if (rowLabels) headings.push({ group: r, x: 0, y, small: true })
     let rowH = 0
     cols.forEach((c, ci) => {
       let cy = y
@@ -249,7 +265,7 @@ function flow(items: LayoutItem[], columns = 5): LayoutResult {
 export function layout(
   items: LayoutItem[],
   intent: LayoutIntent,
-  opts: { columns?: number; direction?: 'right' | 'down'; headingSize: (g: string) => { w: number; h: number }; labelSize?: (g: string) => { w: number; h: number } },
+  opts: { columns?: number; direction?: 'right' | 'down'; headingSize: (g: string) => { w: number; h: number }; labelSize?: (g: string) => { w: number; h: number }; order?: MatrixOrder },
 ): LayoutResult {
   switch (intent) {
     case 'row':
@@ -261,7 +277,7 @@ export function layout(
     case 'tree':
       return tree(items, opts.direction ?? 'right')
     case 'matrix':
-      return matrix(items, opts.labelSize ?? opts.headingSize)
+      return matrix(items, opts.labelSize ?? opts.headingSize, opts.order)
     case 'timeline':
       return timeline(items, opts.labelSize ?? opts.headingSize)
     case 'flow':

@@ -19,6 +19,7 @@ import {
   type SkillLayout,
   type SkillManifest,
   type SkillPrompt,
+  type TypeLocale,
 } from '@aifig/shared'
 import { aifigHome } from './board'
 
@@ -147,6 +148,24 @@ function parseCanvas(raw: unknown, skill: string, skillDir: string, canvasDir: s
     const rows = Array.isArray(tpl?.rows) ? tpl!.rows.map(String) : undefined
     const summary = Array.isArray(tpl?.summary) ? tpl!.summary.map(String) : undefined
     for (const k of [...(rows ?? []), ...(summary ?? [])]) if (!keys.has(k)) errors.push(at(`${w}.template`, `"${k}" is not one of this type's fields`))
+    const locales: Record<string, TypeLocale> = {}
+    if (t.i18n !== undefined && !isObj(t.i18n)) errors.push(at(`${w}.i18n`, 'must be an object keyed by locale, e.g. { "zh-CN": { "label": "…" } }'))
+    for (const [loc, raw] of Object.entries(isObj(t.i18n) ? t.i18n : {})) {
+      const lw = `${w}.i18n.${loc}`
+      if (!/^[a-z]{2}(-[A-Z]{2})?$/.test(loc)) warnings.push(at(lw, 'locale ids look like "zh-CN" or "ja"'))
+      if (!isObj(raw)) {
+        errors.push(at(lw, 'must be an object with label, plural, fields, options'))
+        continue
+      }
+      const strings = (v: unknown, where: string) => {
+        if (v === undefined) return undefined
+        if (!isObj(v)) return void errors.push(at(`${lw}.${where}`, 'must be an object of strings'))
+        return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, String(x)]))
+      }
+      const fieldsT = strings(raw.fields, 'fields')
+      for (const k of Object.keys(fieldsT ?? {})) if (!keys.has(k)) warnings.push(at(`${lw}.fields`, `"${k}" is not one of this type's fields`))
+      locales[loc] = { label: raw.label ? String(raw.label) : undefined, plural: raw.plural ? String(raw.plural) : undefined, description: raw.description ? String(raw.description) : undefined, fields: fieldsT, options: strings(raw.options, 'options'), units: strings(raw.units, 'units'), relations: strings(raw.relations, 'relations') }
+    }
     const def: BlockTypeDef = {
       id: own(localId),
       label,
@@ -161,6 +180,7 @@ function parseCanvas(raw: unknown, skill: string, skillDir: string, canvasDir: s
       base,
       template: rows || summary ? { rows, summary } : undefined,
       relations: {},
+      ...(Object.keys(locales).length ? { locales } : {}),
     }
     out.types.push(def)
   }
@@ -183,7 +203,7 @@ function parseCanvas(raw: unknown, skill: string, skillDir: string, canvasDir: s
       if (!isObj(l)) return void errors.push(at(w, 'must be an object'))
       const intent = String(l.intent ?? '')
       if (!(LAYOUT_INTENTS as readonly string[]).includes(intent)) return void errors.push(at(`${w}.intent`, `must be one of ${LAYOUT_INTENTS.join(', ')}`))
-      const layout: SkillLayout = { id: String(l.id ?? ''), label: String(l.label ?? l.id ?? ''), intent: intent as SkillLayout['intent'], description: l.description ? String(l.description) : undefined, types: Array.isArray(l.types) ? l.types.map((t) => qualify(String(t))) : undefined, rows: l.rows ? String(l.rows) : undefined, cols: l.cols ? String(l.cols) : undefined, field: l.field ? String(l.field) : undefined }
+      const layout: SkillLayout = { id: String(l.id ?? ''), label: String(l.label ?? l.id ?? ''), intent: intent as SkillLayout['intent'], description: l.description ? String(l.description) : undefined, types: Array.isArray(l.types) ? l.types.map((t) => qualify(String(t))) : undefined, rows: l.rows ? String(l.rows) : undefined, cols: l.cols ? String(l.cols) : undefined, field: l.field ? String(l.field) : undefined, rowOrder: Array.isArray(l.rowOrder) ? l.rowOrder.map(String) : undefined, colOrder: Array.isArray(l.colOrder) ? l.colOrder.map(String) : undefined }
       if (!/^[a-z][\w-]*$/.test(layout.id)) errors.push(at(`${w}.id`, 'required, lowercase'))
       if (intent === 'matrix' && (!layout.rows || !layout.cols)) errors.push(at(w, 'a matrix needs "rows" and "cols" (field keys, or "type" for rows)'))
       if (intent === 'timeline' && !layout.field) errors.push(at(w, 'a timeline needs "field" (the date field)'))

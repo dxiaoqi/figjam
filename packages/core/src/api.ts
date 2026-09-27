@@ -19,6 +19,7 @@ import {
   suggestRelation,
   typeChrome,
   typeFields,
+  typeText,
   typePatch,
   type TypeId,
   type TypeRegistry,
@@ -71,6 +72,7 @@ import {
   measureBlock,
   tidyPositions,
   type LayoutIntent,
+  type MatrixOrder,
   type LayoutItem,
 } from './layout'
 import { McpTools } from './mcp-client'
@@ -82,7 +84,7 @@ const axisLabelSize = (g: string) => measureBlock({ kind: 'text', text: `**${g}*
 import { renderSnapshot } from './snapshot'
 import { checkSnippetJs } from './snippet-host'
 import { templateSteps } from './templates'
-import { TEMPLATE_IDS, TEMPLATES, type ContentLanguage, type TemplateId } from '@aifig/shared'
+import { SCENARIO_IDS, SCENARIOS, TEMPLATE_IDS, TEMPLATES, type ContentLanguage, type TemplateId } from '@aifig/shared'
 
 export class ToolError extends Error {}
 
@@ -391,7 +393,12 @@ export class CanvasCore {
       case 'apply_template':
         return this.applyTemplate(this.board(a.board), a.template, a.language ?? 'en', a.rename)
       case 'list_templates':
-        return { templates: TEMPLATE_IDS.map((id) => ({ id, title: TEMPLATES[id].title.en, titles: TEMPLATES[id].title, description: TEMPLATES[id].description })) }
+        return {
+          templates: TEMPLATE_IDS.map((id) => ({ id, title: TEMPLATES[id].title.en, titles: TEMPLATES[id].title, description: TEMPLATES[id].description, ...(TEMPLATES[id].skill ? { skill: TEMPLATES[id].skill } : {}) })),
+          scenarios: SCENARIO_IDS.map((id) => ({ id, ...SCENARIOS[id] })),
+        }
+      case 'open_sample':
+        return this.openSample(a)
       case 'rename_board': {
         const b = this.board(a.board)
         b.doc.transact(() => {
@@ -513,6 +520,14 @@ export class CanvasCore {
             }
           }),
         }
+      }
+      case 'add_comment': {
+        const board = this.board(a.board)
+        const target = board.blocks.get(a.target)
+        if (!target) throw new ToolError(`No block with id "${a.target}"`)
+        const t: Thread = { id: newId(), target: target.id, author: this.author(caller), text: a.text, createdAt: Date.now(), resolved: false, replies: [] }
+        board.doc.transact(() => board.threads.set(t.id, t), 'api')
+        return { thread: t.id, on: target.id }
       }
       case 'reply_thread':
       case 'resolve_thread': {
@@ -669,13 +684,38 @@ export class CanvasCore {
     const language = a.language ?? 'en'
     const title = a.title?.trim() || (a.template ? TEMPLATES[a.template as TemplateId].title[language as ContentLanguage] : language === 'zh-CN' ? '未命名画板' : 'Untitled board')
     const b = this.registry.create(title)
+    if (a.language) b.doc.transact(() => b.meta.set('language', language), 'api')
     if (!a.template) return { board: b.summary() }
     await this.applyTemplate(b, a.template, language)
-    return { board: b.summary(), template: a.template, language, next: 'The board is ready. Read it with get_board before adding to it.' }
+    const skill = TEMPLATES[a.template as TemplateId].skill
+    return {
+      board: b.summary(),
+      template: a.template,
+      language,
+      ...(skill ? { skill } : {}),
+      next: skill
+        ? `The board is ready and the ${skill} skill is enabled. Read get_skill { name: "${skill}" } and follow its workflow; read the board with get_board before adding to it.`
+        : 'The board is ready. Read it with get_board before adding to it.',
+    }
+  }
+
+  /** A copy of a built-in skill's sample board (examples/sample.<language>.aifig), as a new board of this person's. */
+  private openSample(a: Args) {
+    const s = this.skills.get(a.skill)
+    const language: ContentLanguage = a.language ?? 'en'
+    const file = s?.path ? [language, 'en'].map((l) => path.join(s.path!, 'examples', `sample.${l}.aifig`)).find((f) => fs.existsSync(f)) : undefined
+    if (!s || !file) throw new ToolError(`No sample board for “${a.skill}”. Skills with samples: ${this.skills.list().filter((x) => x.path && fs.existsSync(path.join(x.path, 'examples'))).map((x) => x.name).join(', ') || 'none'}`)
+    const b = this.registry.importCopy(file)
+    // the sample carries the skill as it was when the sample was made; bring it up to the installed version
+    if (!s.errors.length) b.doc.transact(() => b.skills.set(s.name, this.snapshotSkill(s, 'Sample')), 'api')
+    return { board: b.summary(), skill: s.name, language: file.includes(`.${language}.`) ? language : 'en' }
   }
 
   private async applyTemplate(b: Board, template: TemplateId, language: ContentLanguage, rename = false) {
     const caller: CallerInfo = { id: 'human:template', name: 'Template', client: 'template', kind: 'human' }
+    const skill = TEMPLATES[template].skill
+    if (!b.meta.get('language')) b.doc.transact(() => b.meta.set('language', language), 'api')
+    if (skill && !b.skills.has(skill)) this.enableSkill({ board: b.id, name: skill }, caller)
     for (const step of templateSteps(template, language)) {
       const r = await this.call({ tool: step.tool, args: { ...step.args, board: b.id }, caller })
       if (!r.ok) throw new ToolError(`Template "${template}" failed at ${step.tool}: ${r.error}`)
@@ -1090,20 +1130,44 @@ export class CanvasCore {
       if (counts.size > 1) warn(`Blocks of this layout are spread over ${counts.size} frames; arranged the ${counts.get(parent)} in ${parent ? `“${board.blocks.get(parent)?.title}”` : 'the canvas'}. Pass \`frame\` to choose.`)
       blocks = blocks.filter((b) => (b.parent ?? '') === parent)
     }
-    const field = (key?: string) => (b: Block) => {
-      if (!key) return undefined
-      if (key === 'type') return b.type ? typeDef(b.type, reg).plural : 'Untyped'
-      const v = typeFields(b, reg)[key]
-      return v === undefined || v === '' ? undefined : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v)
+    const locale = board.meta.get('language') as string | undefined
+    const typeName = (id: string) => typeText(typeDef(id, reg), locale).plural
+    // enum values show as the type's translation for the board's language
+    const enumOf = (key?: string) => {
+      for (const t of typeSet) {
+        const def = typeDef(t, reg)
+        const f = def.fields.find((x) => x.key === key)
+        if (f?.kind === 'enum') return { options: f.options, label: typeText(def, locale).option }
+      }
+      return undefined
+    }
+    const field = (key?: string) => {
+      const en = enumOf(key)
+      return (b: Block) => {
+        if (!key) return undefined
+        if (key === 'type') return b.type ? typeName(b.type) : 'Untyped'
+        const v = typeFields(b, reg)[key]
+        return v === undefined || v === '' ? undefined : typeof v === 'boolean' ? (v ? 'yes' : 'no') : en ? en.label(String(v)) : String(v)
+      }
     }
     const intent: LayoutIntent = l.intent === 'type' ? 'matrix' : l.intent === 'cluster' ? 'matrix' : l.intent
+    // enum fields keep their declared option order along an axis unless the layout says otherwise; a "type"
+    // axis is ordered by the type ids the layout lists
+    const order = (key: string | undefined, given: string[] | undefined) => {
+      if (key === 'type') return given?.map((t) => typeName(t.includes('.') ? t : `${name}.${t}`))
+      const en = enumOf(key)
+      return en ? (given ?? en.options).map((o) => en.label(o)) : given
+    }
     const opts =
       l.intent === 'type'
         ? { row: field('type'), col: () => '' }
         : l.intent === 'cluster'
-          ? { row: () => '', col: field(l.field) }
-          : { row: field(l.rows), col: field(l.cols), date: field(l.field) }
-    const { changeSet } = this.edit(board, caller, a.intent, `${l.label} (${name})`, (rec) => this.arrangeBlocks(board, rec, blocks, intent, opts))
+          ? { row: () => '', col: field(l.field), order: { cols: order(l.field, l.colOrder) } }
+          : { row: field(l.rows), col: field(l.cols), date: field(l.field), order: { rows: order(l.rows, l.rowOrder), cols: order(l.cols, l.colOrder) } }
+    // within a cell or column, the layout's types keep the order it lists them in (e.g. an insight above its quotes)
+    const rank = (b: Block) => (l.types ? l.types.indexOf(b.type!) : 0)
+    const ordered = [...blocks].sort((p, q) => rank(p) - rank(q) || p.y - q.y || p.x - q.x)
+    const { changeSet } = this.edit(board, caller, a.intent, `${l.label} (${name})`, (rec) => this.arrangeBlocks(board, rec, ordered, intent, { ...opts, keepOrder: true }))
     return { board: board.id, changeSet, layout: `${name}.${l.id}`, arranged: blocks.length }
   }
 
@@ -1784,14 +1848,14 @@ export class CanvasCore {
   }
 
   /** Lay out existing siblings with an intent, anchored at their current top-left; axis labels are replaced, flow/timeline get arrows. */
-  private arrangeBlocks(board: Board, rec: Recorder, blocks: Block[], intent: LayoutIntent, o: { columns?: number; row?: (b: Block) => string | undefined; col?: (b: Block) => string | undefined; date?: (b: Block) => string | undefined }) {
+  private arrangeBlocks(board: Board, rec: Recorder, blocks: Block[], intent: LayoutIntent, o: { columns?: number; row?: (b: Block) => string | undefined; col?: (b: Block) => string | undefined; date?: (b: Block) => string | undefined; order?: MatrixOrder; keepOrder?: boolean }) {
     const parent = blocks[0].parent ?? null
-    const ordered = [...blocks].sort((p, q) => p.y - q.y || p.x - q.x)
+    const ordered = o.keepOrder ? blocks : [...blocks].sort((p, q) => p.y - q.y || p.x - q.x)
     const bb = bboxOf(ordered)
     const res = layout(
       ordered.map((b) => ({ key: b.id, kind: b.kind, w: b.w, h: b.h, row: o.row?.(b), col: o.col?.(b), date: o.date?.(b) })),
       intent,
-      { columns: o.columns, headingSize: axisLabelSize, labelSize: axisLabelSize },
+      { columns: o.columns, headingSize: axisLabelSize, labelSize: axisLabelSize, order: o.order },
     )
     for (const ax of board.childrenOf(parent).filter((b) => b.layoutRole === 'axis' && intersects(board.pageRect(b), { x: bb.x - 400, y: bb.y - 200, w: bb.w + 800, h: bb.h + 400 }))) rec.deleteBlock(ax.id)
     const moved = new Set(ordered.map((b) => b.id))

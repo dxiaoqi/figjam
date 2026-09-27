@@ -7,7 +7,8 @@ import type { ThemeMode } from '../board-context'
 import { LOCALES, useLocale, useT } from '../i18n'
 import { Logo } from './BoardMenu'
 import { AgentSetup } from './AgentSetup'
-import { openNewBoard } from './NewBoardDialog'
+import { ScenarioChips } from './NewBoardDialog'
+import { openNewBoard } from './new-board'
 
 const SEEN_KEY = 'aifig:welcomed'
 
@@ -272,6 +273,8 @@ export function Welcome({ theme, onClose }: { theme: ThemeMode; onClose: () => v
               >
                 <LayoutTemplate className="size-3.5" /> {t('welcome.template')}
               </Button>
+              <p className="mt-2 w-full text-xs text-muted-foreground">{t('welcome.scenarios')}</p>
+              <ScenarioChips onPick={finish} className="w-full" />
             </div>
           )}
           {step === 2 && (

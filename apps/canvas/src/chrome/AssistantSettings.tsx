@@ -35,7 +35,7 @@ export function AssistantSettings() {
   useEffect(() => {
     const show = async () => {
       try {
-        if (desktop) {
+        if (desktop?.assistant) {
           const s = await desktop.assistant.get()
           setProvider(s.provider)
           setModel(s.model)
@@ -63,7 +63,7 @@ export function AssistantSettings() {
   const save = async () => {
     setSaving(true)
     try {
-      if (desktop) await desktop.assistant.save({ provider, model, baseUrl, key: key || undefined })
+      if (desktop?.assistant) await desktop.assistant.save({ provider, model, baseUrl, key: key || undefined })
       else {
         const r = await (await apiFetch('/api/assistant/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider, model, baseUrl, key: key || undefined }) })).json()
         if (!r.ok) throw new Error(r.error)

@@ -40,8 +40,10 @@ const allBlocks = async () => {
 // ---- discovery, format, exposure -------------------------------------------------------------
 const list = (await call(AGENT, 'list_skills', { board })).result.skills
 const rk = list.find((s) => s.name === 'research-kit')
-const ck = list.find((s) => s.name === 'competitor-kit')
-check('built-in research-kit and competitor-kit are discovered and valid', rk && ck && !rk.errors && !ck.errors && rk.capability === 'L1' && rk.types.length === 3, JSON.stringify(list.map((s) => [s.name, s.errors])))
+const ck = list.find((s) => s.name === 'product-kit')
+const scenarioKits = ['arch-kit', 'research-kit', 'product-kit', 'prototype-kit', 'lit-kit']
+check('built-in scenario skills (arch, research, product, prototype, lit) are discovered and valid', scenarioKits.every((n) => list.some((s) => s.name === n && !s.errors)) && rk.capability === 'L1' && rk.types.length === 4 && ck.types.length === 8, JSON.stringify(list.map((s) => [s.name, s.errors])))
+check('competitor-kit is folded into product-kit', !list.some((s) => s.name === 'competitor-kit') && ck.types.some((t) => t.id === 'product-kit.competitor'))
 check('list_skills says which tools are configured', rk.tools[0].name === 'web.search' && rk.tools[0].available === true && ck.tools[0].available === false, JSON.stringify([rk.tools, ck.tools]))
 const gs = (await call(AGENT, 'get_skill', { name: 'research-kit' })).result
 check('get_skill returns SKILL.md instructions, types with templates, layouts, prompts', gs.instructions.includes('# Research Kit') && gs.types.find((t) => t.id === 'research-kit.insight').template.rows.includes('confidence') && gs.layouts.some((l) => l.id === 'research-kit.opportunity-matrix') && gs.prompts[0].text.includes('query_blocks'))
@@ -154,7 +156,7 @@ check('after revoking it asks again; denying runs nothing and tells the agent', 
 ws.close()
 const act = (await call(HUMAN, 'list_activity', { board, skill: 'probe-kit' })).result.activity
 check('the shared activity log records enable, permission decisions and tool calls for the skill', act.some((e) => e.action === 'enable') && act.some((e) => e.category === 'permission' && e.source?.id === 'probe-kit') && act.filter((e) => e.action === 'run' && e.outcome === 'ok').length === 3 && act.some((e) => e.action === 'run' && e.outcome === 'denied'), act.map((e) => `${e.category}:${e.action}:${e.outcome}`).join(' '))
-const noTool = await call(AGENT, 'run_skill_action', { board, skill: 'competitor-kit', action: 'fetch-homepage', ids: [probe] })
+const noTool = await call(AGENT, 'run_skill_action', { board, skill: 'product-kit', action: 'fetch-homepage', ids: [probe] })
 check('actions of skills not enabled, or with unconfigured tools, fail clearly', !noTool.ok && noTool.error.includes('not enabled'), noTool.error)
 
 // ---- aifig skill new / validate / dev (hot reload) -----------------------------------------------
@@ -203,6 +205,26 @@ check('“Save as block type” infers fields and types the block', saved.ok && 
 check('…and writes a standard skill folder that validates', exported?.status === 0 && fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8').startsWith('---\nname: skills-test-types'), exported?.stdout)
 const zip = Buffer.from(await (await api(saved.result.export)).arrayBuffer())
 check('…which downloads as a zip', zip.subarray(0, 2).toString() === 'PK' && zip.includes(Buffer.from('skills-test-types/SKILL.md')), `${zip.length} bytes`)
+
+// ---- scenarios: templates that enable their skill, sample boards, translations ----------------------------
+const scen = (await call(AGENT, 'list_templates')).result
+check('list_templates names each scenario with its skill and templates', scen.scenarios.length === 5 && scen.scenarios.every((s) => scenarioKits.includes(s.skill) && s.templates.every((id) => scen.templates.find((t) => t.id === id)?.skill === s.skill)))
+const samples = []
+for (const kit of scenarioKits) for (const language of ['en', 'zh-CN']) samples.push([kit, language, await call(HUMAN, 'open_sample', { skill: kit, language })])
+check('every scenario skill has a sample board in both languages; opening one copies it with the skill enabled', samples.every(([kit, language, r]) => r.ok && r.result.skill === kit && r.result.language === language && r.result.board.blockCount >= 15), samples.filter(([, , r]) => !r.ok).map(([k, l, r]) => `${k} ${l}: ${r.error}`).join('; '))
+const sampleBoard = samples[0][2].result.board.id
+const sampleSkills = (await call(AGENT, 'list_skills', { board: sampleBoard })).result.skills
+check('…and the bundled sample file is never linked or changed', sampleSkills.some((s) => s.name === 'arch-kit' && s.enabled) && !(await call(HUMAN, 'list_boards')).result.boards.some((b) => b.path?.includes('examples')))
+const agentSample = await call(AGENT, 'open_sample', { skill: 'arch-kit' })
+const agentComment = await call(AGENT, 'add_comment', { board, target: probe, text: 'hi' })
+check('open_sample and add_comment stay human-only (not MCP tools)', !agentSample.ok && !agentComment.ok && !tools.includes('open_sample') && !tools.includes('add_comment'))
+check('scenario skill types carry zh-CN labels, field labels and option labels', (await call(AGENT, 'get_skill', { name: 'lit-kit' })).result.types.find((t) => t.id === 'lit-kit.claim').locales['zh-CN'].options.contested === '有争议')
+const badI18n = path.join(work, 'i18n-kit')
+fs.mkdirSync(path.join(badI18n, 'canvas'), { recursive: true })
+fs.writeFileSync(path.join(badI18n, 'SKILL.md'), '---\nname: i18n-kit\ndescription: test\nmetadata:\n  aifig:\n    canvas: canvas/blocks.json\n---\nx\n')
+fs.writeFileSync(path.join(badI18n, 'canvas/blocks.json'), JSON.stringify({ types: { a: { label: 'A', fields: [{ key: 'k', kind: 'text' }], i18n: { 'zh-CN': { label: '甲', fields: { nope: '无' } }, fr: 'x' } } } }))
+const v18 = cli('skill', 'validate', badI18n)
+check('skill validation checks translations (unknown fields warn, malformed locales fail)', v18.status !== 0 && /i18n\.fr/.test(v18.stdout + v18.stderr) && /"nope" is not one of this type's fields/.test(v18.stdout + v18.stderr), (v18.stdout + v18.stderr).trim().split('\n').slice(0, 3).join(' | '))
 
 await mcp.close()
 await new Promise((r) => (core.once('exit', r), core.kill()))

@@ -18,6 +18,16 @@ const coreUrl = `http://127.0.0.1:${port}`
 const devUrl = process.env.AIFIG_DESKTOP_URL // e.g. the Vite dev server for hot reload
 const prefsFile = () => path.join(app.getPath('userData'), 'prefs.json')
 const assistantFile = () => path.join(app.getPath('userData'), 'assistant.bin')
+// build-time feature flags: baked into features.json by the desktop build; from source, the environment
+const features = (() => {
+  try {
+    if (packaged) return JSON.parse(fs.readFileSync(path.join(process.resourcesPath, 'features.json'), 'utf8'))
+  } catch {
+    /* older build */
+  }
+  return { assistant: process.env.AIFIG_FEATURE_ASSISTANT === '1' }
+})()
+const assistantOn = features.assistant === true
 const snippetPort = Number(process.env.AIFIG_SNIPPET_PORT ?? port + 1)
 const snippetOrigin = `http://localhost:${snippetPort}`
 
@@ -178,6 +188,7 @@ function readAssistant() {
 }
 
 async function pushAssistant(settings) {
+  if (!assistantOn) return
   try {
     await fetch(`${coreUrl}/api/assistant/config`, {
       method: 'POST',
@@ -189,7 +200,11 @@ async function pushAssistant(settings) {
   }
 }
 
-ipcMain.handle('assistant:get', () => {
+ipcMain.on('aifig:features', (e) => {
+  e.returnValue = { assistant: assistantOn }
+})
+
+if (assistantOn) ipcMain.handle('assistant:get', () => {
   const s = readAssistant()
   return {
     provider: s?.provider ?? null,
@@ -200,7 +215,7 @@ ipcMain.handle('assistant:get', () => {
   }
 })
 
-ipcMain.handle('assistant:save', async (_e, s) => {
+if (assistantOn) ipcMain.handle('assistant:save', async (_e, s) => {
   const prev = readAssistant()
   const next = s.provider ? { provider: s.provider, model: s.model || '', baseUrl: s.baseUrl || '', key: s.provider === 'mock' ? '' : s.key || (prev?.provider === s.provider ? prev?.key : '') || '' } : null
   const secure = !!vault.backend()
@@ -312,7 +327,7 @@ function buildMenu() {
         },
         { type: 'separator' },
         { id: 'settings', label: tr('settings'), accelerator: 'CmdOrCtrl+,', click: send('settings') },
-        { id: 'assistant-settings', label: tr('assistantSettings'), click: send('assistant-settings') },
+        ...(assistantOn ? [{ id: 'assistant-settings', label: tr('assistantSettings'), click: send('assistant-settings') }] : []),
         { id: 'activity', label: tr('activity'), click: send('activity') },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' },

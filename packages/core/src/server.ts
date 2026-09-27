@@ -7,7 +7,7 @@ import * as encoding from 'lib0/encoding'
 import { WebSocketServer, type WebSocket } from 'ws'
 import * as syncProtocol from 'y-protocols/sync'
 import type { CallerInfo, Capability, ClientMessage, PermissionDecision, ServerMessage } from '@aifig/shared'
-import { CAPABILITIES, CORE_PORT, SNIPPET_PORT, snippetOrigin, type CallRequest } from '@aifig/shared'
+import { CAPABILITIES, CORE_PORT, FEATURES, SNIPPET_PORT, snippetOrigin, type CallRequest } from '@aifig/shared'
 import { startSnippetHost } from './snippet-host'
 import { zipFolder } from './zip'
 import { randomUUID } from 'node:crypto'
@@ -91,8 +91,9 @@ export async function startCore(port = CORE_PORT) {
   const permissions = PermissionBroker.at(home, activity)
   const secrets = auditedStore(openSecretStore(), activity)
   core.security = { permissions, activity }
-  const assistant = new Assistant(core, secrets, activity, Assistant.settingsPath(home))
-  await assistant.load()
+  // the built-in assistant is behind a build-time flag (off by default): no settings, routes or key storage
+  const assistant = FEATURES.assistant ? new Assistant(core, secrets, activity, Assistant.settingsPath(home)) : null
+  await assistant?.load()
   const snippets = await startSnippetHost(core.registry, port === CORE_PORT ? SNIPPET_PORT : port + 1)
   const conns = new Set<Conn>()
   const bound = new WeakSet<Board>()
@@ -234,8 +235,8 @@ export async function startCore(port = CORE_PORT) {
         }
         return json(res, 200, { ok: true, removed: permissions.revoke(subject, body.capability, body.target, actor), grants: permissions.grants() })
       }
-      if (url.pathname === '/api/assistant/settings' && req.method === 'GET') return json(res, 200, assistant.settings())
-      if (url.pathname === '/api/assistant/settings' && req.method === 'POST') {
+      if (assistant && url.pathname === '/api/assistant/settings' && req.method === 'GET') return json(res, 200, assistant.settings())
+      if (assistant && url.pathname === '/api/assistant/settings' && req.method === 'POST') {
         try {
           const r = await assistant.save(JSON.parse((await readBody(req)) || '{}'), PERSON)
           return json(res, 200, { ok: true, ...r, ...assistant.settings() })
@@ -251,13 +252,13 @@ export async function startCore(port = CORE_PORT) {
         if (!body.caller) body.caller = { id: 'anonymous', name: 'Agent', client: 'http', kind: 'agent' }
         return json(res, 200, await core.call(body))
       }
-      if (url.pathname === '/api/assistant/status') return json(res, 200, assistant.status())
-      if (url.pathname === '/api/assistant/config' && req.method === 'POST') {
+      if (assistant && url.pathname === '/api/assistant/status') return json(res, 200, assistant.status())
+      if (assistant && url.pathname === '/api/assistant/config' && req.method === 'POST') {
         // the desktop shell hands over settings from safeStorage; they stay in memory here
         assistant.configure(JSON.parse((await readBody(req)) || '{}'))
         return json(res, 200, { ok: true, ...assistant.status() })
       }
-      if (url.pathname === '/api/assistant/run' && req.method === 'POST') {
+      if (assistant && url.pathname === '/api/assistant/run' && req.method === 'POST') {
         const body = JSON.parse((await readBody(req)) || '{}')
         try {
           return json(res, 200, { ok: true, result: await assistant.run(body.board, body.command, body.ids ?? []) })
@@ -341,8 +342,8 @@ export async function startCore(port = CORE_PORT) {
         res.writeHead(200, { 'content-type': 'image/png' })
         return res.end(Buffer.from(r.image!.data, 'base64'))
       }
-      // built canvas app (npm run build) — optional single-process mode
-      if (req.method === 'GET' && fs.existsSync(distDir)) {
+      // built canvas app (npm run build) — optional single-process mode; unknown API paths stay a JSON 404
+      if (req.method === 'GET' && fs.existsSync(distDir) && !url.pathname.startsWith('/api/')) {
         if (!policy.hostOk(req.headers.host)) return json(res, 403, { ok: false, error: 'Forbidden host' })
         const rel = url.pathname === '/' ? '/index.html' : url.pathname
         let file = path.join(distDir, path.normalize(rel))
