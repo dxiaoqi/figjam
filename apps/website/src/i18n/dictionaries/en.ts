@@ -153,7 +153,7 @@ export default function en(s: Site) {
         body: 'A Skill is a standard Agent Skill folder that any agent can read, plus an optional canvas extension: block types with fields and card templates, relations, layouts such as a positioning matrix or a timeline, and actions. Or make one from a card you already like with Save as block type.',
         points: [
           'L0 is declarative; L1 may call tools — the first use asks you',
-          'research-kit and competitor-kit are built in',
+          'research-kit, product-kit, arch-kit, prototype-kit and lit-kit are built in',
           `${s.cli} skill new and ${s.cli} skill dev with hot reload`,
           'Every call and decision lands in the board’s activity log',
         ],

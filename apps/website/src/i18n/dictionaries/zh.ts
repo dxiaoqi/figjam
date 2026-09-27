@@ -132,7 +132,7 @@ export default function zh(s: Site): Dict {
         eyebrow: 'Skill',
         title: '用一个 SKILL.md，教会画布你的领域。',
         body: 'Skill 就是标准的 Agent Skill 目录，任何 Agent 都能读懂；再加一个可选的画布扩展：带字段和卡片模板的块类型、关系、定位矩阵或时间线这样的布局，以及动作。也可以把一张现成的卡片「保存为块类型」。',
-        points: ['L0 为声明式；L1 可以调用工具，首次使用会先问你', '内置 research-kit 与 competitor-kit', `${s.cli} skill new 与 ${s.cli} skill dev，保存即热重载`, '每次调用和授权决定都记录在画板的活动日志里'],
+        points: ['L0 为声明式；L1 可以调用工具，首次使用会先问你', '内置 research-kit、product-kit、arch-kit、prototype-kit 与 lit-kit', `${s.cli} skill new 与 ${s.cli} skill dev，保存即热重载`, '每次调用和授权决定都记录在画板的活动日志里'],
         alts: {
           matrix: '由 Skill 排出的竞品定位矩阵',
           library: 'Skill 面板：competitor-kit 及其块类型与布局',
