@@ -2,6 +2,8 @@
 //   storage   asset files, a 1.0 board migrated on startup, MCP add_video / replace_asset / list_assets,
 //             live snippet files (person → applied, agent → change set, syntax error → refused), the storage
 //             panel and an inline video in headless Chrome
+//   packs     .aifigpack export over MCP / CLI / the canvas (download), import with a folder choice, history
+//             and comments, skills; a malicious pack is refused in the import dialog
 // usage: node scripts/sharing-e2e.mjs [media-dir] [--skip-build]
 //   With a media dir it saves screenshots and short clips there.
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
@@ -190,8 +192,80 @@ await page.click('[data-storage-filter="all"]')
 await page.locator('[data-storage-used-by]').first().click()
 await page.waitForTimeout(700)
 check('“Used by” selects those blocks on the canvas', (await page.evaluate(() => window.editor?.selection?.size ?? document.querySelectorAll('.ae-block.is-selected').length)) > 0)
-check('no page errors', !errors.length, errors.join(' | '))
 await stopClip?.(path.join(mediaDir, 'storage-walkthrough.mp4'))
+
+// ---- share packs -------------------------------------------------------------------------------------------
+await call(HUMAN, 'add_comment', { board, target: v.id, text: 'Can we trim the first second?' })
+await call(HUMAN, 'enable_skill', { board, name: 'prototype-kit' })
+await call(HUMAN, 'create_version', { board, name: 'Before sharing' })
+const packOut = path.join(tmp, 'out', 'Launch video review.aifigpack')
+fs.mkdirSync(path.dirname(packOut), { recursive: true })
+const mcp2 = new Client({ name: 'claude-code', version: 'sharing' })
+await mcp2.connect(new StdioClientTransport({ command: process.execPath, args: [bin, 'mcp'], env, stderr: 'ignore' }))
+const ex = JSON.parse((await mcp2.callTool({ name: 'export_pack', arguments: { board, path: packOut, include_history: true } })).content[0].text)
+check('MCP export_pack writes a pack with files, history, comments and skills', fs.existsSync(packOut) && ex.includes.history && ex.includes.comments && ex.includes.skills.includes('prototype-kit') && ex.files > 6, JSON.stringify(ex.includes))
+const exAgain = await mcp2.callTool({ name: 'export_pack', arguments: { board, path: packOut } })
+check('…and never overwrites an existing file unless asked', exAgain.isError && /already exists/.test(exAgain.content[0].text))
+const packBytes = fs.readFileSync(packOut)
+check('the pack holds no access token and no grants file', !packBytes.includes(Buffer.from(tokenFor(home))) && !packBytes.includes(Buffer.from('permissions.json')))
+await mcp2.close()
+const un = cli('unpack', packOut, '--to', path.join(tmp, 'Shared'))
+check('aifig unpack checks the pack and opens the board in the chosen folder', un.status === 0 && fs.existsSync(path.join(tmp, 'Shared', 'Launch video review.aifig')) && fs.existsSync(path.join(tmp, 'Shared', 'Launch video review.assets')) && /1 comment threads/.test(un.stdout), un.stdout.trim() || un.stderr.trim())
+const cp = cli('--board', board, 'pack', '-o', path.join(tmp, 'out', 'cli.aifigpack'), '--no-comments')
+check('aifig pack --no-comments', cp.status === 0 && /no comments/.test(cp.stdout), cp.stdout.trim() || cp.stderr.trim())
+
+// the canvas: export (download) and import (upload → preview → folder → open)
+await page.keyboard.press('Escape')
+const dlWait = page.waitForEvent('download', { timeout: 15000 })
+await page.click('[data-menu-export-pack]', { timeout: 1000 }).catch(async () => {
+  await page.evaluate(() => window.dispatchEvent(new Event('aifig:export-pack')))
+})
+await page.waitForSelector('[data-export-pack]')
+await page.waitForTimeout(500)
+if (mediaDir) await page.screenshot({ path: path.join(mediaDir, 'pack-export.png') })
+await page.click('[data-pack-export]')
+const dl = await dlWait
+fs.mkdirSync(path.join(tmp, 'downloads'), { recursive: true })
+const dlPath = path.join(tmp, 'downloads', await dl.suggestedFilename())
+await dl.saveAs(dlPath)
+check('“Share as pack” downloads a .aifigpack in the browser', dlPath.endsWith('.aifigpack') && fs.statSync(dlPath).size > 10_000, `${path.basename(dlPath)} ${fs.statSync(dlPath).size} bytes`)
+const stopPackClip = mediaDir ? await startClip(page, tmp) : null
+await page.evaluate(() => window.dispatchEvent(new CustomEvent('aifig:import-pack', { detail: {} })))
+await page.waitForSelector('[data-import-pack]')
+await page.setInputFiles('[data-pack-input]', packOut)
+await page.waitForSelector('[data-pack-preview]', { timeout: 15000 })
+const dest = path.join(tmp, 'Imported')
+await page.fill('[data-pack-dest]', dest)
+await page.waitForTimeout(700)
+if (mediaDir) await page.screenshot({ path: path.join(mediaDir, 'pack-import.png') })
+await page.click('[data-pack-import]')
+await page.waitForSelector('[data-import-pack]', { state: 'detached', timeout: 15000 })
+await page.waitForTimeout(1800)
+const opened = await page.evaluate(() => new URL(location.href).searchParams.get('board'))
+const importedInfo = (await call(HUMAN, 'get_storage', { board: opened })).result
+check('importing in the canvas saves the board where chosen and switches to it', importedInfo.board.externalPath === path.join(dest, 'Launch video review.aifig') && importedInfo.assets.length >= 5, importedInfo.board.externalPath)
+const importedThreads = (await call(HUMAN, 'get_threads', { board: opened })).result.threads.length
+check('…with its history and comments', importedInfo.history.versions >= 1 && importedThreads === 1, `${importedInfo.history.versions} versions, ${importedThreads} threads`)
+await page.waitForSelector('[data-video-block]', { timeout: 10000 })
+await page.waitForTimeout(800)
+if (mediaDir) await page.screenshot({ path: path.join(mediaDir, 'pack-imported-board.png') })
+await stopPackClip?.(path.join(mediaDir, 'pack-import.mp4'))
+
+// a malicious pack (zip-slip) is refused in the dialog, nothing is written
+{
+  const { zipEntries } = await import('../packages/core/src/zip.ts')
+  const evil = path.join(tmp, 'out', 'evil.aifigpack')
+  fs.writeFileSync(evil, zipEntries([{ name: 'manifest.json', data: Buffer.from('{"format":"aifigpack","version":1,"files":[]}') }, { name: '../../escape.txt', data: Buffer.from('pwned') }]))
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('aifig:import-pack', { detail: {} })))
+  await page.setInputFiles('[data-pack-input]', evil)
+  await page.waitForSelector('[data-pack-error]', { timeout: 10000 })
+  const msg = await page.textContent('[data-pack-error]')
+  check('a malicious pack is refused in the import dialog', /Unsafe path/.test(msg ?? '') && !fs.existsSync(path.join(tmp, 'escape.txt')), msg?.slice(0, 90))
+  if (mediaDir) await page.screenshot({ path: path.join(mediaDir, 'pack-refused.png') })
+  await page.keyboard.press('Escape')
+}
+
+check('no page errors', !errors.length, errors.join(' | '))
 await ctx.close()
 await browser.close()
 

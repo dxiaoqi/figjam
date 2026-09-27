@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import path from 'node:path'
 import { Command } from 'commander'
 import { callCore } from './client'
 import { TEMPLATE_IDS, type AnyToolName, type CallerInfo } from '@aifig/shared'
@@ -245,6 +246,41 @@ program
       console.log(r.note)
     })
   })
+
+program
+  .command('pack')
+  .description('share the board as a .aifigpack (board, files, skills; --history, --no-comments)')
+  .option('-o, --out <file>', 'where to write it (default: ./<title>.aifigpack)')
+  .option('--history', 'include version history')
+  .option('--no-comments', 'leave comment threads out')
+  .option('--force', 'overwrite an existing file')
+  .action(async (o) => {
+    let out = o.out
+    if (!out) {
+      const b = await callCore('get_board', { board: program.opts().board }, caller())
+      const title = b.ok ? String((b.result as { markdown: string }).markdown.match(/^# (.+) \(board id/)?.[1] ?? 'board') : 'board'
+      out = `${title.replace(/[\\/:*?"<>|]+/g, '-')}.aifigpack`
+    }
+    return run('export_pack', { path: path.resolve(out), include_history: !!o.history, include_comments: o.comments !== false, overwrite: !!o.force }, (r) => {
+      console.log(`✓ ${r.path} (${mb(r.size)}, ${r.files} files${r.includes.history ? ', with history' : ''}${r.includes.comments ? '' : ', no comments'}${r.includes.skills.length ? `, skills: ${r.includes.skills.join(', ')}` : ''})`)
+      for (const n of r.notes ?? []) console.log(`  ${n}`)
+    })
+  })
+
+program
+  .command('unpack <file>')
+  .description('open a .aifigpack: check it, save the board in a folder (default ~/Documents/ai-figma) and open it')
+  .option('--to <dir>', 'folder for the board')
+  .option('--install-skills', 'also install the skills in the pack')
+  .action((file: string, o) =>
+    run('import_pack', { path: path.resolve(file), dest: o.to ? path.resolve(o.to) : undefined, install_skills: !!o.installSkills }, (r) => {
+      console.log(`✓ opened ${r.board.id} "${r.board.title}" → ${r.path}`)
+      console.log(`  ${r.board.blockCount} blocks, ${r.history} versions, ${r.comments} comment threads`)
+      if (r.skills.installed.length) console.log(`  installed skills: ${r.skills.installed.join(', ')}`)
+      if (r.next) console.log(`  ${r.next}`)
+      for (const n of r.notes ?? []) console.log(`  ${n}`)
+    }),
+  )
 
 program
   .command('storage')

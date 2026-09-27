@@ -18,7 +18,9 @@ import { buildMcpServer } from './mcp'
 import { ActivityLog } from './activity'
 import { Assistant } from './assistant'
 import { localPolicy, presentedToken, selectWsProtocol, tokenGuard, tokensEqual } from './auth'
-import { ASSET_PATH_RE, assetKeyFor, receiveUpload, serveAsset } from './asset-routes'
+import { ASSET_PATH_RE, assetKeyFor, incomingDir, receiveUpload, saveBody, serveAsset, tempName } from './asset-routes'
+import { defaultPackDir } from './api'
+import { inspectPack, PACK_LIMITS } from './pack'
 import { aifigHome, type Board } from './board'
 import { PermissionBroker } from './permissions'
 import { auditedStore, openSecretStore } from './secrets'
@@ -273,6 +275,29 @@ export async function startCore(port = CORE_PORT) {
         if (!board) return json(res, 404, { ok: false, error: 'No such board' })
         const r = await receiveUpload(req, board, url)
         return json(res, r.status, r.body)
+      }
+      // share packs: download one (browser export), or upload one to import (checked before anything is extracted)
+      const packGet = url.pathname.match(/^\/api\/boards\/([\w-]+)\/pack\.aifigpack$/)
+      if (packGet && req.method === 'GET') {
+        const out = path.join(incomingDir(home), tempName('.aifigpack'))
+        const r = await core.call({ tool: 'export_pack', args: { board: packGet[1], path: out, include_history: url.searchParams.get('history') === '1', include_comments: url.searchParams.get('comments') !== '0' }, caller: PERSON })
+        if (!r.ok) return json(res, 400, r)
+        const name = `${(core.registry.get(packGet[1])?.title ?? 'board').replace(/[\\/:*?"<>|]+/g, '-')}.aifigpack`
+        res.writeHead(200, { 'content-type': 'application/zip', 'content-length': fs.statSync(out).size, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`, 'cache-control': 'no-store', 'x-aifig-pack': JSON.stringify((r.result as { includes: unknown }).includes) })
+        const stream = fs.createReadStream(out)
+        stream.on('close', () => fs.rmSync(out, { force: true }))
+        return stream.pipe(res)
+      }
+      if (url.pathname === '/api/packs' && req.method === 'POST') {
+        const file = path.join(incomingDir(home), tempName('.aifigpack'))
+        try {
+          const size = await saveBody(req, file, PACK_LIMITS.maxTotal + 64 * 1024 * 1024)
+          const { manifest } = inspectPack(file)
+          return json(res, 200, { ok: true, path: file, size, manifest, defaultDest: defaultPackDir() })
+        } catch (e) {
+          fs.rmSync(file, { force: true })
+          return json(res, (e as { status?: number }).status ?? 400, { ok: false, error: `This pack can’t be opened: ${(e as Error).message}` })
+        }
       }
       if (url.pathname === '/api/call' && req.method === 'POST') {
         const body = JSON.parse((await readBody(req)) || '{}') as CallRequest

@@ -241,6 +241,28 @@ export const toolDefs = {
       'Get editable files (index.html, style.css, script.js) for an inline web snippet, to change with your own file tools. Saves are picked up live; for the next 30 minutes each save becomes a change set from you for the person to review (syntax errors are reported, not applied). Prefer update_snippet for small changes.',
     input: { board, id: z.string().describe('Web snippet block id') },
   },
+  export_pack: {
+    title: 'Export share pack',
+    description:
+      'Write the board as a .aifigpack for someone else: the board, every file it uses, the skills it has enabled, and optionally its version history and comments, with a manifest of checksums. Access tokens, permission grants and secrets are never included. Refuses to overwrite an existing file unless `overwrite`.',
+    input: {
+      board,
+      path: z.string().describe('Absolute path of the .aifigpack to write.'),
+      include_history: z.boolean().optional().describe('Add the version history (default false).'),
+      include_comments: z.boolean().optional().describe('Keep comment threads (default true).'),
+      overwrite: z.boolean().optional(),
+    },
+  },
+  import_pack: {
+    title: 'Import share pack',
+    description:
+      'Open a .aifigpack: every file is checked (paths, sizes, checksums) before anything is written, then the board lands in `dest` as <Title>.aifig + <Title>.assets/ (never replacing existing files) and opens. Skills in the pack are installed only with `install_skills`.',
+    input: {
+      path: z.string().describe('Absolute path of the .aifigpack.'),
+      dest: z.string().optional().describe('Folder for the board (default: ~/Documents/ai-figma).'),
+      install_skills: z.boolean().optional(),
+    },
+  },
   group_into_frame: {
     title: 'Group into frame',
     description: 'Wrap existing top-level blocks in a new titled frame, keeping their arrangement.',
@@ -519,6 +541,7 @@ export const humanToolDefs = {
   get_notices: { input: { board: z.string().optional() } },
   dismiss_notice: { input: { id: z.string() } },
   get_storage: { input: { board } },
+  inspect_pack: { input: { path: z.string() } },
   cleanup_assets: { input: { board, dry_run: z.boolean().optional() } },
   reveal_asset: {
     input: {

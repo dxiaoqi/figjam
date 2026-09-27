@@ -310,6 +310,7 @@ ipcMain.on('aifig:token', (e) => {
 // ---- files -------------------------------------------------------------------
 
 async function openFile(file) {
+  if (file && file.toLowerCase().endsWith('.aifigpack')) return openPack(file)
   if (!file) {
     const r = await dialog.showOpenDialog(win, { title: tr('openBoard'), filters: [{ name: tr('boardFile'), extensions: ['aifig'] }], properties: ['openFile'] })
     if (r.canceled || !r.filePaths[0]) return
@@ -323,6 +324,42 @@ async function openFile(file) {
     dialog.showErrorBox(tr('openFailed'), String(e.message ?? e))
   }
 }
+
+/** A share pack: the canvas shows what's inside and asks where to put it. */
+async function openPack(file) {
+  if (!file) {
+    const r = await dialog.showOpenDialog(win, { title: tr('openPack'), filters: [{ name: tr('packFile'), extensions: ['aifigpack'] }], properties: ['openFile'] })
+    if (r.canceled || !r.filePaths[0]) return
+    file = r.filePaths[0]
+  }
+  win?.webContents.send('menu', 'open-pack', path.resolve(file))
+}
+
+const SAVE_KINDS = {
+  pack: { ext: 'aifigpack', name: () => tr('packFile') },
+  zip: { ext: 'zip', name: () => 'ZIP' },
+  html: { ext: 'html', name: () => 'HTML' },
+}
+ipcMain.handle('dialog:folder', async (_e, defaultPath) => {
+  const r = await dialog.showOpenDialog(win, { title: tr('chooseFolder'), defaultPath: typeof defaultPath === 'string' ? defaultPath : app.getPath('documents'), properties: ['openDirectory', 'createDirectory'] })
+  return r.canceled ? null : (r.filePaths[0] ?? null)
+})
+ipcMain.handle('dialog:save', async (_e, opts) => {
+  const kind = opts?.kind === 'folder' ? 'folder' : SAVE_KINDS[opts?.kind] ? opts.kind : 'pack'
+  const name = String(opts?.defaultName ?? 'board').replace(/[\\/:*?"<>|]+/g, '-')
+  if (kind === 'folder') {
+    const r = await dialog.showOpenDialog(win, { title: tr('chooseFolder'), defaultPath: app.getPath('documents'), properties: ['openDirectory', 'createDirectory'] })
+    return r.canceled || !r.filePaths[0] ? null : path.join(r.filePaths[0], name)
+  }
+  const k = SAVE_KINDS[kind]
+  const r = await dialog.showSaveDialog(win, { title: tr('savePack'), defaultPath: path.join(app.getPath('documents'), name), filters: [{ name: k.name(), extensions: [k.ext] }] })
+  return r.canceled ? null : (r.filePath ?? null)
+})
+// only files the canvas just wrote through a save dialog: packs and web exports
+ipcMain.on('shell:reveal', (_e, file) => {
+  if (typeof file !== 'string' || !path.isAbsolute(file) || !/\.(aifigpack|zip|html)$|[\\/][^\\/]+-web$/i.test(file) || !fs.existsSync(file)) return
+  shell.showItemInFolder(file)
+})
 
 async function saveAs() {
   if (!state.boardId) return
@@ -377,6 +414,7 @@ function buildMenu() {
       submenu: [
         { id: 'new-board', label: tr('newBoard'), accelerator: 'CmdOrCtrl+N', click: send('new-board') },
         { id: 'open', label: tr('open'), accelerator: 'CmdOrCtrl+O', click: () => openFile() },
+        { id: 'open-pack', label: tr('openPack'), click: () => openPack() },
         {
           id: 'open-recent',
           label: tr('openRecent'),
@@ -396,6 +434,8 @@ function buildMenu() {
             { label: 'SVG…', click: send('export', 'svg') },
             { label: 'JSON…', click: send('export', 'json') },
             { label: 'Markdown…', click: send('export', 'md') },
+            { type: 'separator' },
+            { id: 'share-pack', label: tr('sharePack'), click: send('export-pack') },
           ],
         },
         { type: 'separator' },
@@ -612,18 +652,34 @@ async function createWindow() {
   } catch (e) {
     dialog.showErrorBox(tr('startFailed'), String(e.message ?? e))
   }
-  const fileArg = process.argv.find((a) => a.endsWith('.aifig'))
+  const fileArg = pendingFile ?? process.argv.find((a) => /\.aifig(pack)?$/i.test(a))
+  pendingFile = null
   if (fileArg) openFile(path.resolve(fileArg))
 }
 
 // the renderer's prefers-color-scheme doesn't track the OS everywhere (e.g. Linux), so forward it
 nativeTheme.on('updated', () => win?.webContents.send('menu', 'os-theme', nativeTheme.shouldUseDarkColors))
 
+/** A file double-clicked before the window was ready (macOS sends open-file early). */
+let pendingFile = null
 app.on('open-file', (e, file) => {
   e.preventDefault()
-  if (win) openFile(file)
+  if (win?.webContents && !win.webContents.isLoading()) openFile(file)
+  else pendingFile = file
+})
+// double-clicking a board or pack while the app runs (Windows, Linux) reaches this instance instead of a second one
+const firstInstance = app.requestSingleInstanceLock()
+if (!firstInstance) app.quit()
+app.on('second-instance', (_e, argv) => {
+  const file = argv.find((a) => /\.aifig(pack)?$/i.test(a))
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.focus()
+  }
+  if (file) openFile(path.resolve(file))
 })
 app.whenReady().then(() => {
+  if (!firstInstance) return
   createWindow()
   getTelemetry().start()
   const log = (m) => fs.appendFile(path.join(app.getPath('userData'), 'updates.log'), `${new Date().toISOString()} ${m}\n`, () => {})

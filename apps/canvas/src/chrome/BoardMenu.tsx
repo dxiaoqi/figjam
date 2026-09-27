@@ -1,4 +1,4 @@
-import { Bookmark, Check, ChevronDown, FolderOpen, HardDrive, History, Pencil, Plus, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
+import { Bookmark, Check, ChevronDown, FolderOpen, HardDrive, History, Package, PackageOpen, Pencil, Plus, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import { useId, useState } from 'react'
 import { FEATURES } from '@aifig/shared'
 import { toast } from 'sonner'
@@ -21,6 +21,7 @@ import { openBackupFolder, openVersionHistory } from '../lib/versions'
 import { useT } from '../i18n'
 import { openNewBoard } from './new-board'
 import { openStorage } from './StoragePanel'
+import { openExportPack, openImportPack } from '../lib/packs'
 
 const CURSOR = 'M14 14L26 18.5L20 20L18.5 26Z'
 
@@ -137,6 +138,13 @@ export function BoardMenu() {
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => openStorage()} data-menu-storage>
             <HardDrive className="size-4" /> {t('board.storage')}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => openExportPack()} data-menu-export-pack>
+            <Package className="size-4" /> {t('board.exportPack')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openImportPack()} data-menu-import-pack>
+            <PackageOpen className="size-4" /> {t('board.importPack')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:activity'))}>

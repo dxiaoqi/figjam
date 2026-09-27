@@ -9,6 +9,12 @@ export interface DesktopBridge {
   reportState(state: { boardId: string | null; title: string }): void
   /** Older shells don't have it. */
   setLocale?(locale: string, pref: string): void
+  /** Native folder picker (pack import destination). */
+  pickFolder?(defaultPath?: string): Promise<string | null>
+  /** Native save dialog for a pack or web export; null when cancelled. */
+  savePath?(opts: { defaultName: string; kind: 'pack' | 'zip' | 'html' | 'folder' }): Promise<string | null>
+  /** Select a file the app just wrote in Finder / Explorer. */
+  revealPath?(file: string): void
   /** Only when the build has the built-in assistant (see FEATURES). */
   assistant?: {
     get(): Promise<{ provider: string | null; model: string; baseUrl: string; hasKey: boolean; encryption: string }>
