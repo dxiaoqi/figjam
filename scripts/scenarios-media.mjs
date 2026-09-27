@@ -103,6 +103,8 @@ for (const [locale, sfx] of Object.entries(LANGS)) {
   await sleep(2200)
   await page.click('button[aria-haspopup="menu"]')
   await page.click('[data-menu-new-board]')
+  await page.waitForSelector('[data-new-board-dialog]')
+  await page.click('[data-new-board-tab-trigger="scenarios"]')
   await page.waitForSelector('[data-scenario-detail]')
   await page.click('[data-scenario="prototype"]')
   await sleep(900)

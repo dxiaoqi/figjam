@@ -263,6 +263,9 @@ export function Welcome({ theme, onClose }: { theme: ThemeMode; onClose: () => v
           {step === 0 && <UsageSharing variant="welcome" className="mt-4" />}
           {step === 1 && (
             <div className="mt-4 flex flex-wrap gap-2">
+              <Button size="sm" data-welcome-start onClick={finish}>
+                {t('welcome.start')}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -270,7 +273,7 @@ export function Welcome({ theme, onClose }: { theme: ThemeMode; onClose: () => v
                 data-welcome-templates
                 onClick={() => {
                   finish()
-                  openNewBoard()
+                  openNewBoard('blank')
                 }}
               >
                 <LayoutTemplate className="size-3.5" /> {t('welcome.template')}

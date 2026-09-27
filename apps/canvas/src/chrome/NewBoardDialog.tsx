@@ -133,7 +133,7 @@ function ScenarioDetail({ id, template, setTemplate, theme, boardName, onOpenSam
 export function NewBoardDialog({ theme, onCreate, onOpenSample }: { theme: ThemeMode; onCreate: (opts: { title?: string; template?: TemplateId }) => Promise<void>; onOpenSample: (skill: string) => Promise<void> }) {
   const t = useT()
   const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<'scenarios' | 'templates'>('scenarios')
+  const [tab, setTab] = useState<'scenarios' | 'templates'>('templates')
   const [choice, setChoice] = useState<TemplateChoice>('blank')
   const [scenario, setScenario] = useState<ScenarioId>('architecture')
   const [scenarioTemplate, setScenarioTemplate] = useState<TemplateId>(SCENARIOS.architecture.templates[0])
@@ -161,7 +161,7 @@ export function NewBoardDialog({ theme, onCreate, onOpenSample }: { theme: Theme
         setTab('templates')
         setChoice(pre as TemplateChoice)
       } else {
-        setTab('scenarios')
+        setTab('templates')
         setChoice('blank')
       }
       setTitle('')
@@ -201,11 +201,11 @@ export function NewBoardDialog({ theme, onCreate, onOpenSample }: { theme: Theme
         </DialogHeader>
         <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
           <TabsList className="w-full sm:w-auto">
-            <TabsTrigger value="scenarios" data-new-board-tab-trigger="scenarios">
-              {t('newBoard.tabScenarios')}
-            </TabsTrigger>
             <TabsTrigger value="templates" data-new-board-tab-trigger="templates">
               {t('newBoard.tabTemplates')}
+            </TabsTrigger>
+            <TabsTrigger value="scenarios" data-new-board-tab-trigger="scenarios">
+              {t('newBoard.tabScenarios')}
             </TabsTrigger>
           </TabsList>
         </Tabs>

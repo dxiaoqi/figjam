@@ -390,8 +390,9 @@ step with `Esc`, shown once, and available again from **Settings ▸ Welcome tou
 unless the URL has `?welcome=1`. An empty board shows the tool keys, three templates to fill it in place, and
 **Connect an agent**.
 
-**New board…** (board menu, ⌘N in the desktop app) opens on **Scenarios** (see [Scenarios](#scenarios)); the
-**Templates** tab has Blank and five general templates: **Research synthesis**, **Competitor analysis**, **User
+**New board…** (board menu, ⌘N in the desktop app) opens on **Templates** with **Blank** selected — an empty
+canvas, no skill enabled. The **Scenarios** tab (see [Scenarios](#scenarios)) is a second choice. The
+**Templates** tab also has five general templates: **Research synthesis**, **Competitor analysis**, **User
 journey map**, **Brainstorm** and **Meeting notes**. Templates are
 ordinary typed blocks placed by the layout engine (frames, `cluster` / `grid` / `stack` intents, no coordinates),
 written in the UI language (English or Chinese), and lint clean. Agents get the same through
@@ -460,10 +461,11 @@ aifig skill list | show <name> | enable <name> | disable <name> | activity
 
 A scenario is a use case packaged as a built-in skill — block types, card templates, layouts and a step-by-step
 agent workflow in its `SKILL.md` — plus a template in English and Chinese and a sample board. **New board ▸
-Scenarios** (also on the welcome tour and on empty boards) shows each scenario's workflow and the prompt to give
-your agent; **Create board** enables the skill on a new board and fills it from the template, **Open sample board**
-opens a copy of the finished example. Agents get the same with `create_board { template }` (scenario templates
-enable their skill; the result says to read `get_skill`) and the CLI with `aifig new-board --template <id>`.
+Scenarios** (a second tab; also offered on the welcome tour and on empty boards) shows each scenario's workflow
+and the prompt to give your agent; **Create board** enables the skill on a new board and fills it from the
+template, **Open sample board** opens a copy of the finished example. A new board without a template stays empty.
+Agents get the same with `create_board { template }` (scenario templates enable their skill; the result says to
+read `get_skill`) and the CLI with `aifig new-board --template <id>`.
 
 | Scenario | Skill | Templates | What the agent does (SKILL.md) |
 |---|---|---|---|

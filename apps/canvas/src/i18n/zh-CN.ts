@@ -171,7 +171,7 @@ export const zhCN: Messages = {
   'welcome.1.point3': '逐项接受或拒绝，随时按 Agent 撤销',
   'welcome.2.eyebrow': '试试画布',
   'welcome.2.title': '在任意位置双击即可书写',
-  'welcome.2.body': '便签自动吸附到 8px 网格，不用费心也很好看。书写时按 Tab 接着写下一张。也可以从模板开始。',
+  'welcome.2.body': '便签自动吸附到 8px 网格，不用费心也很好看。书写时按 Tab 接着写下一张。新画板默认空白，模板和场景都是可选的。',
   'welcome.2.try': '在这里试试 —— 双击虚线区域',
   'welcome.2.tryDone': '很好。按 Tab 写下一张。',
   'welcome.2.tryPlaceholder': '你的第一个想法',

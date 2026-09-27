@@ -71,7 +71,7 @@ export function EmptyState() {
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">{t('empty.templates')}</span>
-            <button className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => openNewBoard()} data-empty-all-templates>
+            <button className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => openNewBoard('blank')} data-empty-all-templates>
               {t('empty.more')} <ArrowRight className="size-3" />
             </button>
           </div>

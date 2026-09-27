@@ -70,6 +70,13 @@ await mcp.close()
 check('MCP: create_board accepts template + language and applies it directly (no review)', !!createTool?.inputSchema.properties.template && viaMcp.board.blockCount > 10 && !(pendingAfterMcp.changeSets ?? []).some((c) => c.status === 'pending'), `${viaMcp.board.blockCount} blocks`)
 const noTpl = await call('create_board', { template: 'nope' })
 check('unknown templates are refused with the valid ids', !noTpl.ok && /research-synthesis/.test(noTpl.error))
+const emptyBoard = await call('create_board', { title: 'Blank by default' })
+const emptySkills = emptyBoard.ok ? (await call('list_skills', { board: emptyBoard.result.board.id })).result.skills : []
+check(
+  'create_board without a template stays empty (no blocks, no skill enabled)',
+  emptyBoard.ok && emptyBoard.result.board.blockCount === 0 && !emptyBoard.result.template && !emptyBoard.result.skill && !emptySkills.some((s) => s.enabled),
+  `${emptyBoard.result?.board.blockCount ?? 'fail'} blocks, skills=${emptySkills.filter((s) => s.enabled).map((s) => s.name).join(',') || 'none'}`,
+)
 
 // ---- agent setup API ----------------------------------------------------------------------
 const agentsApi = (p, init = {}) => fetch(`${base}/api/agents${p}`, { ...init, headers: { ...authHeaders(env.AIFIG_HOME), ...init.headers } }).then((r) => r.json().then((j) => ({ status: r.status, ...j })))
@@ -227,7 +234,32 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   await page.click('button:has(svg.lucide-chevron-down)')
   await page.click('[data-menu-new-board]')
   await page.waitForSelector('[data-new-board-dialog]')
-  check(`[${sfx}] the new-board dialog opens on Scenarios`, (await page.locator('[data-new-board-dialog] [data-scenario]').count()) === 5 && (await page.getAttribute('[data-new-board-dialog]', 'data-new-board-tab')) === 'scenarios')
+  check(
+    `[${sfx}] the new-board dialog opens on Templates with Blank selected`,
+    (await page.getAttribute('[data-new-board-dialog]', 'data-new-board-tab')) === 'templates' &&
+      (await page.locator('[data-new-board-dialog] [data-template]').count()) === 6 &&
+      (await page.locator('[data-new-board-dialog] [data-template="blank"][aria-pressed="true"]').count()) === 1,
+  )
+  await shot(page, `new-board-dialog-${sfx}.png`)
+  const beforeBlank = (await call('list_boards')).result.boards.length
+  await page.click('[data-new-board-create]')
+  await page.waitForTimeout(1500)
+  const blankCreatedId = new URL(page.url()).searchParams.get('board')
+  const blankCreated = (await call('list_boards')).result.boards.find((b) => b.id === blankCreatedId)
+  const blankCreatedSkills = blankCreatedId ? (await call('list_skills', { board: blankCreatedId })).result.skills : []
+  check(
+    `[${sfx}] New board ▸ Blank creates an empty board with no skill enabled`,
+    (await call('list_boards')).result.boards.length === beforeBlank + 1 && blankCreated?.blockCount === 0 && !blankCreatedSkills.some((x) => x.enabled),
+    `${blankCreated?.blockCount ?? 'missing'} blocks`,
+  )
+  await page.waitForSelector('[data-empty-state]')
+  await shot(page, `empty-new-board-${sfx}.png`)
+
+  await page.click('button:has(svg.lucide-chevron-down)')
+  await page.click('[data-menu-new-board]')
+  await page.waitForSelector('[data-new-board-dialog]')
+  await page.click('[data-new-board-tab-trigger="scenarios"]')
+  check(`[${sfx}] Scenarios is the second tab`, (await page.getAttribute('[data-new-board-dialog]', 'data-new-board-tab')) === 'scenarios' && (await page.locator('[data-new-board-dialog] [data-scenario]').count()) === 5)
   await page.click('[data-new-board-dialog] [data-scenario="research"]')
   await page.waitForTimeout(150)
   await shot(page, `new-board-scenarios-${sfx}.png`)
@@ -243,10 +275,9 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   await page.click('button:has(svg.lucide-chevron-down)')
   await page.click('[data-menu-new-board]')
   await page.waitForSelector('[data-new-board-dialog]')
-  await page.click('[data-new-board-tab-trigger="templates"]')
   await page.click('[data-new-board-dialog] [data-template="research-synthesis"]')
   await page.waitForTimeout(150)
-  await shot(page, `new-board-dialog-${sfx}.png`)
+  await shot(page, `new-board-template-pick-${sfx}.png`)
   check(`[${sfx}] the new-board dialog has no overflowing text`, !(await overflowX(page, '[data-new-board-dialog] [data-template] span, [data-new-board-dialog] button')))
   const before = (await call('list_boards')).result.boards.length
   await page.click('[data-new-board-create]')

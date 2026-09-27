@@ -186,7 +186,7 @@ export const en = {
   'welcome.1.point3': 'Accept or reject item by item — undo by agent anytime',
   'welcome.2.eyebrow': 'Try the canvas',
   'welcome.2.title': 'Double-click anywhere to write',
-  'welcome.2.body': 'Stickies snap to an 8px grid and look good without effort. Press Tab while writing to start the next one. Or start from a template.',
+  'welcome.2.body': 'Stickies snap to an 8px grid and look good without effort. Press Tab while writing to start the next one. New boards start blank — templates and scenarios are optional.',
   'welcome.2.try': 'Try it here — double-click the dotted area',
   'welcome.2.tryDone': 'Nice. Press Tab for the next one.',
   'welcome.2.tryPlaceholder': 'Your first idea',

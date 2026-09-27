@@ -26,7 +26,7 @@ import { openWebExport } from './WebExport'
 
 const CURSOR = 'M14 14L26 18.5L20 20L18.5 26Z'
 
-/** The app icon's small tile (assets/brand/icon-small.svg): a sticky with an agent cursor on it. */
+/** The color brand tile (assets/brand/icon-small.svg): yellow sticky + agent cursor on the warm ink rounded-rect. */
 export function Logo({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden>
@@ -35,6 +35,15 @@ export function Logo({ className }: { className?: string }) {
       <path d={CURSOR} fill="#D97757" stroke="#1C1917" strokeWidth="3" strokeLinejoin="round" />
       <path d={CURSOR} fill="#D97757" stroke="#D97757" strokeWidth="1" strokeLinejoin="round" />
     </svg>
+  )
+}
+
+/** Header / wordmark glyph: the color tile at 24px. Drop-shadow follows the rounded-rect so it holds in light and dark. */
+export function HeaderMark({ className }: { className?: string }) {
+  return (
+    <span data-header-mark className={cn('inline-flex size-6 shrink-0', className)}>
+      <Logo className="size-full [filter:drop-shadow(0_0_0_1px_rgba(28,25,23,0.16))] dark:[filter:drop-shadow(0_0_0_1px_rgba(255,255,255,0.28))]" />
+    </span>
   )
 }
 
@@ -96,7 +105,7 @@ export function BoardMenu() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button className="chrome flex h-10 items-center gap-2.5 rounded-xl pr-3 pl-2 text-sm font-medium transition-colors hover:bg-accent/60">
-            <Mark className="size-5" />
+            <HeaderMark />
             <span className="max-w-[40vw] truncate">{title || t('board.untitled')}</span>
             <ChevronDown className="size-3.5 text-muted-foreground" />
           </button>
