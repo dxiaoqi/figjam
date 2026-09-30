@@ -75,6 +75,8 @@ export const typeFilter = store<TypeFilter>('', { type: null, where: {} })
 export const useTypeFilter = () => useSyncExternalStore(typeFilter.subscribe, typeFilter.get)
 export const filterActive = (f: TypeFilter) => !!f.type
 export const matchesFilter = (b: Block, f: TypeFilter) => !f.type || matchesQuery(b, { type: f.type, where: f.where }, currentTypes())
+/** Class for blocks that are not the active filter's matches — including labels and column titles, which are not typed blocks. */
+export const filterDimClass = (b: Block, f: TypeFilter) => (filterActive(f) && !matchesFilter(b, f) ? 'aifig-dim' : false)
 
 // ---- promote / demote (local, undoable) --------------------------------------------
 
@@ -209,6 +211,12 @@ export function TypeFilterBar() {
   const f = useTypeFilter()
   const { mode: commentMode } = useCommentPrefs()
   useT()
+  // Frame titles are drawn by the canvas engine, outside the block tree the filter class walks.
+  useEffect(() => {
+    const root = document.documentElement
+    root.toggleAttribute('data-type-filter', filterActive(f))
+    return () => root.removeAttribute('data-type-filter')
+  }, [f])
   const docVersion = editor.getDocVersion()
   const blocks = useMemo(() => editor.blocks().filter(isTypeable), [editor, docVersion])
   const reg = useTypes()
