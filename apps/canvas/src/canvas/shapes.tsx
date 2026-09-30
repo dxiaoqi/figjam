@@ -30,7 +30,7 @@ import { callCore } from '../lib/core'
 import { RichEditor, RichText } from './rich-editor'
 import { WebBlock as WebBlockLazy } from './web-block'
 import { t } from '../i18n'
-import { applyPrefix, filterActive, matchesFilter, TypeFooter, TypeHeader, useTypeFilter } from './types-ui'
+import { applyPrefix, filterDimClass, TypeFooter, TypeHeader, useTypeFilter } from './types-ui'
 
 // ---- next color (shared by the toolbar and creation tools) --------------------
 
@@ -169,7 +169,7 @@ function useTypeState(block: Block, editing: boolean, editor: Editor) {
     wasEditing.current = editing
   }, [editing, editor, block.id])
   const done = block.type === 'todo' && !!block.typeData?.todo?.done
-  return cn(block.type && `is-typed type-${block.type}`, done && 'is-done', filterActive(filter) && !matchesFilter(block, filter) && 'aifig-dim')
+  return cn(block.type && `is-typed type-${block.type}`, done && 'is-done', filterDimClass(block, filter))
 }
 
 function Sticky({ block, editing, editor }: BlockRenderProps) {
@@ -247,8 +247,10 @@ function Text({ block, editing, editor }: BlockRenderProps) {
   const style: CSSProperties = { fontSize: FONT_SIZES[size], fontWeight: bold ? 650 : 400, letterSpacing: bold ? '-0.01em' : undefined }
   const ref = useRef<HTMLDivElement>(null)
   useContentFit(block, editing, editor, ref)
+  // Column titles and axis labels are plain text. They are not filter matches, so they dim with everything else that isn't.
+  const dim = filterDimClass(block, useTypeFilter())
   return (
-    <div className="aifig-text" style={style} ref={ref}>
+    <div className={cn('aifig-text', dim)} style={style} ref={ref}>
       {editing ? (
         <RichEditor
           engine={editor}

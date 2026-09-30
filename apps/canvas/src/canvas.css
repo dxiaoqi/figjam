@@ -562,6 +562,12 @@
   filter: saturate(0.4);
   transition: opacity 160ms ease-out, filter 160ms ease-out;
 }
+/* Frame titles are not blocks, so they are not on the per-block dim path. */
+html[data-type-filter] .ae-frame-label {
+  opacity: 0.22;
+  filter: saturate(0.4);
+  transition: opacity 160ms ease-out, filter 160ms ease-out;
+}
 
 /* agent moves held back while you work settle in once you pause */
 .ae-block.is-settling {
@@ -689,6 +695,15 @@ html[data-comment-mode] .aifig-canvas [data-comment-popover] textarea {
   height: 0;
   opacity: 0.45;
   pointer-events: none;
+}
+/* A typed block's status line sits under the editor. The zero-height placeholder must
+   stay on one line there, or its second line (the “/ to set a type” hint) paints on the status. */
+.aifig-sticky-inner:has(.aifig-type-footer) .aifig-rich-host .ProseMirror p.is-editor-empty:first-child::before,
+.aifig-sticky-inner:has(.aifig-type-rows) .aifig-rich-host .ProseMirror p.is-editor-empty:first-child::before,
+.aifig-card-inner:has(.aifig-type-footer) .aifig-rich-host .ProseMirror p.is-editor-empty:first-child::before,
+.aifig-card-inner:has(.aifig-type-rows) .aifig-rich-host .ProseMirror p.is-editor-empty:first-child::before {
+  white-space: nowrap;
+  max-width: 100%;
 }
 .aifig-card .body.aifig-rich,
 .aifig-card .body .ProseMirror {

@@ -139,6 +139,11 @@ export function RichEditor(props: {
 }) {
   const onTab = useRef(props.onTab)
   onTab.current = props.onTab
+  // TipTap builds placeholder decorations once from the extension options. A callback
+  // read at decoration time stays current when the block gains a type while editing
+  // (the untyped “/ to set a type” hint must not stay painted over the status line).
+  const placeholderRef = useRef(props.placeholder)
+  placeholderRef.current = props.placeholder
   const [linkOpen, setLinkOpen] = useState(false)
   const tiptap = useEditor({
     extensions: [
@@ -151,7 +156,7 @@ export function RichEditor(props: {
         underline: false,
         link: { openOnClick: false, autolink: true, protocols: ['mailto'] },
       }),
-      Placeholder.configure({ placeholder: props.placeholder }),
+      Placeholder.configure({ placeholder: () => placeholderRef.current }),
     ],
     content: mdToHtml(props.value),
     autofocus: props.autoFocus === false ? false : 'end',
@@ -189,6 +194,16 @@ export function RichEditor(props: {
   const hostRef = useRef<HTMLDivElement>(null)
   const [blockEl, setBlockEl] = useState<HTMLElement | null>(null)
   useLayoutEffect(() => setBlockEl(hostRef.current?.closest<HTMLElement>('.ae-block') ?? null), [])
+  useLayoutEffect(() => {
+    if (!tiptap || tiptap.isDestroyed) return
+    try {
+      if (tiptap.view.isDestroyed) return
+      // Rebuild decorations so data-placeholder matches the prop (type just applied, locale changed).
+      tiptap.view.dispatch(tiptap.state.tr.setMeta('addToHistory', false))
+    } catch {
+      /* editor view not mounted yet; the placeholder callback already has the current text */
+    }
+  }, [tiptap, props.placeholder])
   // e.g. Enter in a card title moves the caret to the end of the body
   useEffect(() => {
     const host = hostRef.current
