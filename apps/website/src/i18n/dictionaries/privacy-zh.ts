@@ -18,7 +18,7 @@ export default function privacyZh(s: Site): PrivacyDict {
     boards: {
       title: '你的画板和文件',
       body: [
-        '画板是 ~/.aifig（或你设置的 AIFIG_HOME）里的 .aifig 文件。本地 Core 只监听 127.0.0.1，并且需要本机专属的访问令牌，其他电脑和网页都连不上它。',
+        '画板是 ~/.nodboard（或你设置的 NODBOARD_HOME）里的 .nodboard 文件。本地 Core 只监听 127.0.0.1，并且需要本机专属的访问令牌，其他电脑和网页都连不上它。',
         '没有账号，也没有同步服务。画板内容、文件名和路径从不会发给我们。',
       ],
     },
@@ -42,7 +42,7 @@ export default function privacyZh(s: Site): PrivacyDict {
         { name: 'locale', what: '只有语言和地区，例如 zh-CN' },
       ],
       never: '从不发送：你的姓名、邮箱、主机名或用户名、文件路径、画板内容，以及任何由此推导出的信息。',
-      off: '无论开关状态如何，设置 AIFIG_TELEMETRY=off 或 DO_NOT_TRACK=1 都会关闭它。没有配置统计服务的构建什么都不发送，也不显示这个开关。',
+      off: '无论开关状态如何，设置 NODBOARD_TELEMETRY=off 或 DO_NOT_TRACK=1 都会关闭它。没有配置统计服务的构建什么都不发送，也不显示这个开关。',
     },
     downloads: {
       title: '下载计数（本网站）',

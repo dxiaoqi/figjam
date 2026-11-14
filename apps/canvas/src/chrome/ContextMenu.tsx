@@ -38,8 +38,8 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import type { Vec } from '@aifig/canvas-engine'
-import { COLORS, FEATURES, RELATIONS, type Relation, type RouteStyle } from '@aifig/shared'
+import type { Vec } from '@nodboard/canvas-engine'
+import { COLORS, FEATURES, RELATIONS, type Relation, type RouteStyle } from '@nodboard/shared'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -177,7 +177,7 @@ export function ContextMenu() {
                 <DropdownMenuItem onSelect={run(() => editor.startEditing(ids[0]))} data-web-run>
                   <Play /> {t(blocks[0].web?.mode === 'url' ? 'menu.openHere' : 'menu.run')}
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={run(() => window.dispatchEvent(new CustomEvent('aifig:snippet-dialog', { detail: { id: ids[0] } })))} data-web-edit>
+                <DropdownMenuItem onSelect={run(() => window.dispatchEvent(new CustomEvent('nodboard:snippet-dialog', { detail: { id: ids[0] } })))} data-web-edit>
                   <Code2 /> {t(blocks[0].web?.mode === 'url' ? 'menu.changeUrl' : 'menu.editSource')}
                 </DropdownMenuItem>
                 {blocks[0].web?.mode === 'url' && blocks[0].web.url && (
@@ -208,7 +208,7 @@ export function ContextMenu() {
               </DropdownMenuItem>
             )}
             {blocks.length === 1 && (
-              <DropdownMenuItem onSelect={run(() => window.dispatchEvent(new CustomEvent('aifig:comment', { detail: ids[0] })))}>
+              <DropdownMenuItem onSelect={run(() => window.dispatchEvent(new CustomEvent('nodboard:comment', { detail: ids[0] })))}>
                 <MessageSquarePlus /> {t('menu.comment')} <DropdownMenuShortcut>M</DropdownMenuShortcut>
               </DropdownMenuItem>
             )}
@@ -259,7 +259,7 @@ export function ContextMenu() {
                     <Tags className="opacity-40" /> {t('menu.plainKeep')}
                   </DropdownMenuItem>
                   {blocks.length === 1 && isTypeable(blocks[0]) && (
-                    <DropdownMenuItem data-save-type onSelect={run(() => window.dispatchEvent(new CustomEvent('aifig:save-type', { detail: ids[0] })))}>
+                    <DropdownMenuItem data-save-type onSelect={run(() => window.dispatchEvent(new CustomEvent('nodboard:save-type', { detail: ids[0] })))}>
                       <Puzzle /> {t('skills.saveAsType')}
                     </DropdownMenuItem>
                   )}

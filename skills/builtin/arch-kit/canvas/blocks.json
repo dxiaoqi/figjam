@@ -1,5 +1,5 @@
 {
-  "$schema": "https://aifig.dev/schemas/skill-blocks-1.json",
+  "$schema": "https://nodboard.dev/schemas/skill-blocks-1.json",
   "version": 1,
   "types": {
     "module": {
@@ -52,7 +52,7 @@
       "fields": [
         { "key": "runtime", "label": "Runtime", "kind": "text", "placeholder": "Node 22" },
         { "key": "port", "label": "Port", "kind": "text", "placeholder": "47821" },
-        { "key": "entry", "label": "Entry point", "kind": "text", "placeholder": "bin/aifig.mjs core" },
+        { "key": "entry", "label": "Entry point", "kind": "text", "placeholder": "bin/nodboard.mjs core" },
         { "key": "layer", "label": "Layer", "kind": "enum", "options": ["ui", "api", "domain", "data", "infra", "tooling"] }
       ],
       "template": { "rows": ["runtime", "port"], "summary": ["entry"] },
@@ -105,7 +105,7 @@
       "fields": [
         { "key": "engine", "label": "Engine", "kind": "text", "placeholder": "Yjs files on disk" },
         { "key": "holds", "label": "Holds", "kind": "text", "placeholder": "Boards, versions" },
-        { "key": "location", "label": "Location", "kind": "text", "placeholder": "~/.aifig/boards" }
+        { "key": "location", "label": "Location", "kind": "text", "placeholder": "~/.nodboard/boards" }
       ],
       "template": { "rows": ["engine", "holds"], "summary": ["location"] },
       "i18n": { "zh-CN": { "label": "数据存储", "plural": "数据存储", "fields": { "engine": "引擎", "holds": "存放", "location": "位置" } } }

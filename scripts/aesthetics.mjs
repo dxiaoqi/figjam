@@ -26,10 +26,10 @@ fs.rmSync(output, { recursive: true, force: true })
 fs.mkdirSync(output, { recursive: true })
 
 // isolated core
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-aesthetics-'))
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-aesthetics-'))
 const port = String(47861 + Math.floor(Math.random() * 100))
-const env = { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: port, AIFIG_NO_AUTOSTART: '1' }
-const core = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'core'], { env, stdio: 'ignore' })
+const env = { ...process.env, NODBOARD_HOME: home, NODBOARD_CORE_PORT: port, NODBOARD_NO_AUTOSTART: '1' }
+const core = spawn(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'core'], { env, stdio: 'ignore' })
 for (let i = 0; i < 50; i++) {
   await new Promise((r) => setTimeout(r, 200))
   try {
@@ -40,7 +40,7 @@ for (let i = 0; i < 50; i++) {
 }
 
 const client = new Client({ name: 'claude-code', version: 'aesthetics' })
-await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/aifig.mjs'), 'mcp'], env, stderr: 'inherit' }))
+await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/nodboard.mjs'), 'mcp'], env, stderr: 'inherit' }))
 const call = async (name, args) => {
   const r = await client.callTool({ name, arguments: args })
   const text = r.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n')

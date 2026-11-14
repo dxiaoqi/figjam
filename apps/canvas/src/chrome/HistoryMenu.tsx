@@ -1,6 +1,6 @@
 import { History, Layers, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { ChangeSet } from '@aifig/shared'
+import type { ChangeSet } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,

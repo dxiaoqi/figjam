@@ -1,8 +1,8 @@
-# ai-figma
+# nodboard
 
-> Code name. A local-first infinite canvas shared by you and your AI agents.
+> A local-first infinite canvas shared by you and your AI agents.
 
-ai-figma is a whiteboard that feels good to use by hand and that Claude Code, Cursor and other agents can drive
+nodboard is a whiteboard that feels good to use by hand and that Claude Code, Cursor and other agents can drive
 through MCP or a CLI. Whatever an agent adds is laid out by the engine (tokens, 8px grid, layout intents), shows up
 live with the agent's cursor, and waits in a change set for you to accept or reject.
 
@@ -31,7 +31,7 @@ npm install
 npm run dev
 ```
 
-Open the link `npm run dev` prints (`http://127.0.0.1:47820/#token=…`), or run `npx aifig open --dev`. The core only
+Open the link `npm run dev` prints (`http://127.0.0.1:47820/#token=…`), or run `npx nodboard open --dev`. The core only
 answers clients holding its per-install access token (see [Security](#security)); the link signs this browser in once.
 `npm run dev` starts two processes:
 
@@ -41,7 +41,7 @@ answers clients holding its per-install access token (see [Security](#security))
 | ui | 47820 | The canvas app (Vite + React + our own canvas engine), a client of the core. `/api` and `/sync` are proxied to the core |
 
 Run them separately with `npm run core` and `npm run ui`. Opening the plain address shows a sign-in screen where you can
-paste the token from `npx aifig token`. If the browser ever shows
+paste the token from `npx nodboard token`. If the browser ever shows
 `504 (Outdated Optimize Dep)` (for example after changing dependencies), run `npm run dev:clean`, which clears
 Vite's dependency cache and re-bundles, then reload the page. For a single process, `npm start` builds the UI and
 the core serves it on port 47821.
@@ -62,13 +62,13 @@ described in [docs/distribution.md](docs/distribution.md).
 
 The desktop app runs the core with Electron's own Node, so nothing else needs to be installed, and signs in to it on its own. It has native menus
 and shortcuts (New Board ⌘N, Open… ⌘O, Open Recent, Save As… ⇧⌘S, Export PNG/SVG/JSON/Markdown, Undo/Redo, zoom,
-minimap, Appearance), opens `.aifig` files from anywhere (Save As keeps the chosen file in sync), follows the OS
+minimap, Appearance), opens `.nodboard` files from anywhere (Save As keeps the chosen file in sync), follows the OS
 light/dark setting, and its **Connect agent** dialog points agents at the bundled CLI/MCP.
 
-Boards live in `~/.aifig/boards/<id>.aifig` (checksummed Yjs state, see below) with their files in `<id>.assets/` and
+Boards live in `~/.nodboard/boards/<id>.nodboard` (checksummed Yjs state, see below) with their files in `<id>.assets/` and
 a readable `<id>.json` next to it (see [Files next to the board](#files-next-to-the-board)).
 The same folder (kept at `0700`) holds `access-token`, `permissions.json` and `activity.jsonl`. Override the
-location with `AIFIG_HOME`, and ports with `AIFIG_CORE_PORT` / `AIFIG_UI_PORT`. `~/.aifig/state.json` remembers the
+location with `NODBOARD_HOME`, and ports with `NODBOARD_CORE_PORT` / `NODBOARD_UI_PORT`. `~/.nodboard/state.json` remembers the
 board last active in the canvas, which is the default for tools called without `board` (agents should pass it anyway).
 
 ### Your data is safe
@@ -77,30 +77,30 @@ board last active in the canvas, which is the default for tools called without `
   the first unsaved edit. Ctrl-C, SIGTERM (quitting the desktop app), SIGHUP and crashes flush unsaved edits first;
   `kill -9` or a power cut can lose at most that last 2 s window, never corrupt the file. The readable `<id>.json`
   copy is only a convenience: it is rebuilt in a worker thread from the saved state, at most 10 s behind (and on
-  exit), so saving a 10k-block board doesn't stall the core. `AIFIG_JSON_COPY=off` turns it off (`sync` builds it
+  exit), so saving a 10k-block board doesn't stall the core. `NODBOARD_JSON_COPY=off` turns it off (`sync` builds it
   on the main thread).
 - **Version history** (board menu › *Version history…*, or the history button): a version is kept from just before
   any large edit (5+ items removed, or 25+ changed at once), every 10 minutes while a board changes, when a board is
   opened with unversioned edits, and before every restore or agent undo. Name a checkpoint any time. Versions are
   previewed read-only; restoring checkpoints the current state first and ⌘Z undoes it. Retention keeps the newest 20
   automatic versions, then one per hour for 48 hours, then one per day for 30 days; named checkpoints stay until you
-  delete them. History lives in `~/.aifig/history/<board>/`.
-- **File format.** `.aifig` files carry a header with a schema version (currently `2.0`), a SHA-256 checksum of the
+  delete them. History lives in `~/.nodboard/history/<board>/`.
+- **File format.** `.nodboard` files carry a header with a schema version (currently `2.0`), a SHA-256 checksum of the
   Yjs document and the list of asset files it needs. Older files are migrated forward on open (the original is kept in the backups); files from a newer
   *major* version are refused with a message saying to update, and are left untouched.
 - **Corruption recovery.** If a board file is truncated or fails its checksum, the core keeps the damaged file aside
   (`backups/damaged/`), loads the newest copy that verifies (Save As mirror, version or backup) and shows a banner saying
   what happened. If there's no good copy it says so — it never silently starts an empty board.
 - **Backups.** Rolling copies of every board (10 per board, at most hourly, plus one on each start and a last one when a
-  board is deleted) in `~/.aifig/backups`, or wherever `AIFIG_BACKUP_DIR` / `~/.aifig/config.json` point:
+  board is deleted) in `~/.nodboard/backups`, or wherever `NODBOARD_BACKUP_DIR` / `~/.nodboard/config.json` point:
 
   ```json
-  { "backups": { "dir": "~/Dropbox/aifig-backups", "keep": 20, "intervalMinutes": 30 },
+  { "backups": { "dir": "~/Dropbox/nodboard-backups", "keep": 20, "intervalMinutes": 30 },
     "versions": { "keepRecent": 30, "hourlyForHours": 72, "dailyForDays": 60, "intervalMinutes": 10 } }
   ```
 
-  *Open backup folder* is in the board menu and in Version history; `aifig backups --open` from a terminal. Backups are
-  plain `.aifig` files — open one with **Open…** to look inside.
+  *Open backup folder* is in the board menu and in Version history; `nodboard backups --open` from a terminal. Backups are
+  plain `.nodboard` files — open one with **Open…** to look inside.
 
 ### Files next to the board
 
@@ -111,14 +111,14 @@ editing happens through copies (below) and comes back as a new file.
 
 | Where | What |
 |---|---|
-| `~/.aifig/boards/<id>.aifig` + `<id>.assets/` | the board and its files (the core's working copy) |
-| `Name.aifig` + `Name.assets/` | a board you opened or saved with **Save As**: every save is mirrored to the file, and new files to the folder beside it |
-| `~/.aifig/history/<id>/v….aifig` | versions: the document only; their header lists the files they need from `<id>.assets/` |
-| `~/.aifig/backups/<title>--<id>/` | rolling backups, with one shared `assets/` pool (hard-linked when on the same disk) |
+| `~/.nodboard/boards/<id>.nodboard` + `<id>.assets/` | the board and its files (the core's working copy) |
+| `Name.nodboard` + `Name.assets/` | a board you opened or saved with **Save As**: every save is mirrored to the file, and new files to the folder beside it |
+| `~/.nodboard/history/<id>/v….nodboard` | versions: the document only; their header lists the files they need from `<id>.assets/` |
+| `~/.nodboard/backups/<title>--<id>/` | rolling backups, with one shared `assets/` pool (hard-linked when on the same disk) |
 
-*Why a folder beside the file and not a bundle or a zip:* the `.aifig` stays one small, checksummed file that opens,
+*Why a folder beside the file and not a bundle or a zip:* the `.nodboard` stays one small, checksummed file that opens,
 backs up and diffs like before; the files stay browsable, openable and editable in any app; and a pair travels by
-itself — move or copy `Name.aifig` together with `Name.assets/` (Finder, Explorer, `cp -r`, a USB stick) and it opens
+itself — move or copy `Name.nodboard` together with `Name.assets/` (Finder, Explorer, `cp -r`, a USB stick) and it opens
 anywhere, because files are found by content, not by path. If the folder didn't come along, the core also looks in its
 own copy, the backups and other boards (same hash, same bytes; every file is checked before it's used), and the canvas
 and the Storage panel mark anything still missing, with **Replace…** to point at it again. Backups keep their own pool
@@ -126,12 +126,12 @@ because they exist for the day the board's folder is gone.
 
 - **Migration.** Boards from format 1.x (bytes inside the document) move their files out on first open, their version
   history is rewritten the same way (versions stop carrying copies of every image), and the original file is kept
-  byte for byte in the backups (`…-before-format-1.0.aifig`). Older builds refuse 2.0 files with the usual "update"
+  byte for byte in the backups (`…-before-format-1.0.nodboard`). Older builds refuse 2.0 files with the usual "update"
   message instead of showing boards without images.
 - **Clean-up.** A file is deleted only when nothing names it: not the board, not a change waiting for review or an
   accepted change that can still be undone, not any version in the history — and nothing at all is deleted while a
   version file can't be read. The core collects such files on its own every 30 minutes (only ones older than 10
-  minutes); **Clean up unused** in the Storage panel (or `aifig assets --cleanup`) also drops files no block uses from
+  minutes); **Clean up unused** in the Storage panel (or `nodboard assets --cleanup`) also drops files no block uses from
   the board, and says what version history keeps. Backup pools are collected against the backups alone.
 - **Storage panel** (board menu › *Storage…*, desktop *File › Storage…*): where the board and its files are, the total
   size by type, every file with its type, size and the blocks that use it (click to select them), *Show in Finder /
@@ -140,40 +140,40 @@ because they exist for the day the board's folder is gone.
   a poster frame, and the block plays inline with native controls (it pauses when scrolled away). Exports show the
   poster (PNG/SVG) or link the file (Markdown/JSON); exported web pages play it.
 - **Edit snippet source in your editor.** Right-click a web snippet › *Edit files in your editor* (or the Storage
-  panel, `aifig snippet-files <id> --open`) writes `index.html`, `style.css` and `script.js` to `snippets/<block>/` in
-  the assets folder and opens them in Cursor / VS Code (`AIFIG_EDITOR` picks another; never a browser). Every save
+  panel, `nodboard snippet-files <id> --open`) writes `index.html`, `style.css` and `script.js` to `snippets/<block>/` in
+  the assets folder and opens them in Cursor / VS Code (`NODBOARD_EDITOR` picks another; never a browser). Every save
   updates the canvas live, attributed to *External editor*. An agent that asks for the files (`edit_snippet_files`)
   owns its saves for 30 minutes: each becomes a change set to review, and rejecting it rewrites the files. A save with a
   JS syntax error is reported in the canvas and not applied.
 ### Share packs
 
-**Share as pack…** (board menu; desktop *File › Export › Share Pack*) writes one `.aifigpack` for someone else: the
+**Share as pack…** (board menu; desktop *File › Export › Share Pack*) writes one `.nodboardpack` for someone else: the
 board, every file it uses, the skills enabled on it, and — if you switch them on — its version history and comment
 threads (comments are on by default, history off). It's a zip:
 
 ```
-manifest.json          format "aifigpack", version 1, what's included, and path + size + SHA-256 of every other file
-board.aifig            the board (without comments when they're left out; snippet grants cleared)
+manifest.json          format "nodboardpack", version 1, what's included, and path + size + SHA-256 of every other file
+board.nodboard            the board (without comments when they're left out; snippet grants cleared)
 assets/<sha256>.<ext>  the files (unused uploads stay home)
 skills/<name>/…        SKILL.md and canvas/ of each enabled skill (no examples, dotfiles or anything that looks like a key)
-history/v….aifig       versions, if included (without comments when they're left out)
+history/v….nodboard       versions, if included (without comments when they're left out)
 ```
 
 Access tokens, permission grants, secrets, the activity log and anything outside the board are never packed; a board
 that contains the access token itself (pasted into a block) is refused. **Open pack…** (board menu, desktop *File ›
-Open Pack…*, or double-click a `.aifigpack` — the desktop app registers the file type) shows what's inside, asks where to
-save it (default `~/Documents/ai-figma`), and opens `<Title>.aifig` + `<Title>.assets/` there, never replacing existing
+Open Pack…*, or double-click a `.nodboardpack` — the desktop app registers the file type) shows what's inside, asks where to
+save it (default `~/Documents/nodboard`), and opens `<Title>.nodboard` + `<Title>.assets/` there, never replacing existing
 files; skills are only installed when you tick *Install* (built-in ones are never overwritten). Before anything is
 written, every entry is checked: no paths that escape the folder (`..`, absolute, drive letters, backslashes), no
 symlinks, encryption, ZIP64 or duplicate names, only the files a pack can contain (no scripts), sizes within limits
 (2 GB in total, zip bombs stop at their declared size), every CRC, every checksum in the manifest, asset names matching
-their bytes, and the board's own checksum. Agents use `export_pack` / `import_pack`; the CLI `aifig pack` / `aifig
+their bytes, and the board's own checksum. Agents use `export_pack` / `import_pack`; the CLI `nodboard pack` / `nodboard
 unpack`.
 
 ### Export as a web page
 
 **Export as web page…** (board menu, right-click › Export board, desktop *File › Export › Web Page…*) writes a read-only,
-interactive page of the board that anyone can open — no ai-figma needed:
+interactive page of the board that anyone can open — no nodboard needed:
 
 ```
 Board (web)/
@@ -188,7 +188,7 @@ Board (web)/
 Readers pan and zoom (trackpad, drag, pinch, arrow keys), and every block renders as on the canvas: stickies, cards and
 typed fields, frames, routed connectors and labels, images, videos (inline player), and web snippets. Inline snippets
 **run**: each is loaded into a `sandbox="allow-scripts"` frame (opaque origin) whose document starts with a CSP that
-allows no network at all (`connect-src 'none'`, no remote images, fonts, scripts or frames); `aifig.getState()` returns
+allows no network at all (`connect-src 'none'`, no remote images, fonts, scripts or frames); `nodboard.getState()` returns
 the saved state and `setState` keeps changes in memory. A snippet takes the pointer when clicked and gives it back on
 Esc or a click elsewhere, so the canvas still pans over it. URL embeds (YouTube, Figma, …) are kept and load only when
 the reader clicks them — until then the page makes no request at all. Comments (pins with their threads) and typed
@@ -201,7 +201,7 @@ refused). The viewer is about 515 KB of JS (167 KB gzipped) and 104 KB of CSS, m
 Pages, Vercel, an S3/R2 bucket with website hosting, or any web server (`npx serve .` previews it). Videos seek best
 on hosts with HTTP range requests (all of these). `PUBLISHING.md` in every export repeats this; anyone with the link can
 see the board and download its files, so remove it from the host to take it down. Agents use `export_web`; the CLI
-`aifig export-web [-o dir] [--zip | --single] [--no-comments] [--dark]`.
+`nodboard export-web [-o dir] [--zip | --single] [--no-comments] [--dark]`.
 
 - Media elements load files from `/api/assets/<board>/<asset>` with an *asset key* (an HMAC of the access token that
   opens nothing but asset files), served with `nosniff`, a sandbox CSP and Range support; snippet source is served as
@@ -211,24 +211,24 @@ see the board and download its files, so remove it from the host to take it down
 with `EACCES` or the desktop window stays white, point every writable location somewhere the sandbox allows:
 
 ```bash
-AIFIG_HOME=/tmp/aifig npx aifig core                                   # boards, state, logs
-AIFIG_HOME=/tmp/aifig npx electron apps/desktop --user-data-dir=/tmp/aifig-electron --disable-gpu
+NODBOARD_HOME=/tmp/nodboard npx nodboard core                                   # boards, state, logs
+NODBOARD_HOME=/tmp/nodboard npx electron apps/desktop --user-data-dir=/tmp/nodboard-electron --disable-gpu
 ```
 
 `--user-data-dir` moves Electron's profile (caches, recent files, keychain-encrypted settings) out of
 `~/Library/Application Support` / `~/.config`; `--disable-gpu` avoids the GPU process and its shader cache. Use the
-same `AIFIG_HOME` in your agent's MCP config (`"env": { "AIFIG_HOME": "/tmp/aifig" }`) so the agent and the app see
+same `NODBOARD_HOME` in your agent's MCP config (`"env": { "NODBOARD_HOME": "/tmp/nodboard" }`) so the agent and the app see
 the same boards.
 
 ## Connect an agent
 
-The MCP server and the CLI are the same `bin/aifig.mjs` entry point. If the core isn't running they start it in the
+The MCP server and the CLI are the same `bin/nodboard.mjs` entry point. If the core isn't running they start it in the
 background, so agents work even when the canvas isn't open (edits appear when you open it).
 
 **Claude Code**
 
 ```bash
-claude mcp add ai-figma -- node /absolute/path/to/ai-figma/bin/aifig.mjs mcp
+claude mcp add nodboard -- node /absolute/path/to/nodboard/bin/nodboard.mjs mcp
 ```
 
 **Cursor** — `~/.cursor/mcp.json` or `.cursor/mcp.json`:
@@ -236,41 +236,41 @@ claude mcp add ai-figma -- node /absolute/path/to/ai-figma/bin/aifig.mjs mcp
 ```json
 {
   "mcpServers": {
-    "ai-figma": {
+    "nodboard": {
       "command": "node",
-      "args": ["/absolute/path/to/ai-figma/bin/aifig.mjs", "mcp"]
+      "args": ["/absolute/path/to/nodboard/bin/nodboard.mjs", "mcp"]
     }
   }
 }
 ```
 
-The stdio server and the CLI read the access token from `AIFIG_HOME` themselves — nothing to configure.
+The stdio server and the CLI read the access token from `NODBOARD_HOME` themselves — nothing to configure.
 
 **Local HTTP** (Streamable HTTP, while the core runs — nothing to launch) needs the token as a header:
 
 ```bash
-claude mcp add --transport http ai-figma http://127.0.0.1:47821/mcp --header "Authorization: Bearer $(npx aifig token)"
+claude mcp add --transport http nodboard http://127.0.0.1:47821/mcp --header "Authorization: Bearer $(npx nodboard token)"
 ```
 
-(Cursor: `{ "mcpServers": { "ai-figma": { "url": "http://127.0.0.1:47821/mcp", "headers": { "Authorization": "Bearer <token>" } } } }`.)
+(Cursor: `{ "mcpServers": { "nodboard": { "url": "http://127.0.0.1:47821/mcp", "headers": { "Authorization": "Bearer <token>" } } } }`.)
 The endpoint only answers on `127.0.0.1`, rejects other `Host` headers (DNS rebinding) and browser `Origin`s other than
 the app, and requires the token on every request. Keep configs with the token out of shared or committed files;
-`aifig token --rotate` replaces it.
+`nodboard token --rotate` replaces it.
 
 **One-click setup.** The **Connect agent** dialog (and the last step of the welcome tour) detects Claude Code and
-Cursor on this machine and adds ai-figma to their MCP settings — `~/.claude.json` (user MCP servers) and
+Cursor on this machine and adds nodboard to their MCP settings — `~/.claude.json` (user MCP servers) and
 `~/.cursor/mcp.json` — after you confirm. Choose how the agent connects: a stdio entry for the right CLI (in the
 desktop app, the bundled one; works while the app is closed) or a local HTTP entry (`url` plus an
 `Authorization: Bearer <token>` header; the file is then kept at `0600`). It backs the existing file up next to it
-(`*.aifig-backup-<time>`), keeps every other setting and the file's indentation, writes atomically, never touches a
+(`*.nodboard-backup-<time>`), keeps every other setting and the file's indentation, writes atomically, never touches a
 file it can't parse, and does nothing when the entry is already there; **Change…** switches an existing entry.
 **Test connection** connects exactly as configured (launches the command, or calls the URL with its headers) and does
 a real MCP handshake (`initialize` → `tools/list`). The endpoints (`/api/agents…`) require the access token and only
-answer the app itself on this machine (loopback Host and Origin). `AIFIG_AGENT_CONFIG_HOME` / `AIFIG_AGENT_PATH` point detection at another home folder / PATH (tests).
+answer the app itself on this machine (loopback Host and Origin). `NODBOARD_AGENT_CONFIG_HOME` / `NODBOARD_AGENT_PATH` point detection at another home folder / PATH (tests).
 
 The same dialog keeps the copy-paste fallback: all of these configs with the correct paths and the token filled in (in the
 desktop app, for its bundled CLI). The agent's name
-and color come from its MCP client info (Claude Code, Cursor, Codex); set `AIFIG_AGENT_NAME` to override.
+and color come from its MCP client info (Claude Code, Cursor, Codex); set `NODBOARD_AGENT_NAME` to override.
 
 [`skills/ai-figma-canvas/SKILL.md`](skills/ai-figma-canvas/SKILL.md) is an Agent Skill that teaches agents how to
 use the canvas well. Copy it into `~/.claude/skills/` (or your agent's skills folder).
@@ -287,60 +287,60 @@ use the canvas well. Copy it into `~/.claude/skills/` (or your agent's skills fo
 | Collaborate | `set_status`, `begin_change_set`, `commit_change_set`, `list_change_sets` (incl. per-item rejections and reasons), `get_threads`, `reply_thread`, `resolve_thread` |
 | Types | `list_types`, `set_type` (promote / demote with `none` / update fields), `query_blocks` (by type and field); `create_blocks` accepts `type` + `fields`, `connect` accepts `relation`, `tidy` accepts `by: "type" \| "matrix"` |
 | Web snippets | `create_snippet` (https URL embed, or inline `html` / `css` / `js`), `update_snippet` — both through review |
-| Export | `export_board` (Markdown document or JSON structure), `export_pack` / `import_pack` (`.aifigpack` share packs), `export_web` (read-only interactive web page: folder, zip or single file) |
+| Export | `export_board` (Markdown document or JSON structure), `export_pack` / `import_pack` (`.nodboardpack` share packs), `export_web` (read-only interactive web page: folder, zip or single file) |
 | Versions | `list_versions`, `create_version` (named checkpoint), `restore_version` (checkpoints the current state first; from an agent it's a change set to review) |
 
-Also exposed: resource `aifig://design/tokens` and prompt `layout-best-practices`.
+Also exposed: resource `nodboard://design/tokens` and prompt `layout-best-practices`.
 
 ## CLI
 
 ```bash
-npm link                       # optional: puts `aifig` on your PATH (otherwise: node bin/aifig.mjs …)
+npm link                       # optional: puts `nodboard` on your PATH (otherwise: node bin/nodboard.mjs …)
 
-aifig boards
-aifig new-board --template research-synthesis --lang zh-CN   # or: aifig new-board "Title"; aifig templates
-aifig read                                         # outline of the board open in the canvas
-aifig add "Fast onboarding" "Offline first" --frame "Principles" --intent "Capture principles"
-aifig add "FigJam::Great feel, cloud-first" "tldraw::Best canvas SDK" --kind card --layout row
-aifig add --from-json plan.json                    # any create_blocks payload
-aifig connect <fromId> <toId> --label "leads to" --route elbow
-aifig route <connectorId...> --style curved         # curved | elbow | straight
-aifig route <connectorId> --waypoints "400,120;400,480"   # elbow bends (--clear-waypoints to auto-route)
-aifig update <id> --rotate 15
-aifig image ./sketch.png --width 320 --inside "Inspiration"  # or an https:// URL
-aifig video ./demo.mp4 --poster ./demo.png         # MP4 / WebM, plays inline
-aifig assets                                       # files next to the board: type, size, users, locations
-aifig assets --cleanup [--dry-run]                 # remove files no block uses (history keeps what it needs)
-aifig replace <assetId|blockId> ./new.png          # --part poster|html|css|js
-aifig snippet-files <id> [--open]                  # editable index.html / style.css / script.js, live
-aifig storage [--reveal]                           # where the board, its files, history and backups are
-aifig pack -o plan.aifigpack --history [--no-comments]   # share pack: board, files, skills (+ history, comments)
-aifig unpack plan.aifigpack --to ~/Boards [--install-skills]  # check, save as <Title>.aifig + .assets, open
-aifig export-web -o site/ [--zip | --single]       # read-only web page: works from file:// and any static host
-aifig tidy --frame "Principles"
-aifig lint
-aifig snapshot -o board.png                        # --dark, --frame, --ids a,b,c, .svg
-aifig export --format md -o board.md               # md | json | png | svg (md/json print to stdout without -o)
-aifig status "Clustering interview notes…"
-aifig changes                                      # change sets and their review status
-aifig accept | aifig reject [id] --reason "…"      # review from the terminal
-aifig types                                        # built-in block types and their fields
-aifig add "? why do teams churn" --type question
-aifig set-type <id> hypothesis --status supported  # or: aifig set-type <id> none (fields are kept)
-aifig query --type hypothesis --status unverified
-aifig tidy --frame "Synthesis" --by matrix --field status
-aifig snippet --url https://www.figma.com/proto/…  # or --html @demo.html --css @demo.css --js @demo.js
-aifig snippet-update <id> --js @demo.js
-aifig versions                                     # version history (auto snapshots, checkpoints, pre-restore states)
-aifig checkpoint "Before clustering"               # named checkpoint
-aifig --human restore <versionId>                  # restore now (without --human it goes through review)
-aifig backups [--open]                             # print / open the backup folder
-aifig call <tool> '<json args>'                    # anything in the Canvas API
-aifig open [--dev] [--print]                       # open the canvas in a browser, signed in
-aifig token [--rotate]                             # the local access token (for HTTP MCP configs)
-aifig permissions                                  # remembered grants and pending requests
-aifig permissions allow agent:claude-code network example.com   # or revoke agent:claude-code
-aifig activity [-c network|secret|permission|auth] # recent network / secret / permission / auth events
+nodboard boards
+nodboard new-board --template research-synthesis --lang zh-CN   # or: nodboard new-board "Title"; nodboard templates
+nodboard read                                         # outline of the board open in the canvas
+nodboard add "Fast onboarding" "Offline first" --frame "Principles" --intent "Capture principles"
+nodboard add "FigJam::Great feel, cloud-first" "tldraw::Best canvas SDK" --kind card --layout row
+nodboard add --from-json plan.json                    # any create_blocks payload
+nodboard connect <fromId> <toId> --label "leads to" --route elbow
+nodboard route <connectorId...> --style curved         # curved | elbow | straight
+nodboard route <connectorId> --waypoints "400,120;400,480"   # elbow bends (--clear-waypoints to auto-route)
+nodboard update <id> --rotate 15
+nodboard image ./sketch.png --width 320 --inside "Inspiration"  # or an https:// URL
+nodboard video ./demo.mp4 --poster ./demo.png         # MP4 / WebM, plays inline
+nodboard assets                                       # files next to the board: type, size, users, locations
+nodboard assets --cleanup [--dry-run]                 # remove files no block uses (history keeps what it needs)
+nodboard replace <assetId|blockId> ./new.png          # --part poster|html|css|js
+nodboard snippet-files <id> [--open]                  # editable index.html / style.css / script.js, live
+nodboard storage [--reveal]                           # where the board, its files, history and backups are
+nodboard pack -o plan.nodboardpack --history [--no-comments]   # share pack: board, files, skills (+ history, comments)
+nodboard unpack plan.nodboardpack --to ~/Boards [--install-skills]  # check, save as <Title>.nodboard + .assets, open
+nodboard export-web -o site/ [--zip | --single]       # read-only web page: works from file:// and any static host
+nodboard tidy --frame "Principles"
+nodboard lint
+nodboard snapshot -o board.png                        # --dark, --frame, --ids a,b,c, .svg
+nodboard export --format md -o board.md               # md | json | png | svg (md/json print to stdout without -o)
+nodboard status "Clustering interview notes…"
+nodboard changes                                      # change sets and their review status
+nodboard accept | nodboard reject [id] --reason "…"      # review from the terminal
+nodboard types                                        # built-in block types and their fields
+nodboard add "? why do teams churn" --type question
+nodboard set-type <id> hypothesis --status supported  # or: nodboard set-type <id> none (fields are kept)
+nodboard query --type hypothesis --status unverified
+nodboard tidy --frame "Synthesis" --by matrix --field status
+nodboard snippet --url https://www.figma.com/proto/…  # or --html @demo.html --css @demo.css --js @demo.js
+nodboard snippet-update <id> --js @demo.js
+nodboard versions                                     # version history (auto snapshots, checkpoints, pre-restore states)
+nodboard checkpoint "Before clustering"               # named checkpoint
+nodboard --human restore <versionId>                  # restore now (without --human it goes through review)
+nodboard backups [--open]                             # print / open the backup folder
+nodboard call <tool> '<json args>'                    # anything in the Canvas API
+nodboard open [--dev] [--print]                       # open the canvas in a browser, signed in
+nodboard token [--rotate]                             # the local access token (for HTTP MCP configs)
+nodboard permissions                                  # remembered grants and pending requests
+nodboard permissions allow agent:claude-code network example.com   # or revoke agent:claude-code
+nodboard activity [-c network|secret|permission|auth] # recent network / secret / permission / auth events
 ```
 
 Global flags: `--board <id|title>`, `--as "<agent name>"` (shown on the canvas), `--human` (apply directly without
@@ -396,7 +396,7 @@ canvas, no skill enabled. The **Scenarios** tab (see [Scenarios](#scenarios)) is
 journey map**, **Brainstorm** and **Meeting notes**. Templates are
 ordinary typed blocks placed by the layout engine (frames, `cluster` / `grid` / `stack` intents, no coordinates),
 written in the UI language (English or Chinese), and lint clean. Agents get the same through
-`create_board { template, language }` and the CLI through `aifig new-board --template …`; template content applies
+`create_board { template, language }` and the CLI through `nodboard new-board --template …`; template content applies
 directly instead of as a change set. Templates live in `packages/core/src/templates.ts` and
 `scenario-templates.ts` (content) and `packages/shared/src/templates.ts` (ids, titles, the skill a template
 enables, scenarios).
@@ -415,14 +415,14 @@ organized by type. Types stay small on purpose: anything deeper belongs to Skill
 ### Skills
 
 A skill is a standard [Agent Skill](https://agentskills.io) folder — any agent can read its `SKILL.md` — with an
-optional canvas extension that ai-figma reads:
+optional canvas extension that nodboard reads:
 
 ```
 product-kit/
-  SKILL.md              # frontmatter: name, description, metadata.aifig { version, canvas, capability, permissions }
+  SKILL.md              # frontmatter: name, description, metadata.nodboard { version, canvas, capability, permissions }
   canvas/blocks.json    # block types (fields + card template, translations), relations, layouts, actions, prompts
   canvas/prompts/*.md   # prompt templates
-  examples/             # optional sample boards: sample.en.aifig, sample.zh-CN.aifig
+  examples/             # optional sample boards: sample.en.nodboard, sample.zh-CN.nodboard
 ```
 
 - **Block types** build on typed blocks: namespaced ids (`product-kit.competitor`), a sticky or card base, token
@@ -436,25 +436,25 @@ product-kit/
   cluster axes follow the field's option order (`rowOrder` / `colOrder` override it; a `"type"` axis lists type
   ids).
 - **Capabilities**: **L0** is declarative (types, templates, layouts, instructions). **L1** can also call tools by
-  name — built-in ones (`aifig.get_board`, `aifig.create_blocks`, …) or tools of MCP servers you configure in
-  `~/.aifig/mcp.json` (`{ "mcpServers": { "web": { "command": "…", "args": [] } } }` → `web.search`). The first
+  name — built-in ones (`nodboard.get_board`, `nodboard.create_blocks`, …) or tools of MCP servers you configure in
+  `~/.nodboard/mcp.json` (`{ "mcpServers": { "web": { "command": "…", "args": [] } } }` → `web.search`). The first
   use of a tool on a board asks you (allow once / always on this board / deny); results arrive as a change set,
   and every call and decision is in the board's activity log (Skills › Activity), where grants can be revoked.
   L2 (sandboxed scripts) is not supported yet.
 - Skills come from `skills/builtin` (the scenario skills `arch-kit`, `research-kit`, `product-kit`,
-  `prototype-kit`, `lit-kit`), `~/.aifig/skills` (installed) and folders
-  under `aifig skill dev`. Enable them per board in the **Skills** panel (puzzle icon, top right); disabling keeps
+  `prototype-kit`, `lit-kit`), `~/.nodboard/skills` (installed) and folders
+  under `nodboard skill dev`. Enable them per board in the **Skills** panel (puzzle icon, top right); disabling keeps
   blocks' types and fields. Agents see them through MCP: `list_skills`, `get_skill` (instructions, types, layouts),
-  `apply_skill_layout`, `run_skill_action`, and `aifig://skills/<name>/SKILL.md` resources.
+  `apply_skill_layout`, `run_skill_action`, and `nodboard://skills/<name>/SKILL.md` resources.
 - **Save as block type** (right-click a card › Set as… › Save as block type…) turns a card into a type — `Key: value`
-  lines become fields — and writes a standard skill folder to `~/.aifig/skills`, downloadable as a zip.
+  lines become fields — and writes a standard skill folder to `~/.nodboard/skills`, downloadable as a zip.
 
 ```bash
-aifig skill new persona-kit            # scaffold SKILL.md + canvas/blocks.json
-aifig skill dev ./persona-kit --enable # validate on every save, hot-reload into boards that use it
-aifig skill validate ./persona-kit     # errors point at file › path
-aifig skill install ./persona-kit      # copy into ~/.aifig/skills
-aifig skill list | show <name> | enable <name> | disable <name> | activity
+nodboard skill new persona-kit            # scaffold SKILL.md + canvas/blocks.json
+nodboard skill dev ./persona-kit --enable # validate on every save, hot-reload into boards that use it
+nodboard skill validate ./persona-kit     # errors point at file › path
+nodboard skill install ./persona-kit      # copy into ~/.nodboard/skills
+nodboard skill list | show <name> | enable <name> | disable <name> | activity
 ```
 
 ### Scenarios
@@ -465,7 +465,7 @@ Scenarios** (a second tab; also offered on the welcome tour and on empty boards)
 and the prompt to give your agent; **Create board** enables the skill on a new board and fills it from the
 template, **Open sample board** opens a copy of the finished example. A new board without a template stays empty.
 Agents get the same with `create_board { template }` (scenario templates enable their skill; the result says to
-read `get_skill`) and the CLI with `aifig new-board --template <id>`.
+read `get_skill`) and the CLI with `nodboard new-board --template <id>`.
 
 | Scenario | Skill | Templates | What the agent does (SKILL.md) |
 |---|---|---|---|
@@ -494,8 +494,8 @@ run when you double-click them; `Esc` or clicking outside stops them, and they p
 Sandbox: inline snippets are served by a separate snippet host (`localhost:<core port + 1>`, a different site from
 the app) into `sandbox="allow-scripts"` iframes (opaque origin, credentialless), with a CSP that blocks all network
 (`connect-src 'none'`, no external scripts, images, fonts or frames). They can't reach the board, files or keys; the
-only channel is `aifig.getState()` / `aifig.setState(obj)` for the snippet's own state (≤16 KB).
-`aifig.requestPermission('network' | 'neighbors')` is the hook for v2 grants (denied in v1). A heartbeat watchdog stops
+only channel is `nodboard.getState()` / `nodboard.setState(obj)` for the snippet's own state (≤16 KB).
+`nodboard.requestPermission('network' | 'neighbors')` is the hook for v2 grants (denied in v1). A heartbeat watchdog stops
 snippets that hang (endless loops) or use too much memory. URL embeds run as their own origin without top navigation.
 In the desktop app, snippets run in `<webview>`s instead, each in its own in-memory partition (`snippet-<board>-<block>`:
 separate storage, cache, cookies and permission state). The main process decides every webview's settings (sandboxed,
@@ -506,12 +506,12 @@ navigation for anything that isn't the app.
 
 ## Security
 
-**Access token.** On first start the core creates `AIFIG_HOME/access-token` (32 random bytes, mode `0600`, folder
+**Access token.** On first start the core creates `NODBOARD_HOME/access-token` (32 random bytes, mode `0600`, folder
 `0700`). The HTTP API, MCP over HTTP and the sync WebSocket (token as a subprotocol) all require it; so does every other
 route except a bare liveness answer from `/api/health`. The core listens on `127.0.0.1` only, checks `Host` (DNS
 rebinding) and `Origin` (other web pages) on every request, and sends no CORS headers. The CLI and stdio MCP read the
-token file, the desktop app gets it from its shell, a browser gets it once from the `aifig open` link (a `#fragment`,
-never sent to a server) and keeps it in localStorage. `AIFIG_TOKEN` overrides the file; `aifig token --rotate` replaces
+token file, the desktop app gets it from its shell, a browser gets it once from the `nodboard open` link (a `#fragment`,
+never sent to a server) and keeps it in localStorage. `NODBOARD_TOKEN` overrides the file; `nodboard token --rotate` replaces
 it (running cores notice).
 
 **Permissions and activity.** Agents and skills ask the core's permission broker before they
@@ -522,12 +522,12 @@ skill) and host, stored in `permissions.json`. Every decision, fetch, secret acc
 `activity.jsonl` (names and hosts only, credentials redacted) and the **Activity & permissions** dialog (board menu, or
 File menu in the desktop app). Outbound fetches by the core (images by URL, video posters) never go to loopback, private, link-local or
 metadata addresses, and redirects are re-checked. For Skills: `core.security.permissions.request({ capability, target,
-actor, source: { kind: 'skill', id }, reason })` and `activity.record(…)`, types in `@aifig/shared` (`security.ts`).
+actor, source: { kind: 'skill', id }, reason })` and `activity.record(…)`, types in `@nodboard/shared` (`security.ts`).
 
 **Secrets.** The core's `SecretStore` (for skills and integrations) only persists secrets in an OS keychain — macOS
 Keychain via `security` (the secret goes over stdin, never argv) or Linux `secret-tool` — and otherwise keeps them in
 memory for the session; they never go into boards or plain files, and every access is logged by name. Tests use
-`AIFIG_SECRET_STORE=mock`, an in-memory double that is never selected automatically.
+`NODBOARD_SECRET_STORE=mock`, an in-memory double that is never selected automatically.
 
 ### Threat model
 
@@ -535,7 +535,7 @@ memory for the session; they never go into boards or plain files, and every acce
 |---|---|
 | A website you visit calls `127.0.0.1:47821` (CSRF, reading boards) | Token required; `Origin` must be the app; no CORS headers; preflights refused |
 | DNS rebinding (`evil.example` resolving to 127.0.0.1) | `Host` must be a loopback name on the core/UI port (API, MCP, WebSocket, app files) |
-| Other users on the same machine, or the LAN | Listens on 127.0.0.1 only; token file `0600`, `AIFIG_HOME` `0700`; the token is never printed to log files |
+| Other users on the same machine, or the LAN | Listens on 127.0.0.1 only; token file `0600`, `NODBOARD_HOME` `0700`; the token is never printed to log files |
 | Prompt-injected agent exfiltrating data or reaching local services via the core | Network needs a grant or a yes in the canvas; SSRF guard blocks loopback/private/metadata addresses; everything is logged |
 | Malicious web snippet | Separate site, opaque origin, strict CSP (no network), sandboxed frame / webview with its own partition, narrow state bridge, watchdog |
 | Secrets leaking into files, boards or logs | OS keychain or session memory only; boards never hold keys; logs record names, never values |
@@ -551,9 +551,9 @@ holder declares (the CLI's `--human`), so permission prompts apply to MCP agents
 
 ```
  Claude Code / Cursor ──MCP stdio──┐
- scripts / terminal ────aifig CLI──┼──HTTP /api/call──► aifig core (Node)
+ scripts / terminal ────nodboard CLI──┼──HTTP /api/call──► nodboard core (Node)
                                    │                     ├─ Canvas API (zod-validated tools)
- Canvas app (engine) ◄─WebSocket──┘                     ├─ Yjs board documents  ─► ~/.aifig/boards
+ Canvas app (engine) ◄─WebSocket──┘                     ├─ Yjs board documents  ─► ~/.nodboard/boards
    Yjs sync + agent presence                             ├─ layout engine: tokens, intents, tidy, lint
                                                          ├─ change sets / suggestion layer
                                                          └─ headless SVG/PNG snapshots
@@ -578,14 +578,14 @@ npm-workspaces monorepo:
 
 ```
 packages/
-  shared/         @aifig/shared — tokens, model types, text measurement, Canvas API tool schemas
-  core/           @aifig/core — server (HTTP + Yjs WebSocket), boards + persistence, Canvas API, layout, snapshots, presence
-  canvas-engine/  @aifig/canvas-engine — Editor, CanvasView, input, geometry (React, Yjs)
-  cli/            @aifig/cli — aifig CLI, MCP stdio server, HTTP client with core auto-start
+  shared/         @nodboard/shared — tokens, model types, text measurement, Canvas API tool schemas
+  core/           @nodboard/core — server (HTTP + Yjs WebSocket), boards + persistence, Canvas API, layout, snapshots, presence
+  canvas-engine/  @nodboard/canvas-engine — Editor, CanvasView, input, geometry (React, Yjs)
+  cli/            @nodboard/cli — nodboard CLI, MCP stdio server, HTTP client with core auto-start
 apps/
-  canvas/         @aifig/canvas — the canvas app: block renderers, agent layer, review UI, chrome (shadcn/ui);
+  canvas/         @nodboard/canvas — the canvas app: block renderers, agent layer, review UI, chrome (shadcn/ui);
                   src/viewer is the read-only viewer of exported web pages (vite.viewer.config.ts → dist/viewer)
-bin/aifig.mjs     entry point for the CLI, `aifig core` and `aifig mcp`
+bin/nodboard.mjs     entry point for the CLI, `nodboard core` and `nodboard mcp`
 ```
 
 Workspace packages export their TypeScript sources directly (no build step); `tsx` runs the node side and Vite
@@ -607,7 +607,7 @@ MCP, a person reviewing item by item and commenting, and the agent reading the c
 **Shipped**
 
 - Desktop app (Electron) with native menus, files, recents, OS appearance, bundled CLI/MCP and a packaging script
-- Local core with Yjs boards persisted to `.aifig` files; JSON and Markdown exports (UI, CLI, MCP) plus PNG/SVG
+- Local core with Yjs boards persisted to `.nodboard` files; JSON and Markdown exports (UI, CLI, MCP) plus PNG/SVG
 - Own canvas engine: token-driven stickies, cards, headings, images and frames; rich text; routed connectors with
   waypoints; rotation; snapping with guides and spacing labels; context menu, minimap, touch, level of detail
 - Layout engine: intents, free-space placement, frame auto-grow, making room when blocks grow, tidy, lint
@@ -616,7 +616,7 @@ MCP, a person reviewing item by item and commenting, and the agent reading the c
   rest, partly accepted change sets; undo by change set or by author, including accepted work (later edits by people
   are kept)
 - Comments on blocks (`M`) that agents read and answer (`get_threads`, `reply_thread`, `resolve_thread`)
-- Typed blocks and Skills (L0 / L1, permission prompts, activity log, `aifig skill new/dev/validate`, Save as block
+- Typed blocks and Skills (L0 / L1, permission prompts, activity log, `nodboard skill new/dev/validate`, Save as block
   type) with five scenario skills, their templates (en, zh-CN) and sample boards
 - Agent-output aesthetics regression set (`npm run test:aesthetics`)
 
@@ -632,7 +632,7 @@ MCP, a person reviewing item by item and commenting, and the agent reading the c
 
 The UI ships in English and Simplified Chinese. It follows the OS / browser language (any `zh*` → 简体中文,
 otherwise English); **Settings** (gear, top right; ⌘, in the desktop app) and the desktop **View ▸ Language** menu
-override it. The choice is stored per machine (`localStorage` `aifig:locale`) and the desktop menus follow it.
+override it. The choice is stored per machine (`localStorage` `nodboard:locale`) and the desktop menus follow it.
 
 **How to add strings**
 
@@ -688,7 +688,7 @@ images, plus the canvas and website favicons, apple-touch icons and PWA icons), 
 
 ### Feature flags
 
-Build-time flags live in `packages/shared/src/features.ts` and are off by default. `AIFIG_FEATURE_ASSISTANT=1`
+Build-time flags live in `packages/shared/src/features.ts` and are off by default. `NODBOARD_FEATURE_ASSISTANT=1`
 brings back the built-in assistant (selection commands, provider settings, key storage via Electron `safeStorage` or
 the core's secret store): set it when building (`npm run build`, `npm run desktop:build`) — Vite and the desktop
 bundle bake it in — and, when running from source, for `npm run dev` / `npm run desktop`. Without it the assistant's
@@ -699,7 +699,7 @@ desktop suites test whichever state the flag is in.
 ### CI
 
 `npm run ci` runs typecheck, lint, every suite above, the bench budgets and the desktop e2e, one after another
-against a temporary `AIFIG_HOME` (it starts `npm run dev` for the suites that need it, on ports 47820/47821). It writes
+against a temporary `NODBOARD_HOME` (it starts `npm run dev` for the suites that need it, on ports 47820/47821). It writes
 `ci-results/<step>.log`, `results.json` and `summary.md` and exits 1 when any step fails. `--only=` / `--skip=` take
 step ids (`typecheck, lint, api, security, data-safety, skills, contrast, onboarding, sharing, e2e, aesthetics, mcp-stdio,
 mcp-http, bench, desktop`). It needs Node 22+, `npm ci` and Chrome at `/usr/local/bin/google-chrome`; the desktop step
@@ -707,7 +707,7 @@ and the bench's desktop cold start need a display (`DISPLAY`, e.g. Xvfb) and are
 
 Origin has no hosted runner: CI results are check runs that an Origin App reports on a commit, and they show up in the
 pull request's **Checks** tab (where they can be required before merging). With `ORIGIN_CHECKS_TOKEN` set (or
-`--report=origin`), `npm run ci` reports one check run per step in an "ai-figma CI" suite — queued, in progress, then
+`--report=origin`), `npm run ci` reports one check run per step in a "nodboard CI" suite — queued, in progress, then
 passed / failed with the failing checks and the end of the log. To set it up:
 
 1. Create a private Origin App with the `repository:checks:write` scope and install it on this repository; mint an

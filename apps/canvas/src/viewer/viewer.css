@@ -1,7 +1,7 @@
 @import "tailwindcss" source(none);
 @source "./";
 @source "../canvas/markdown.tsx";
-@import "@aifig/canvas-engine/styles.css";
+@import "@nodboard/canvas-engine/styles.css";
 @import "../canvas.css";
 
 /* The exported web page: only the Latin subset of Inter is bundled (CJK falls back to system fonts). */
@@ -23,7 +23,7 @@ body,
 }
 
 /* inline snippets run live; until clicked, the canvas gets the pointer */
-.aifig-viewer-activate {
+.nodboard-viewer-activate {
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -35,7 +35,7 @@ body,
   background: transparent;
   cursor: pointer;
 }
-.aifig-viewer-activate-hint {
+.nodboard-viewer-activate-hint {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -50,17 +50,17 @@ body,
   transform: translateY(2px);
   transition: opacity 140ms ease, transform 140ms ease;
 }
-.aifig-viewer-activate:hover .aifig-viewer-activate-hint,
-.aifig-viewer-activate:focus-visible .aifig-viewer-activate-hint {
+.nodboard-viewer-activate:hover .nodboard-viewer-activate-hint,
+.nodboard-viewer-activate:focus-visible .nodboard-viewer-activate-hint {
   opacity: 1;
   transform: none;
 }
-.aifig-web.is-running {
+.nodboard-web.is-running {
   outline: 2px solid var(--agent, #6e56cf);
   outline-offset: 2px;
 }
 
-.aifig-viewer-pin {
+.nodboard-viewer-pin {
   position: relative;
   display: flex;
   width: 26px;
@@ -78,18 +78,18 @@ body,
   cursor: pointer;
   transition: transform 120ms ease;
 }
-.dark .aifig-viewer-pin {
+.dark .nodboard-viewer-pin {
   background: #e7e5e4;
   color: #1c1917;
 }
-.aifig-viewer-pin:hover,
-.aifig-viewer-pin.is-open {
+.nodboard-viewer-pin:hover,
+.nodboard-viewer-pin.is-open {
   transform: scale(1.08);
 }
-.aifig-viewer-pin.is-resolved {
+.nodboard-viewer-pin.is-resolved {
   opacity: 0.55;
 }
-.aifig-viewer-pin em {
+.nodboard-viewer-pin em {
   position: absolute;
   top: -6px;
   right: -8px;
@@ -104,7 +104,7 @@ body,
   background: #fde68a;
 }
 
-.aifig-viewer-missing {
+.nodboard-viewer-missing {
   max-width: 420px;
   margin: 20vh auto;
   padding: 0 24px;
@@ -114,8 +114,8 @@ body,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .aifig-viewer-activate-hint,
-  .aifig-viewer-pin {
+  .nodboard-viewer-activate-hint,
+  .nodboard-viewer-pin {
     transition: none;
   }
 }

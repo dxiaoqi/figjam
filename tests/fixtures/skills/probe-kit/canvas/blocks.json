@@ -11,7 +11,7 @@
     }
   },
   "actions": [
-    { "id": "peek", "label": "Peek at the board", "tool": "aifig.get_board", "args": { "format": "markdown" }, "appliesTo": ["probe"] },
+    { "id": "peek", "label": "Peek at the board", "tool": "nodboard.get_board", "args": { "format": "markdown" }, "appliesTo": ["probe"] },
     { "id": "search", "label": "Search the web", "tool": "web.search", "args": { "query": "{{title}}" }, "appliesTo": ["probe"], "output": { "mode": "blocks", "type": "idea" } }
   ]
 }

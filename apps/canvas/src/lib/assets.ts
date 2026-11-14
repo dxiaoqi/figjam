@@ -1,4 +1,4 @@
-import type { Asset, AssetRole, WebSnippet } from '@aifig/shared'
+import type { Asset, AssetRole, WebSnippet } from '@nodboard/shared'
 import { apiFetch } from './auth'
 
 /**
@@ -28,7 +28,7 @@ export function uploadAsset(boardId: string, file: Blob, role: AssetRole, name?:
     const xhr = new XMLHttpRequest()
     const q = new URLSearchParams({ role, ...(name ? { name } : {}) })
     xhr.open('POST', `/api/boards/${encodeURIComponent(boardId)}/assets?${q}`)
-    const token = (globalThis as { aifigDesktop?: { token?: string } }).aifigDesktop?.token ?? localStorage.getItem('aifig:token')
+    const token = (globalThis as { nodboardDesktop?: { token?: string } }).nodboardDesktop?.token ?? localStorage.getItem('nodboard:token')
     if (token) xhr.setRequestHeader('authorization', `Bearer ${token}`)
     xhr.setRequestHeader('content-type', file.type || 'application/octet-stream')
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total)

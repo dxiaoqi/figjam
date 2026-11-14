@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { hostOf, type Block, type CallerInfo } from '@aifig/shared'
+import { hostOf, type Block, type CallerInfo } from '@nodboard/shared'
 import type { ActivityLog } from './activity'
 import type { CanvasCore } from './api'
 import { ToolError } from './api'
@@ -115,9 +115,9 @@ export class Assistant {
     private log?: ActivityLog,
     private settingsFile?: string,
   ) {
-    const env = process.env.AIFIG_ASSISTANT as ProviderName | undefined
+    const env = process.env.NODBOARD_ASSISTANT as ProviderName | undefined
     if (env) {
-      this.configure({ provider: env, key: process.env.AIFIG_ASSISTANT_KEY, model: process.env.AIFIG_ASSISTANT_MODEL, baseUrl: process.env.AIFIG_ASSISTANT_BASE_URL })
+      this.configure({ provider: env, key: process.env.NODBOARD_ASSISTANT_KEY, model: process.env.NODBOARD_ASSISTANT_MODEL, baseUrl: process.env.NODBOARD_ASSISTANT_BASE_URL })
       this.keySource = 'env'
     }
   }

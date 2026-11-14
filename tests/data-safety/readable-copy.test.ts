@@ -14,7 +14,7 @@ const fill = (b: Board, n: number) =>
 const readJson = (b: Board) => JSON.parse(fs.readFileSync(b.jsonFile, 'utf8'))
 
 test('the readable copy is built in the background, debounced, with the same shape as Board.toJSON()', async () => {
-  delete process.env.AIFIG_JSON_COPY
+  delete process.env.NODBOARD_JSON_COPY
   tempHome('readable')
   const b = Board.create('Readable')
   fill(b, 50)
@@ -35,7 +35,7 @@ test('the readable copy is built in the background, debounced, with the same sha
 })
 
 test('saving a 10k-block board keeps the main thread free of the readable copy', async () => {
-  delete process.env.AIFIG_JSON_COPY
+  delete process.env.NODBOARD_JSON_COPY
   tempHome('readable-10k')
   const b = Board.create('Big')
   fill(b, 10_000)
@@ -44,18 +44,18 @@ test('saving a 10k-block board keeps the main thread free of the readable copy',
   const saveMs = performance.now() - t0
   await readableCopies.idle()
   assert.equal(readJson(b).blocks.length, 10_000)
-  process.env.AIFIG_JSON_COPY = 'sync'
+  process.env.NODBOARD_JSON_COPY = 'sync'
   b.doc.transact(() => b.blocks.delete('s0'))
   b.saveNow()
   const t1 = performance.now()
   await readableCopies.idle()
   const inlineMs = performance.now() - t1
-  delete process.env.AIFIG_JSON_COPY
+  delete process.env.NODBOARD_JSON_COPY
   assert.ok(saveMs < inlineMs + 40, `save ${saveMs.toFixed(1)} ms vs building the copy inline ${inlineMs.toFixed(1)} ms`)
 })
 
 test('flush on exit writes pending copies synchronously; deleting a board removes its copy', async () => {
-  delete process.env.AIFIG_JSON_COPY
+  delete process.env.NODBOARD_JSON_COPY
   tempHome('readable-flush')
   const reg = new BoardRegistry()
   const b = reg.create('Flushed')
@@ -68,13 +68,13 @@ test('flush on exit writes pending copies synchronously; deleting a board remove
   assert.ok(!fs.existsSync(file))
 })
 
-test('AIFIG_JSON_COPY=off skips the readable copy', async () => {
-  process.env.AIFIG_JSON_COPY = 'off'
+test('NODBOARD_JSON_COPY=off skips the readable copy', async () => {
+  process.env.NODBOARD_JSON_COPY = 'off'
   tempHome('readable-off')
   const b = Board.create('No copy')
   fill(b, 5)
   b.saveNow()
   await readableCopies.idle()
   assert.ok(!fs.existsSync(b.jsonFile))
-  delete process.env.AIFIG_JSON_COPY
+  delete process.env.NODBOARD_JSON_COPY
 })

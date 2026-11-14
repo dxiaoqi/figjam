@@ -1,5 +1,5 @@
 // Core access token for the bench: uses scripts/lib/core-auth.mjs when present, else reads it the same way
-// (AIFIG_TOKEN, or <AIFIG_HOME>/access-token). Cores without token auth ignore it.
+// (NODBOARD_TOKEN, or <NODBOARD_HOME>/access-token). Cores without token auth ignore it.
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -13,9 +13,9 @@ try {
 
 export function tokenFor(home) {
   if (lib) return lib.tokenFor(home)
-  if (process.env.AIFIG_TOKEN) return process.env.AIFIG_TOKEN
+  if (process.env.NODBOARD_TOKEN) return process.env.NODBOARD_TOKEN
   try {
-    return fs.readFileSync(path.join(home ?? process.env.AIFIG_HOME ?? path.join(os.homedir(), '.aifig'), 'access-token'), 'utf8').trim()
+    return fs.readFileSync(path.join(home ?? process.env.NODBOARD_HOME ?? path.join(os.homedir(), '.nodboard'), 'access-token'), 'utf8').trim()
   } catch {
     return ''
   }

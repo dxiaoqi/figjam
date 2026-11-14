@@ -35,7 +35,7 @@ const log = (...m) => console.error('[bench]', ...m)
 
 // ---- setup -----------------------------------------------------------------------------------------------
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-bench-'))
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-bench-'))
 const home = path.join(tmp, 'home')
 fs.mkdirSync(home, { recursive: true })
 const dist = path.join(root, 'apps/canvas/dist')
@@ -44,11 +44,11 @@ if (!args['skip-build'] || !fs.existsSync(dist)) {
   execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'ignore' })
 }
 log('generating fixtures…')
-const fixtures = JSON.parse(execFileSync(process.execPath, ['--import', 'tsx', path.join(root, 'scripts/bench/fixtures.ts'), '200', '1000', '10000'], { cwd: root, env: { ...process.env, AIFIG_HOME: home }, encoding: 'utf8' }))
+const fixtures = JSON.parse(execFileSync(process.execPath, ['--import', 'tsx', path.join(root, 'scripts/bench/fixtures.ts'), '200', '1000', '10000'], { cwd: root, env: { ...process.env, NODBOARD_HOME: home }, encoding: 'utf8' }))
 const fx = Object.fromEntries(fixtures.map((f) => [f.blocks, f]))
 
 const report = {
-  schema: 'aifig-bench/1',
+  schema: 'nodboard-bench/1',
   at: new Date().toISOString(),
   git: (() => {
     try {
@@ -77,7 +77,7 @@ const rssMB = (pid) => {
 
 async function startCore(homeDir, port) {
   const t0 = performance.now()
-  const proc = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'core', '--port', String(port)], { env: { ...process.env, AIFIG_HOME: homeDir, AIFIG_CORE_PORT: String(port) }, stdio: 'ignore' })
+  const proc = spawn(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'core', '--port', String(port)], { env: { ...process.env, NODBOARD_HOME: homeDir, NODBOARD_CORE_PORT: String(port) }, stdio: 'ignore' })
   for (let i = 0; i < 600; i++) {
     if (await authedFetch(`http://127.0.0.1:${port}/api/health`, {}, homeDir).then((r) => r.ok, () => false)) break
     await sleep(5)
@@ -316,7 +316,7 @@ if (want('web') || want('frames')) {
 
 if (want('mcp')) {
   const core = await startCore(home, nextPort())
-  const client = new Client({ name: 'aifig-bench', version: '1.0.0' })
+  const client = new Client({ name: 'nodboard-bench', version: '1.0.0' })
   await client.connect(new StreamableHTTPClientTransport(new URL(`${core.base}/mcp`), { requestInit: { headers: authHeaders(home) } }))
   const call = async (name, args) => {
     const t0 = performance.now()
@@ -415,7 +415,7 @@ if (want('desktop') && !args['skip-desktop']) {
       const app = await electron.launch({
         executablePath: bin,
         args: [path.join(root, 'apps/desktop'), '--no-sandbox', `--user-data-dir=${path.join(tmp, `profile-${i}`)}`],
-        env: { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: String(port), DISPLAY: process.env.DISPLAY ?? ':1' },
+        env: { ...process.env, NODBOARD_HOME: home, NODBOARD_CORE_PORT: String(port), DISPLAY: process.env.DISPLAY ?? ':1' },
       })
       try {
         const win = await app.firstWindow()

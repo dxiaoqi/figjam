@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, Check, LayoutTemplate, X } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { COLORS, type ColorToken } from '@aifig/shared'
+import { COLORS, type ColorToken } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { ThemeMode } from '../board-context'
@@ -11,7 +11,7 @@ import { ScenarioChips } from './NewBoardDialog'
 import { openNewBoard } from './new-board'
 import { UsageSharing } from './UsageSharing'
 
-const SEEN_KEY = 'aifig:welcomed'
+const SEEN_KEY = 'nodboard:welcomed'
 
 /**
  * First launch only. Automated browsers (tests, screenshot scripts) skip it unless the URL has `?welcome=1`,
@@ -59,7 +59,7 @@ function Lines({ w = [70, 52] }: { w?: number[] }) {
 function BoardArt({ theme }: { theme: ThemeMode }) {
   const t = useT()
   return (
-    <div className="aifig-canvas relative h-full overflow-hidden" aria-hidden>
+    <div className="nodboard-canvas relative h-full overflow-hidden" aria-hidden>
       <div className="absolute top-8 left-1/2 h-[140px] w-[328px] -translate-x-1/2 rounded-xl border max-sm:scale-90 sm:-translate-x-[62%]" style={{ background: theme === 'dark' ? '#1A1A1D' : '#F4F4F2' }}>
         <div className="absolute -top-5 left-0 text-[10px] font-medium text-muted-foreground">{t('type.insight.plural')}</div>
         <Note theme={theme} c="yellow" className="top-4 left-4 size-[88px] rotate-[-2deg]">
@@ -69,13 +69,13 @@ function BoardArt({ theme }: { theme: ThemeMode }) {
           <Lines w={[80, 60, 40]} />
         </Note>
         <div
-          className="aifig-welcome-suggest absolute top-4 left-[224px] size-[88px] rounded-[4px] border-[1.5px] border-dashed border-[#6E56CF] p-2"
+          className="nodboard-welcome-suggest absolute top-4 left-[224px] size-[88px] rounded-[4px] border-[1.5px] border-dashed border-[#6E56CF] p-2"
           style={{ background: COLORS.teal[theme].bg, color: COLORS.teal[theme].ink }}
         >
           <Lines w={[66, 48]} />
         </div>
       </div>
-      <div className="aifig-welcome-cursor absolute top-[118px] left-1/2 translate-x-[70px] max-sm:hidden">
+      <div className="nodboard-welcome-cursor absolute top-[118px] left-1/2 translate-x-[70px] max-sm:hidden">
         <svg width="18" height="18" viewBox="0 0 22 22">
           <path d="M3 2.5 L18 9.5 L11 11.5 L8.2 18.5 Z" fill="#6E56CF" stroke="white" strokeWidth="1.6" strokeLinejoin="round" />
         </svg>
@@ -128,7 +128,7 @@ function TryArea({ theme }: { theme: ThemeMode }) {
         const r = e.currentTarget.getBoundingClientRect()
         add(Math.min(Math.max(8, e.clientX - r.left - 44), r.width - 96), Math.min(Math.max(8, e.clientY - r.top - 44), r.height - 96))
       }}
-      className="aifig-canvas relative h-full cursor-crosshair overflow-hidden"
+      className="nodboard-canvas relative h-full cursor-crosshair overflow-hidden"
     >
       {!notes.length && (
         <div className="pointer-events-none absolute inset-5 flex items-center justify-center rounded-2xl border-2 border-dashed border-foreground/15 text-center text-sm text-muted-foreground">
@@ -172,11 +172,11 @@ function TryArea({ theme }: { theme: ThemeMode }) {
 
 function AgentsArt() {
   return (
-    <div className="aifig-canvas relative flex h-full items-center justify-center gap-5" aria-hidden>
+    <div className="nodboard-canvas relative flex h-full items-center justify-center gap-5" aria-hidden>
       <span className="flex size-14 items-center justify-center rounded-2xl bg-[#D97757] text-xl font-semibold text-white shadow-md">C</span>
-      <span className="aifig-welcome-link h-px w-12 border-t-2 border-dashed border-foreground/25 sm:w-16" />
+      <span className="nodboard-welcome-link h-px w-12 border-t-2 border-dashed border-foreground/25 sm:w-16" />
       <Logo className="size-16 drop-shadow-md" />
-      <span className="aifig-welcome-link h-px w-12 border-t-2 border-dashed border-foreground/25 sm:w-16" />
+      <span className="nodboard-welcome-link h-px w-12 border-t-2 border-dashed border-foreground/25 sm:w-16" />
       <span className="flex size-14 items-center justify-center rounded-2xl bg-neutral-900 text-xl font-semibold text-white shadow-md dark:bg-neutral-700">⌘</span>
     </div>
   )

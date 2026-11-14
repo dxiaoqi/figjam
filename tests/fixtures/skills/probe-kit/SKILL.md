@@ -2,12 +2,12 @@
 name: probe-kit
 description: Test skill with one type and actions that call a built-in tool and a mock MCP tool.
 metadata:
-  aifig:
+  nodboard:
     version: 0.1.0
     canvas: canvas/blocks.json
     capability: L1
     permissions:
-      tools: [aifig.get_board, web.search]
+      tools: [nodboard.get_board, web.search]
 ---
 
 # Probe kit

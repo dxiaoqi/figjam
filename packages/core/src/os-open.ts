@@ -22,12 +22,12 @@ function onPath(name: string) {
 /**
  * How to show a file: `reveal` selects it in Finder / Explorer (Linux: opens its folder), `open` uses the
  * default app, `edit` opens source in a code editor — never the default app, which for .html would be a
- * browser running the snippet unsandboxed. AIFIG_EDITOR (e.g. "code -n") picks the editor.
+ * browser running the snippet unsandboxed. NODBOARD_EDITOR (e.g. "code -n") picks the editor.
  */
 export function osCommand(target: string, mode: OpenMode): { cmd: string; args: string[] } {
   const plat = process.platform
   if (mode === 'edit') {
-    const custom = process.env.AIFIG_EDITOR?.trim()
+    const custom = process.env.NODBOARD_EDITOR?.trim()
     if (custom) {
       const [cmd, ...args] = custom.split(/\s+/)
       return { cmd, args: [...args, target] }
@@ -52,11 +52,11 @@ export function osCommand(target: string, mode: OpenMode): { cmd: string; args: 
   return { cmd: 'xdg-open', args: [target] }
 }
 
-/** Run it detached. With AIFIG_REVEAL=off (tests, headless machines) nothing is launched. */
+/** Run it detached. With NODBOARD_REVEAL=off (tests, headless machines) nothing is launched. */
 export async function openInOs(target: string, mode: OpenMode): Promise<{ path: string; opened: boolean; command: string }> {
   const { cmd, args } = osCommand(target, mode)
   const command = [cmd, ...args].join(' ')
-  if (process.env.AIFIG_REVEAL === 'off') return { path: target, opened: false, command }
+  if (process.env.NODBOARD_REVEAL === 'off') return { path: target, opened: false, command }
   const opened = await new Promise<boolean>((resolve) => {
     try {
       const p = spawn(cmd, args, { detached: true, stdio: 'ignore' })

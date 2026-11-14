@@ -6,10 +6,10 @@ The product website: marketing pages, scenario pages and the docs entry point. N
 ```bash
 npm run website                 # from the repo root: dev server on http://127.0.0.1:47900
 npm run website:build           # static export to apps/website/out
-npm start -w @aifig/website     # serve out/ on http://127.0.0.1:47901 like a static host (brotli/gzip, cache headers)
+npm start -w @nodboard/website     # serve out/ on http://127.0.0.1:47901 like a static host (brotli/gzip, cache headers)
 ```
 
-Set `SITE_URL` (e.g. `https://aifig.dev`) for production builds: canonical URLs, `hreflang` alternates, Open Graph
+Set `SITE_URL` (e.g. `https://nodboard.dev`) for production builds: canonical URLs, `hreflang` alternates, Open Graph
 images, `sitemap.xml` and `robots.txt` are absolute and read it. It defaults to the local dev address.
 
 ## Pages
@@ -27,7 +27,7 @@ images, `sitemap.xml` and `robots.txt` are absolute and read it. It defaults to 
 
 ## Where things live
 
-- **Brand.** `src/config/site.ts` holds the product name (a code name for now), the CLI and MCP server names, the
+- **Brand.** `src/config/site.ts` holds the product name, the CLI and MCP server names, the
   repository URL and the contact email. Every page, title and command reads from it.
 - **Copy.** `src/i18n/dictionaries/en.ts` is the source of truth; `zh.ts` must have the same shape or the typecheck
   fails. Scenario and privacy copy live next to it (`scenarios-en.ts`, `privacy-en.ts` and their `-zh` twins).
@@ -36,7 +36,7 @@ images, `sitemap.xml` and `robots.txt` are absolute and read it. It defaults to 
 - **Scenarios.** `src/content/scenarios.ts` maps each scenario to its Skill (`arch-kit`, `research-kit`,
   `product-kit`, `prototype-kit`, `lit-kit`) and board template, and gives every block type a token color and icon.
   Steps, block types and prompts follow each `skills/builtin/<skill>/SKILL.md` and the New board dialog.
-- **Design tokens.** Sticky, surface and agent colors come straight from `@aifig/shared` (`TokenStyle` emits them as
+- **Design tokens.** Sticky, surface and agent colors come straight from `@nodboard/shared` (`TokenStyle` emits them as
   CSS variables); the shadcn theme values match `apps/canvas/src/index.css`.
 - **Media.** `public/media` holds WebP screenshots (each with an 800px `-800` variant for phones) and MP4/WebM clips
   from the product's demo recordings; `src/lib/media.ts` lists their sizes. Inter's Latin subset is copied into

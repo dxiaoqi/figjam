@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import type http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
-import { TOKEN_FILE, WS_PROTOCOL, WS_TOKEN_PREFIX } from '@aifig/shared'
+import { TOKEN_FILE, WS_PROTOCOL, WS_TOKEN_PREFIX } from '@nodboard/shared'
 
 /**
  * Per-install local access token. Everything that talks to the core (canvas, desktop shell, CLI, MCP over
@@ -11,15 +11,23 @@ import { TOKEN_FILE, WS_PROTOCOL, WS_TOKEN_PREFIX } from '@aifig/shared'
  * without loading the whole core.
  */
 
-export const homeDir = () => process.env.AIFIG_HOME ?? path.join(os.homedir(), '.aifig')
+export function homeDir() {
+  if (process.env.NODBOARD_HOME) return process.env.NODBOARD_HOME
+  if (process.env.AIFIG_HOME) return process.env.AIFIG_HOME
+  const next = path.join(os.homedir(), '.nodboard')
+  const prev = path.join(os.homedir(), '.aifig')
+  if (fs.existsSync(next)) return next
+  if (fs.existsSync(prev)) return prev
+  return next
+}
 export const tokenPath = (home = homeDir()) => path.join(home, TOKEN_FILE)
 
 const newToken = () => randomBytes(32).toString('base64url')
 const TOKEN_RE = /^[A-Za-z0-9_-]{32,128}$/
 
-/** Read the token if present (env `AIFIG_TOKEN` wins). Never creates one. */
+/** Read the token if present (env `NODBOARD_TOKEN` wins). Never creates one. */
 export function readToken(home = homeDir()): string | null {
-  const env = process.env.AIFIG_TOKEN?.trim()
+  const env = (process.env.NODBOARD_TOKEN ?? process.env.AIFIG_TOKEN)?.trim()
   if (env) return env
   try {
     const t = fs.readFileSync(tokenPath(home), 'utf8').trim()
@@ -42,7 +50,7 @@ function writeTokenFile(file: string, token: string, flag: 'wx' | 'w') {
 
 /** Load the token, creating it (0600) on first run and tightening loose permissions on an existing file. */
 export function loadOrCreateToken(home = homeDir()): string {
-  const env = process.env.AIFIG_TOKEN?.trim()
+  const env = (process.env.NODBOARD_TOKEN ?? process.env.AIFIG_TOKEN)?.trim()
   if (env) return env
   const file = tokenPath(home)
   const existing = readToken(home)
@@ -75,27 +83,27 @@ export function tokensEqual(a: string | null | undefined, b: string | null | und
   return x.length === y.length && timingSafeEqual(x, y)
 }
 
-/** Token from `Authorization: Bearer …`, `X-Aifig-Token`, or (WebSocket upgrades) the offered subprotocols. */
+/** Token from `Authorization: Bearer …`, `X-Nodboard-Token`, or (WebSocket upgrades) the offered subprotocols. */
 export function presentedToken(req: http.IncomingMessage): string | null {
   const auth = req.headers.authorization
   if (auth?.startsWith('Bearer ')) return auth.slice(7).trim()
-  const h = req.headers['x-aifig-token']
+  const h = req.headers['x-nodboard-token'] ?? req.headers['x-aifig-token']
   if (typeof h === 'string' && h) return h.trim()
   const protos = req.headers['sec-websocket-protocol']
   if (typeof protos === 'string') {
-    const p = protos.split(',').map((s) => s.trim()).find((s) => s.startsWith(WS_TOKEN_PREFIX))
-    if (p) return p.slice(WS_TOKEN_PREFIX.length)
+    const p = protos.split(',').map((s) => s.trim()).find((s) => s.startsWith(WS_TOKEN_PREFIX) || s.startsWith('aifig-token.'))
+    if (p) return p.slice(p.startsWith(WS_TOKEN_PREFIX) ? WS_TOKEN_PREFIX.length : 'aifig-token.'.length)
   }
   return null
 }
 
-export const selectWsProtocol = (protocols: Set<string>) => (protocols.has(WS_PROTOCOL) ? WS_PROTOCOL : false)
+export const selectWsProtocol = (protocols: Set<string>) => (protocols.has(WS_PROTOCOL) ? WS_PROTOCOL : protocols.has('aifig') ? 'aifig' : false)
 
 /**
  * Hosts and origins the core answers to: loopback names on its own port and the dev UI port (the Vite proxy
  * forwards the browser's Host/Origin). Anything else is DNS rebinding or a foreign web page.
  */
-export function localPolicy(corePort: number, uiPort = Number(process.env.AIFIG_UI_PORT ?? 47820)) {
+export function localPolicy(corePort: number, uiPort = Number(process.env.NODBOARD_UI_PORT ?? 47820)) {
   const ports = [...new Set([corePort, uiPort])]
   const names = ['127.0.0.1', 'localhost', '[::1]']
   const hosts = new Set(ports.flatMap((p) => names.map((n) => `${n}:${p}`)))
@@ -127,7 +135,7 @@ export function tokenGuard(home = homeDir()) {
     },
     check(presented: string | null) {
       if (tokensEqual(presented, token)) return true
-      if (!presented || process.env.AIFIG_TOKEN) return false
+      if (!presented || process.env.NODBOARD_TOKEN) return false
       const m = stamp()
       if (m === mtime) return false
       mtime = m

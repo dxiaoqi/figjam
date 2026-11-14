@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { SNIPPET_FILES, type Block, type CallerInfo, type CallRequest, type CallResponse, type SnippetFileEvent, type SnippetPart } from '@aifig/shared'
+import { SNIPPET_FILES, type Block, type CallerInfo, type CallRequest, type CallResponse, type SnippetFileEvent, type SnippetPart } from '@nodboard/shared'
 import { writeFileAtomic } from './atomic'
 import type { Board, BoardRegistry } from './board'
 
@@ -19,7 +19,7 @@ interface Core {
 
 /**
  * Editable working copies of inline web snippets: `snippets/<block>/index.html, style.css, script.js` in the
- * board's assets folder (next to `Name.aifig` when the board has a file). The asset files themselves stay
+ * board's assets folder (next to `Name.nodboard` when the board has a file). The asset files themselves stay
  * immutable; a save here goes through `update_snippet` like any other edit — the canvas updates live, the
  * block is attributed to the external editor, and an agent that checked the files out gets a change set to
  * review. When the snippet changes elsewhere (canvas, agent, review), the files are rewritten to match.

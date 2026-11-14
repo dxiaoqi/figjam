@@ -10,7 +10,7 @@ import { signIn } from './lib/core-auth.mjs'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'media')
 fs.mkdirSync(out, { recursive: true })
-const cli = (args, input) => execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), ...args], { encoding: 'utf8', input })
+const cli = (args, input) => execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), ...args], { encoding: 'utf8', input })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--no-sandbox'] })

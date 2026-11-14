@@ -15,7 +15,7 @@ export const LOCALES: { id: Locale; label: string }[] = [
 ]
 
 const dicts: Record<Locale, Messages> = { en, 'zh-CN': zhCN }
-const PREF_KEY = 'aifig:locale'
+const PREF_KEY = 'nodboard:locale'
 
 /** First supported language in the OS / browser preference list. */
 export function systemLocale(langs: readonly string[] = typeof navigator === 'undefined' ? [] : navigator.languages?.length ? navigator.languages : [navigator.language]): Locale {

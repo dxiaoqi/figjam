@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { applyLegacyEnv } from './legacy-env'
 import { COLOR_TOKENS, SIZE_TOKENS } from './tokens'
 import { RELATIONS } from './types'
 import { CONTENT_LANGUAGES, TEMPLATE_IDS, TEMPLATES } from './templates'
@@ -258,10 +259,10 @@ export const toolDefs = {
   export_pack: {
     title: 'Export share pack',
     description:
-      'Write the board as a .aifigpack for someone else: the board, every file it uses, the skills it has enabled, and optionally its version history and comments, with a manifest of checksums. Access tokens, permission grants and secrets are never included. Refuses to overwrite an existing file unless `overwrite`.',
+      'Write the board as a .nodboardpack for someone else: the board, every file it uses, the skills it has enabled, and optionally its version history and comments, with a manifest of checksums. Access tokens, permission grants and secrets are never included. Refuses to overwrite an existing file unless `overwrite`.',
     input: {
       board,
-      path: z.string().describe('Absolute path of the .aifigpack to write.'),
+      path: z.string().describe('Absolute path of the .nodboardpack to write.'),
       include_history: z.boolean().optional().describe('Add the version history (default false).'),
       include_comments: z.boolean().optional().describe('Keep comment threads (default true).'),
       overwrite: z.boolean().optional(),
@@ -270,10 +271,10 @@ export const toolDefs = {
   import_pack: {
     title: 'Import share pack',
     description:
-      'Open a .aifigpack: every file is checked (paths, sizes, checksums) before anything is written, then the board lands in `dest` as <Title>.aifig + <Title>.assets/ (never replacing existing files) and opens. Skills in the pack are installed only with `install_skills`.',
+      'Open a .nodboardpack: every file is checked (paths, sizes, checksums) before anything is written, then the board lands in `dest` as <Title>.nodboard + <Title>.assets/ (never replacing existing files) and opens. Skills in the pack are installed only with `install_skills`.',
     input: {
-      path: z.string().describe('Absolute path of the .aifigpack.'),
-      dest: z.string().optional().describe('Folder for the board (default: ~/Documents/ai-figma).'),
+      path: z.string().describe('Absolute path of the .nodboardpack.'),
+      dest: z.string().optional().describe('Folder for the board (default: ~/Documents/nodboard).'),
       install_skills: z.boolean().optional(),
     },
   },
@@ -328,7 +329,7 @@ export const toolDefs = {
       'or an inline HTML/CSS/JS snippet you write (a small interactive demo, chart or prototype).',
       'Snippets show a static preview and only run when a person double-clicks them, in a sandboxed frame on a separate origin.',
       'Inline snippets have NO network access (no fetch, no external scripts/images/fonts — inline everything, use data: URLs)',
-      'and cannot see the board. They can keep a small JSON state (≤16 KB) via `await aifig.getState()` / `aifig.setState(obj)`.',
+      'and cannot see the board. They can keep a small JSON state (≤16 KB) via `await nodboard.getState()` / `nodboard.setState(obj)`.',
       'Placement works like create_blocks. Goes through change-set review.',
     ].join(' '),
     input: {
@@ -608,6 +609,7 @@ export type CallResponse =
   | { ok: true; result: unknown; image?: { mimeType: string; data: string } }
   | { ok: false; error: string }
 
+applyLegacyEnv()
 const env: Record<string, string | undefined> = (globalThis as any).process?.env ?? {}
-export const CORE_PORT = Number(env.AIFIG_CORE_PORT ?? 47821)
-export const UI_PORT = Number(env.AIFIG_UI_PORT ?? 47820)
+export const CORE_PORT = Number(env.NODBOARD_CORE_PORT ?? 47821)
+export const UI_PORT = Number(env.NODBOARD_UI_PORT ?? 47820)

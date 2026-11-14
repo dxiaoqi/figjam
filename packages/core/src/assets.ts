@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { ASSET_FILE_RE } from '@aifig/shared'
+import { ASSET_FILE_RE } from '@nodboard/shared'
 import { writeFileAtomic } from './atomic'
 
 /**
@@ -188,9 +188,9 @@ export class AssetStore {
   }
 }
 
-/** `Name.aifig` → `Name.assets` in the same folder: the assets that travel with a board file. */
+/** `Name.nodboard` → `Name.assets` in the same folder: the assets that travel with a board file. */
 export function siblingAssetsDir(boardFile: string) {
   const dir = path.dirname(boardFile)
-  const base = path.basename(boardFile).replace(/\.aifig$/i, '')
+  const base = path.basename(boardFile).replace(/\.(nodboard|aifig)$/i, '')
   return path.join(dir, `${base}.assets`)
 }

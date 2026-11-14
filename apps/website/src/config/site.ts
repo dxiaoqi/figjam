@@ -1,13 +1,11 @@
 /**
- * Brand and product identifiers. The product name is a code name until launch:
- * change `name` here and every page, title and meta tag follows.
- * `cli` and `mcpServer` are the identifiers the product ships today; rename them
- * together with the CLI binary and the default MCP server name.
+ * Brand and product identifiers. Change `name` and every page, title and meta tag follows.
+ * `cli` is the binary (`nodboard`). `mcpServer` is the name written into agent configs.
  */
 export const site = {
-  name: 'ai-figma',
-  cli: 'aifig',
-  mcpServer: 'ai-figma',
+  name: 'nodboard',
+  cli: 'nodboard',
+  mcpServer: 'nodboard',
   version: '0.1.0',
   url: process.env.SITE_URL ?? 'http://127.0.0.1:47900',
   repoUrl: 'https://cursor.com/codebase/we-ding/genesis',

@@ -10,7 +10,7 @@ import { tempHome } from './helpers'
 const writer = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'writer.ts')
 
 function run(mode: string, home: string) {
-  const child = spawn(process.execPath, ['--import', 'tsx', writer, mode], { env: { ...process.env, AIFIG_HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] })
+  const child = spawn(process.execPath, ['--import', 'tsx', writer, mode], { env: { ...process.env, NODBOARD_HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] })
   let out = ''
   child.stdout!.on('data', (d) => (out += d))
   const waitFor = (re: RegExp, ms = 20_000) =>
@@ -47,7 +47,7 @@ test('kill -9 in the middle of writes never leaves a damaged or older-than-ackno
     w.child.kill('SIGKILL')
     await exited(w.child)
     const acked = Math.max(...[...w.output().matchAll(/saved (\d+)/g)].map((m) => Number(m[1])))
-    const file = path.join(boardsDir(), fs.readdirSync(boardsDir()).find((f) => f.endsWith('.aifig'))!)
+    const file = path.join(boardsDir(), fs.readdirSync(boardsDir()).find((f) => f.endsWith('.nodboard'))!)
     const b = loadOnly(file)
     const count = [...b.blocks.keys()].filter((k) => k.startsWith('c')).length
     assert.ok(count >= acked, `round ${round}: file has ${count} blocks, ${acked} were acknowledged`)
@@ -70,6 +70,6 @@ test('SIGTERM flushes edits that were still waiting for the debounce', async () 
   await w.waitFor(/edited/)
   w.child.kill('SIGTERM')
   await exited(w.child)
-  const file = path.join(boardsDir(), fs.readdirSync(boardsDir()).find((f) => f.endsWith('.aifig'))!)
+  const file = path.join(boardsDir(), fs.readdirSync(boardsDir()).find((f) => f.endsWith('.nodboard'))!)
   assert.equal(loadOnly(file).blocks.get('unsaved')?.text, 'written on the way out')
 })

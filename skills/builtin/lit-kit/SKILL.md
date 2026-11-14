@@ -1,8 +1,8 @@
 ---
 name: lit-kit
-description: Run a literature review on an ai-figma board — papers, claims, supporting evidence and counter-evidence with exact citations, research questions and gaps — built into an argument map, then exported as a review outline. Use when reading papers, reports or preprints and synthesizing what they say on the canvas.
+description: Run a literature review on a nodboard board — papers, claims, supporting evidence and counter-evidence with exact citations, research questions and gaps — built into an argument map, then exported as a review outline. Use when reading papers, reports or preprints and synthesizing what they say on the canvas.
 metadata:
-  aifig:
+  nodboard:
     version: 1.0.0
     canvas: canvas/blocks.json
     capability: L0

@@ -1,4 +1,4 @@
-import { stripMarkdown, type Block } from '@aifig/shared'
+import { stripMarkdown, type Block } from '@nodboard/shared'
 
 export type DiffPart = { kind: 'same' | 'add' | 'del'; text: string }
 

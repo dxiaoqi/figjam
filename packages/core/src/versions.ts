@@ -1,18 +1,18 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import * as Y from 'yjs'
-import { assetFileName, type Asset, type VersionInfo, type VersionKind } from '@aifig/shared'
+import { assetFileName, type Asset, type VersionInfo, type VersionKind } from '@nodboard/shared'
 import type { AssetStore } from './assets'
 import { writeFileAtomic } from './atomic'
-import { aifigHome, type RetentionPolicy } from './config'
-import { compareSchema, CorruptFileError, CURRENT_SCHEMA, decodeContainer, encodeContainer, formatSchema, readHeader, type ContainerHeader } from './fileformat'
+import { nodboardHome, type RetentionPolicy } from './config'
+import { compareSchema, CorruptFileError, CURRENT_SCHEMA, decodeContainer, encodeContainer, formatSchema, isBoardFileName, readHeader, type ContainerHeader } from './fileformat'
 import { migrate } from './migrations'
 
 /** Kinds that retention never removes on its own. */
 const PROTECTED: VersionKind[] = ['checkpoint', 'recovered']
 
 export function historyDir(boardId: string) {
-  return path.join(aifigHome(), 'history', boardId)
+  return path.join(nodboardHome(), 'history', boardId)
 }
 
 const idOk = (id: string) => /^v[0-9a-z]+$/.test(id)
@@ -80,7 +80,7 @@ export function writeVersion(board: VersionSource, kind: VersionKind, name: stri
     ...(by ? { by } : {}),
   }
   const bytes = encodeContainer(payload ?? Y.encodeStateAsUpdate(board.doc), { savedAt: at, board: board.id, title: board.title, schema: board.schemaLabel, version: { ...info }, assets: docAssetFiles(doc) })
-  writeFileAtomic(path.join(historyDir(board.id), `${id}.aifig`), bytes)
+  writeFileAtomic(path.join(historyDir(board.id), `${id}.nodboard`), bytes)
   return { ...info, size: bytes.byteLength }
 }
 
@@ -102,7 +102,7 @@ export function listVersions(boardId: string): VersionInfo[] {
   const dir = historyDir(boardId)
   let names: string[] = []
   try {
-    names = fs.readdirSync(dir).filter((n) => n.endsWith('.aifig'))
+    names = fs.readdirSync(dir).filter(isBoardFileName)
   } catch {
     return []
   }
@@ -121,7 +121,10 @@ export function listVersions(boardId: string): VersionInfo[] {
 
 export function versionFile(boardId: string, id: string) {
   if (!idOk(id)) throw new CorruptFileError(`"${id}" is not a version id`)
-  return path.join(historyDir(boardId), `${id}.aifig`)
+  const dir = historyDir(boardId)
+  const next = path.join(dir, `${id}.nodboard`)
+  const prev = path.join(dir, `${id}.aifig`)
+  return fs.existsSync(prev) && !fs.existsSync(next) ? prev : next
 }
 
 /** Read and verify one version. Throws CorruptFileError / FutureVersionError, or ENOENT. */
@@ -189,7 +192,7 @@ export function historyAssetFiles(boardId: string): { files: Set<string>; versio
   const files = new Set<string>()
   let names: string[] = []
   try {
-    names = fs.readdirSync(dir).filter((n) => n.endsWith('.aifig'))
+    names = fs.readdirSync(dir).filter(isBoardFileName)
   } catch {
     return { files, versions: 0, unreadable: 0 }
   }
@@ -214,7 +217,7 @@ export function migrateHistory(boardId: string, store: AssetStore) {
   const dir = historyDir(boardId)
   let names: string[] = []
   try {
-    names = fs.readdirSync(dir).filter((n) => n.endsWith('.aifig'))
+    names = fs.readdirSync(dir).filter(isBoardFileName)
   } catch {
     return 0
   }

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { nanoid } from 'nanoid'
-import type { ActivityCategory, ActivityEntry } from '@aifig/shared'
+import type { ActivityCategory, ActivityEntry } from '@nodboard/shared'
 
 const MAX_BYTES = 1024 * 1024
 const KEEP_IN_MEMORY = 500
@@ -12,7 +12,7 @@ export const redact = (s: string) => s.replace(SECRETISH, '[redacted]')
 
 /**
  * Append-only activity log for actions that touch the network, secrets or permissions. JSONL under
- * AIFIG_HOME (0600, rotated at 1 MB, one previous file kept) plus an in-memory tail for the canvas.
+ * NODBOARD_HOME (0600, rotated at 1 MB, one previous file kept) plus an in-memory tail for the canvas.
  */
 export class ActivityLog {
   private tail: ActivityEntry[] = []

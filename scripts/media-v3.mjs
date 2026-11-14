@@ -12,7 +12,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'media')
 const demo = process.argv[3]
 fs.mkdirSync(out, { recursive: true })
-const cli = (args) => execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), ...args], { encoding: 'utf8' })
+const cli = (args) => execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), ...args], { encoding: 'utf8' })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // two small illustrations to use as image blocks
@@ -20,12 +20,12 @@ const svgs = {
   palette: `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420"><rect width="640" height="420" fill="#FAFAF9"/>${['#FFF1B8', '#FFD9D6', '#E8DEFF', '#D6E8FF', '#CDF1EC', '#DDF3D2'].map((c, i) => `<rect x="${40 + (i % 3) * 190}" y="${40 + Math.floor(i / 3) * 180}" width="170" height="160" rx="10" fill="${c}"/>`).join('')}</svg>`,
   wire: `<svg xmlns="http://www.w3.org/2000/svg" width="560" height="400"><rect width="560" height="400" rx="16" fill="#FFFFFF"/><rect x="24" y="24" width="512" height="44" rx="8" fill="#EDEDEB"/><rect x="24" y="92" width="160" height="284" rx="8" fill="#F4F4F2"/><rect x="204" y="92" width="332" height="136" rx="8" fill="#E8DEFF"/><rect x="204" y="244" width="160" height="132" rx="8" fill="#D6E8FF"/><rect x="376" y="244" width="160" height="132" rx="8" fill="#CDF1EC"/></svg>`,
 }
-for (const [k, svg] of Object.entries(svgs)) fs.writeFileSync(`/tmp/aifig-${k}.png`, new Resvg(svg, { fitTo: { mode: 'zoom', value: 2 } }).render().asPng())
+for (const [k, svg] of Object.entries(svgs)) fs.writeFileSync(`/tmp/nodboard-${k}.png`, new Resvg(svg, { fitTo: { mode: 'zoom', value: 2 } }).render().asPng())
 
 const mood = JSON.parse(cli(['--json', 'new-board', 'Moodboard (v3)'])).board.id
 const frame = JSON.parse(cli(['--json', '--human', '--board', mood, 'add', 'Warm, calm, a little playful', '--kind', 'text', '--size', 'l', '--frame', 'Direction'])).frame
-cli(['--human', '--board', mood, 'image', '/tmp/aifig-palette.png', '--width', '320', '--inside', frame])
-cli(['--human', '--board', mood, 'image', '/tmp/aifig-wire.png', '--width', '280', '--inside', frame])
+cli(['--human', '--board', mood, 'image', '/tmp/nodboard-palette.png', '--width', '320', '--inside', frame])
+cli(['--human', '--board', mood, 'image', '/tmp/nodboard-wire.png', '--width', '280', '--inside', frame])
 
 const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--no-sandbox'] })
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, hasTouch: true, recordVideo: { dir: out, size: { width: 1440, height: 900 } } })
@@ -130,7 +130,7 @@ await page.keyboard.press('Escape')
 await sleep(300)
 
 // 5. export of the moodboard rendered by the core (rotation, images, rich text)
-const png = await ed(async (board) => [...new Uint8Array(await (await fetch(`/api/boards/${board}/snapshot.png`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })).arrayBuffer())], mood)
+const png = await ed(async (board) => [...new Uint8Array(await (await fetch(`/api/boards/${board}/snapshot.png`, { headers: { authorization: `Bearer ${localStorage.getItem('nodboard:token')}` } })).arrayBuffer())], mood)
 fs.writeFileSync(path.join(out, '07-export-png.png'), Buffer.from(png))
 console.log('✓ 07-export-png.png')
 

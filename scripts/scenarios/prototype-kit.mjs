@@ -23,9 +23,9 @@ const T = {
       { label: 'B', name: 'One-click detect', approach: 'Detect agents, connect with one click', why: 'Fastest when the agent is already installed.' },
       { label: 'C', name: 'Copy the config', approach: 'Tabs with ready-to-paste config', why: 'Transparent for people who want to see what changes.' },
     ],
-    a: { h: 'Connect your agent', steps: ['Pick your agent', 'We add ai-figma to its settings', 'Test the connection'], next: 'Next', done: 'Connected ✓', of: 'Step {n} of 3' },
+    a: { h: 'Connect your agent', steps: ['Pick your agent', 'We add nodboard to its settings', 'Test the connection'], next: 'Next', done: 'Connected ✓', of: 'Step {n} of 3' },
     b: { h: 'Agents on this Mac', sub: 'We found these. Connect one to start.', agents: ['Claude Code', 'Cursor'], connect: 'Connect', connected: 'Connected', found: 'found' },
-    c: { h: 'Add ai-figma to your agent', sub: 'Paste this into its MCP settings.', copy: 'Copy', copied: 'Copied' },
+    c: { h: 'Add nodboard to your agent', sub: 'Paste this into its MCP settings.', copy: 'Copy', copied: 'Copied' },
     comments: [
       [0, 'Three steps feel slow when my agent is already installed.', 'change'],
       [1, 'This is the one — but say what changes in my config first.', 'keep'],
@@ -45,9 +45,9 @@ const T = {
       { label: 'B', name: '一键检测', approach: '检测已装的 Agent，一键连接', why: 'Agent 已经装好时最快。' },
       { label: 'C', name: '复制配置', approach: '分标签给出可直接粘贴的配置', why: '想看清改了什么的人更放心。' },
     ],
-    a: { h: '连接你的 Agent', steps: ['选择你的 Agent', '把 ai-figma 写进它的配置', '测试连接'], next: '下一步', done: '已连接 ✓', of: '第 {n} 步，共 3 步' },
+    a: { h: '连接你的 Agent', steps: ['选择你的 Agent', '把 nodboard 写进它的配置', '测试连接'], next: '下一步', done: '已连接 ✓', of: '第 {n} 步，共 3 步' },
     b: { h: '这台 Mac 上的 Agent', sub: '找到了这些，连接一个就能开始。', agents: ['Claude Code', 'Cursor'], connect: '连接', connected: '已连接', found: '已发现' },
-    c: { h: '把 ai-figma 加到你的 Agent', sub: '把这段粘贴进它的 MCP 配置。', copy: '复制', copied: '已复制' },
+    c: { h: '把 nodboard 加到你的 Agent', sub: '把这段粘贴进它的 MCP 配置。', copy: '复制', copied: '已复制' },
     comments: [
       [0, 'Agent 已经装好时，三步显得太慢。', 'change'],
       [1, '就是它了 —— 但先告诉我会改配置里的什么。', 'keep'],
@@ -75,7 +75,7 @@ render()`,
     css: CSS,
     js: `document.querySelectorAll('button[data-i]').forEach((b)=>b.addEventListener('click',()=>{b.textContent=${js(t.b.connected)};b.className='ok';b.disabled=true}))`,
   }
-  const cfg = { 'Claude Code': 'claude mcp add ai-figma -- npx aifig mcp', Cursor: '{ "mcpServers": { "ai-figma": { "command": "npx", "args": ["aifig", "mcp"] } } }' }
+  const cfg = { 'Claude Code': 'claude mcp add nodboard -- npx nodboard mcp', Cursor: '{ "mcpServers": { "nodboard": { "command": "npx", "args": ["nodboard", "mcp"] } } }' }
   const C = {
     html: `<div><h1>${t.c.h}</h1><p class="sub">${t.c.sub}</p></div><div class="tabs" role="tablist">${Object.keys(cfg).map((k, i) => `<button role="tab" class="${i ? 'ghost' : 'primary'}" data-k="${k}">${k}</button>`).join('')}</div><pre id="cfg"></pre><button class="ghost" id="copy">${t.c.copy}</button>`,
     css: `${CSS}.tabs{display:flex;gap:6px}pre{font:12px/1.5 ui-monospace,Menlo,monospace;background:#1c1c1f;color:#f4f4f5;border-radius:10px;padding:12px;white-space:pre-wrap;word-break:break-all}`,
@@ -88,7 +88,7 @@ render()`,
   return [A, B, C]
 }
 
-/** Click through a snippet in headless Chrome (with the aifig state bridge stubbed); null when Chrome isn't there. */
+/** Click through a snippet in headless Chrome (with the nodboard state bridge stubbed); null when Chrome isn't there. */
 async function interact(web, steps) {
   const chrome = process.env.CHROME ?? '/usr/local/bin/google-chrome'
   if (!fs.existsSync(chrome)) return null
@@ -98,7 +98,7 @@ async function interact(web, steps) {
     const page = await browser.newPage({ viewport: { width: 360, height: 480 } })
     const errors = []
     page.on('pageerror', (e) => errors.push(e.message))
-    await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>${web.css ?? ''}</style></head><body>${web.html ?? ''}<script>window.aifig={getState:async()=>({}),setState:async()=>{}};${web.js ?? ''}</script></body></html>`)
+    await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>${web.css ?? ''}</style></head><body>${web.html ?? ''}<script>window.nodboard={getState:async()=>({}),setState:async()=>{}};${web.js ?? ''}</script></body></html>`)
     const before = await page.evaluate(() => document.body.innerText)
     for (const s of steps) await page.click(s)
     const after = await page.evaluate(() => document.body.innerText)

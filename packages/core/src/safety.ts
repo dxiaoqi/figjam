@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import type { VersionInfo, VersionKind } from '@aifig/shared'
+import type { VersionInfo, VersionKind } from '@nodboard/shared'
 import { backupFile, listBackups } from './backups'
 import type { Board, ChangeCounts } from './board'
 import { dataSafetyConfig } from './config'

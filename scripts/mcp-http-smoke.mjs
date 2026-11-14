@@ -5,7 +5,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { authHeaders, tokenFor } from './lib/core-auth.mjs'
 
-const url = process.argv[2] ?? `http://127.0.0.1:${process.env.AIFIG_CORE_PORT ?? 47821}/mcp`
+const url = process.argv[2] ?? `http://127.0.0.1:${process.env.NODBOARD_CORE_PORT ?? 47821}/mcp`
 let failures = 0
 const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? ` — ${detail}` : ''}`)

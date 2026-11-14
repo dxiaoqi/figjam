@@ -5,16 +5,16 @@ import { writeFileAtomic } from './atomic'
 
 /**
  * The readable `<id>.json` next to each board is a convenience copy (for people, diffs and scripts); the
- * `.aifig` file is the source of truth. Building it means walking every block and stringifying megabytes,
+ * `.nodboard` file is the source of truth. Building it means walking every block and stringifying megabytes,
  * so it is debounced and built in a worker thread from the bytes the save already encoded: saves stay cheap
  * on the core's event loop even for 10k-block boards.
  *
- * `AIFIG_JSON_COPY`: `worker` (default) · `sync` (same debounce, built on the main thread) · `off`.
+ * `NODBOARD_JSON_COPY`: `worker` (default) · `sync` (same debounce, built on the main thread) · `off`.
  */
 export type ReadableCopyMode = 'worker' | 'sync' | 'off'
 
 export const readableCopyMode = (): ReadableCopyMode => {
-  const v = process.env.AIFIG_JSON_COPY?.trim().toLowerCase()
+  const v = process.env.NODBOARD_JSON_COPY?.trim().toLowerCase()
   return v === 'off' || v === '0' || v === 'false' ? 'off' : v === 'sync' ? 'sync' : 'worker'
 }
 
@@ -39,7 +39,7 @@ interface Pending {
 }
 
 // A sibling module: packages/core/src/readable-copy-worker.mjs from source, or the copy the desktop build bundles
-// (with yjs inlined) next to aifig.mjs — a packaged app has no node_modules to resolve yjs from.
+// (with yjs inlined) next to nodboard.mjs — a packaged app has no node_modules to resolve yjs from.
 const WORKER_URL = new URL('./readable-copy-worker.mjs', import.meta.url)
 
 const WORKER_IDLE_MS = 15_000

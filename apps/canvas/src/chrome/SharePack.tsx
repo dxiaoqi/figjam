@@ -1,7 +1,7 @@
 import { AlertTriangle, Check, FileArchive, FolderOpen, History, Loader2, MessageSquare, Package, PackageOpen, Puzzle, ShieldCheck, Shapes, Files } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { formatBytes } from '@aifig/shared'
+import { formatBytes } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -31,7 +31,7 @@ function Row({ icon, label, detail, children }: { icon: ReactNode; label: string
 
 const safeFile = (s: string) => s.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'board'
 
-/** Export the board as a .aifigpack: the board, its files and skills, optionally history and comments. */
+/** Export the board as a .nodboardpack: the board, its files and skills, optionally history and comments. */
 export function ExportPackDialog() {
   const { boardId } = useBoard()
   const title = useBoardTitle()
@@ -54,8 +54,8 @@ export function ExportPackDialog() {
         })
         .catch(() => setInfo({ files: 0, bytes: 0, versions: 0, historyBytes: 0 }))
     }
-    window.addEventListener('aifig:export-pack', on)
-    return () => window.removeEventListener('aifig:export-pack', on)
+    window.addEventListener('nodboard:export-pack', on)
+    return () => window.removeEventListener('nodboard:export-pack', on)
   }, [boardId])
 
   const threads = [...editor.doc.getMap<{ resolved: boolean }>('threads').values()].length
@@ -66,7 +66,7 @@ export function ExportPackDialog() {
     setBusy(true)
     try {
       if (desktop?.savePath) {
-        const target = await desktop.savePath({ defaultName: `${safeFile(title)}.aifigpack`, kind: 'pack' })
+        const target = await desktop.savePath({ defaultName: `${safeFile(title)}.nodboardpack`, kind: 'pack' })
         if (!target) return
         const r = await callCore<{ path: string; size: number; notes?: string[] }>('export_pack', { board: boardId, path: target, include_history: history, include_comments: comments, overwrite: true })
         toast.success(t('pack.exported', { name: r.path.split(/[\\/]/).pop() ?? '', size: size(r.size) }), {
@@ -123,7 +123,7 @@ export function ExportPackDialog() {
 
 type ImportState = { step: 'pick' } | { step: 'uploading'; name: string; pct: number } | { step: 'preview'; pack: PackPreview; name: string } | { step: 'error'; message: string }
 
-/** Open a .aifigpack: check it, show what's inside, extract it to a folder the person picks, open the board. */
+/** Open a .nodboardpack: check it, show what's inside, extract it to a folder the person picks, open the board. */
 export function ImportPackDialog() {
   const { switchBoard, refreshBoards } = useBoard()
   const [open, setOpen] = useState(false)
@@ -153,8 +153,8 @@ export function ImportPackDialog() {
         setState({ step: 'error', message: (err as Error).message })
       }
     }
-    window.addEventListener('aifig:import-pack', on)
-    return () => window.removeEventListener('aifig:import-pack', on)
+    window.addEventListener('nodboard:import-pack', on)
+    return () => window.removeEventListener('nodboard:import-pack', on)
   }, [])
 
   const onFile = async (file: File | undefined) => {
@@ -292,7 +292,7 @@ export function ImportPackDialog() {
       <input
         ref={input}
         type="file"
-        accept=".aifigpack,application/zip"
+        accept=".nodboardpack,.aifigpack,application/zip"
         hidden
         onChange={(e) => {
           onFile(e.target.files?.[0] ?? undefined)

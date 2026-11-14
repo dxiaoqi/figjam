@@ -48,11 +48,11 @@ async function checkUrl(raw: string) {
   }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new NetGuardError('Only http(s) URLs can be fetched')
   if (u.username || u.password) throw new NetGuardError('URLs with credentials are not fetched')
-  if (process.env.AIFIG_ALLOW_PRIVATE_FETCH === '1') return u
+  if (process.env.NODBOARD_ALLOW_PRIVATE_FETCH === '1') return u
   const host = u.hostname.replace(/^\[|\]$/g, '')
   const addrs = net.isIP(host) ? [host] : (await lookup(host, { all: true }).catch(() => [])).map((a) => a.address)
   if (!addrs.length) throw new NetGuardError(`Could not resolve ${u.hostname}`)
-  if (addrs.some(isPrivateAddress)) throw new NetGuardError(`${u.hostname} is a local or private address, which ai-figma does not fetch from`)
+  if (addrs.some(isPrivateAddress)) throw new NetGuardError(`${u.hostname} is a local or private address, which nodboard does not fetch from`)
   return u
 }
 

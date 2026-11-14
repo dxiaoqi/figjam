@@ -3,7 +3,7 @@ import { BUILTIN_TYPES, type BlockTypeDef, type FieldDef, type Relation, type Ty
 
 /**
  * Skills (§3): an Agent Skill folder (SKILL.md with `name` + `description`) plus an optional canvas extension
- * declared in `metadata.aifig` and defined in `canvas/blocks.json`: block types, card templates, layouts,
+ * declared in `metadata.nodboard` and defined in `canvas/blocks.json`: block types, card templates, layouts,
  * prompt templates and tool actions. v1 supports L0 (declarative) and L1 (calling tools by name).
  */
 export type SkillCapability = 'L0' | 'L1'
@@ -35,7 +35,7 @@ export interface SkillAction {
   id: string
   label: string
   description?: string
-  /** Tool name: `aifig.<canvas tool>` (built-in) or `<mcp server>.<tool>` (configured in ~/.aifig/mcp.json). */
+  /** Tool name: `nodboard.<canvas tool>` (built-in) or `<mcp server>.<tool>` (configured in ~/.nodboard/mcp.json). */
   tool: string
   /** Arguments; strings may use {{text}}, {{title}} and {{fields.<key>}} from each selected block. */
   args?: Record<string, unknown>
@@ -94,7 +94,7 @@ export const SKILL_ICONS = [
 export type SkillIcon = (typeof SKILL_ICONS)[number]
 
 /** Built-in tools a skill may call by name (the Canvas API, acting as the skill, through review). */
-export const BUILTIN_SKILL_TOOLS = ['aifig.create_blocks', 'aifig.get_board', 'aifig.query_blocks', 'aifig.connect', 'aifig.export_board'] as const
+export const BUILTIN_SKILL_TOOLS = ['nodboard.create_blocks', 'nodboard.get_board', 'nodboard.query_blocks', 'nodboard.connect', 'nodboard.export_board'] as const
 
 export const isFieldKind = (k: unknown): k is FieldDef['kind'] => k === 'text' || k === 'number' || k === 'enum' || k === 'boolean'
 export const SKILL_NAME = /^[a-z0-9]+(-[a-z0-9]+)*$/

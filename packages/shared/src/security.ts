@@ -1,15 +1,15 @@
 /**
  * Shared security vocabulary: local access token transport, permission requests and the activity log.
- * The core owns the logic (`@aifig/core` PermissionBroker / ActivityLog / SecretStore); the canvas renders
+ * The core owns the logic (`@nodboard/core` PermissionBroker / ActivityLog / SecretStore); the canvas renders
  * prompts and the log; Skills reuse the same request shape with `source.kind = 'skill'`.
  */
 import type { CallerInfo } from './tools'
 
-/** File under AIFIG_HOME holding the per-install access token (created by the core, mode 0600). */
+/** File under NODBOARD_HOME holding the per-install access token (created by the core, mode 0600). */
 export const TOKEN_FILE = 'access-token'
-/** WebSocket subprotocol the core selects; the token travels as a second offered protocol `aifig-token.<token>`. */
-export const WS_PROTOCOL = 'aifig'
-export const WS_TOKEN_PREFIX = 'aifig-token.'
+/** WebSocket subprotocol the core selects; the token travels as a second offered protocol `nodboard-token.<token>`. */
+export const WS_PROTOCOL = 'nodboard'
+export const WS_TOKEN_PREFIX = 'nodboard-token.'
 
 /** What an action needs the person's OK for. Extend here (and in the prompt copy) rather than inventing ad-hoc checks. */
 export type Capability = 'network' | 'secrets' | 'tool'

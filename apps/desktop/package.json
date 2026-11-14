@@ -1,8 +1,8 @@
 {
-  "name": "@aifig/desktop",
+  "name": "@nodboard/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "ai-figma desktop app",
+  "description": "nodboard desktop app",
   "main": "src/main.mjs",
   "type": "module",
   "devDependencies": {

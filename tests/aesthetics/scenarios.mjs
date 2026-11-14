@@ -96,7 +96,7 @@ export const scenarios = [
           frame: 'System architecture',
           layout: 'tree',
           blocks: [
-            { ref: 'core', kind: 'card', title: 'aifig core', text: 'Yjs boards, layout engine, change sets', color: 'gray' },
+            { ref: 'core', kind: 'card', title: 'nodboard core', text: 'Yjs boards, layout engine, change sets', color: 'gray' },
             { ref: 'ui', parent: 'core', kind: 'card', title: 'Canvas app', text: 'Engine + review UI', color: 'blue' },
             { ref: 'mcp', parent: 'core', kind: 'card', title: 'MCP server', text: 'stdio and local HTTP', color: 'purple' },
             { ref: 'cli', parent: 'core', kind: 'card', title: 'CLI', text: 'Scripts and terminals', color: 'teal' },

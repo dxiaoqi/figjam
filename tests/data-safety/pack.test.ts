@@ -44,14 +44,14 @@ test('pack round trip: board, files, comments, history and skills survive; unuse
   const b = boardWithEverything(reg)
   const arch = skills.get('arch-kit')
   if (arch) b.doc.transact(() => b.skills.set('arch-kit', { ...arch, enabledAt: 1, enabledBy: 'You' }))
-  const out = path.join(home, 'Launch plan.aifigpack')
+  const out = path.join(home, 'Launch plan.nodboardpack')
   const r = exportPack(b, skills, out, { history: true, comments: true })
   assert.equal(r.manifest.format, PACK_FORMAT)
-  assert.ok(r.manifest.files.some((f) => f.path === 'board.aifig'))
+  assert.ok(r.manifest.files.some((f) => f.path === 'board.nodboard'))
   assert.ok(r.manifest.files.some((f) => f.path.startsWith('history/')))
   const boardAssets = inspectPack(out).manifest.files.filter((f) => f.path.startsWith('assets/')).length
   assert.equal(boardAssets, 4, 'image, video, snippet html, and the unused upload only because the included version still names it')
-  const noHistory = exportPack(b, skills, path.join(home, 'nh.aifigpack'), { history: false })
+  const noHistory = exportPack(b, skills, path.join(home, 'nh.nodboardpack'), { history: false })
   assert.equal(noHistory.manifest.files.filter((f) => f.path.startsWith('assets/')).length, 3, 'without history the unused upload stays home')
   if (arch) assert.ok(r.manifest.includes.skills.includes('arch-kit') && r.manifest.files.some((f) => f.path === 'skills/arch-kit/SKILL.md'))
   const bytes = fs.readFileSync(out)
@@ -66,7 +66,7 @@ test('pack round trip: board, files, comments, history and skills survive; unuse
   reg2.loadAll()
   const dest = path.join(other, 'Shared with me')
   const im = importPack(reg2, new SkillLibrary(), out, dest)
-  assert.equal(path.basename(im.path), 'Launch plan.aifig')
+  assert.equal(path.basename(im.path), 'Launch plan.nodboard')
   assert.ok(fs.existsSync(path.join(dest, 'Launch plan.assets')))
   const nb = im.board
   assert.equal(nb.blocks.size, 4)
@@ -81,7 +81,7 @@ test('pack round trip: board, files, comments, history and skills survive; unuse
 
   // importing again never replaces the first one
   const again = importPack(reg2, new SkillLibrary(), out, dest)
-  assert.equal(path.basename(again.path), 'Launch plan 2.aifig')
+  assert.equal(path.basename(again.path), 'Launch plan 2.nodboard')
 })
 
 test('without comments, neither the board nor its history carries them', () => {
@@ -89,7 +89,7 @@ test('without comments, neither the board nor its history carries them', () => {
   const reg = new BoardRegistry()
   reg.loadAll()
   const b = boardWithEverything(reg)
-  const out = path.join(home, 'x.aifigpack')
+  const out = path.join(home, 'x.nodboardpack')
   exportPack(b, new SkillLibrary(), out, { history: true, comments: false })
   const reg2 = new BoardRegistry()
   const im = importPack(reg2, new SkillLibrary(), out, path.join(home, 'in'))
@@ -106,8 +106,8 @@ test('a board holding the access token is refused', () => {
   reg.loadAll()
   const b = reg.create('Oops')
   b.doc.transact(() => b.blocks.set('s', sticky('s', `my token is ${token}`)))
-  assert.throws(() => exportPack(b, new SkillLibrary(), path.join(home, 'o.aifigpack')), /access token/)
-  assert.ok(!fs.existsSync(path.join(home, 'o.aifigpack')))
+  assert.throws(() => exportPack(b, new SkillLibrary(), path.join(home, 'o.nodboardpack')), /access token/)
+  assert.ok(!fs.existsSync(path.join(home, 'o.nodboardpack')))
 })
 
 // ---- malicious packs ------------------------------------------------------------------------------
@@ -177,7 +177,7 @@ function validEntries(home: string): Raw[] {
     const a = b.importAssetFile(path.join(media, 'whiteboard.png'), { mime: 'image/png', ext: 'png', role: 'image' })
     b.blocks.set('i', { ...sticky('i'), kind: 'image', asset: a.id } as Block)
   })
-  const out = path.join(home, 'valid.aifigpack')
+  const out = path.join(home, 'valid.nodboardpack')
   exportPack(b, new SkillLibrary(), out)
   const fd = fs.openSync(out, 'r')
   try {
@@ -190,11 +190,11 @@ function validEntries(home: string): Raw[] {
 function manifestFor(entries: Raw[], extra: Record<string, unknown> = {}) {
   return Buffer.from(
     JSON.stringify({
-      format: 'aifigpack',
+      format: 'nodboardpack',
       version: 1,
       createdAt: '',
       app: 'x',
-      board: { title: 'Target', schema: '2.0', blocks: 1, file: 'board.aifig' },
+      board: { title: 'Target', schema: '2.0', blocks: 1, file: 'board.nodboard' },
       includes: { history: false, comments: true, skills: [] },
       files: entries.filter((e) => e.name !== 'manifest.json').map((e) => ({ path: e.name, size: e.declared ?? e.data!.length, sha256: sha256Hex(e.data!) })),
       ...extra,
@@ -220,18 +220,18 @@ test('malicious and broken packs are refused before anything reaches the destina
   const renamed = good.map((e) => (e.name.startsWith('assets/') ? { ...e, name: `assets/${'0'.repeat(64)}.png` } : e))
   cases.push(['an asset whose bytes don’t match its name', withManifest(renamed), /match its name/])
   cases.push(['a zip bomb (expands 1000×)', withManifest([...good, { name: 'assets/' + 'a'.repeat(64) + '.png', data: Buffer.alloc(60 * 1024 * 1024), deflate: true }]), /expands suspiciously|too large/])
-  const liar: Raw = { name: 'history/vliar1.aifig', data: Buffer.alloc(8 * 1024 * 1024, 7), deflate: true, declared: 1000 }
+  const liar: Raw = { name: 'history/vliar1.nodboard', data: Buffer.alloc(8 * 1024 * 1024, 7), deflate: true, declared: 1000 }
   cases.push(['an entry larger than it declares', withManifest([...good, liar]), /size it claims|decompressed/])
   cases.push(['a duplicate entry', craft([{ name: 'manifest.json', data: manifestFor(good) }, ...good, good[0]]), /twice/])
-  cases.push(['a pack from a newer ai-figma', withManifest(good, { version: 9 }), /newer ai-figma/])
+  cases.push(['a pack from a newer nodboard', withManifest(good, { version: 9 }), /newer nodboard/])
   cases.push(['not a pack at all', craft([{ name: 'hello.txt', data: Buffer.from('hi') }]), /no manifest/])
   cases.push(['a truncated file', withManifest(good).subarray(0, 200), /Not a zip|truncated|damaged/])
-  const corruptBoard = good.map((e) => (e.name === 'board.aifig' ? { ...e, data: Buffer.concat([e.data!.subarray(0, e.data!.length - 20), Buffer.alloc(20, 1)]) } : e))
+  const corruptBoard = good.map((e) => (e.name === 'board.nodboard' ? { ...e, data: Buffer.concat([e.data!.subarray(0, e.data!.length - 20), Buffer.alloc(20, 1)]) } : e))
   cases.push(['a damaged board inside a consistent pack', withManifest(corruptBoard), /checksum|damaged/])
   cases.push(['too many entries', withManifest([...good, ...Array.from({ length: 20_001 }, (_, i) => ({ name: `skills/s/f${i}.md`, data: Buffer.from('x') }))]), /Too many files/])
 
   for (const [label, zip, why] of cases) {
-    const file = path.join(home, `case-${Math.random().toString(36).slice(2)}.aifigpack`)
+    const file = path.join(home, `case-${Math.random().toString(36).slice(2)}.nodboardpack`)
     fs.writeFileSync(file, zip)
     const dest = path.join(home, 'dest', label.replace(/\W+/g, '-'))
     const reg = new BoardRegistry()

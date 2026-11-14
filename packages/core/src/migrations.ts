@@ -1,5 +1,5 @@
 import type * as Y from 'yjs'
-import { assetIdFor, extForMime, SNIPPET_FILES, SNIPPET_ROLES, snippetThumbKey, type Asset, type Block, type ChangeSet, type WebSnippet } from '@aifig/shared'
+import { assetIdFor, extForMime, SNIPPET_FILES, SNIPPET_ROLES, snippetThumbKey, type Asset, type Block, type ChangeSet, type WebSnippet } from '@nodboard/shared'
 import { compareSchema, CURRENT_SCHEMA, formatSchema, FutureVersionError, type SchemaVersion } from './fileformat'
 
 /**

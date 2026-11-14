@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { nanoid } from 'nanoid'
-import { CAPABILITIES, type Capability, type CallerInfo, type PermissionDecision, type PermissionGrant, type PermissionRequest, type PermissionSource } from '@aifig/shared'
+import { CAPABILITIES, type Capability, type CallerInfo, type PermissionDecision, type PermissionGrant, type PermissionRequest, type PermissionSource } from '@nodboard/shared'
 import type { ActivityLog } from './activity'
 
 export interface PermissionAsk {
@@ -47,7 +47,7 @@ export class PermissionBroker {
   constructor(
     private log: ActivityLog,
     private file: string | null,
-    private timeoutMs = Number(process.env.AIFIG_PERMISSION_TIMEOUT_MS ?? 45_000),
+    private timeoutMs = Number(process.env.NODBOARD_PERMISSION_TIMEOUT_MS ?? 45_000),
   ) {
     if (!file) return
     try {
@@ -110,7 +110,7 @@ export class PermissionBroker {
     }
     if (actor.kind === 'human') return done({ granted: true, via: 'human' })
     if (this.hasGrant(subject, capability, target)) return done({ granted: true, via: 'grant' })
-    if (process.env.AIFIG_PERMISSIONS === 'deny') return done({ granted: false, via: 'policy' })
+    if (process.env.NODBOARD_PERMISSIONS === 'deny') return done({ granted: false, via: 'policy' })
     if (!this.prompter.available()) return done({ granted: false, via: 'no-ui' }, 'no canvas open to ask')
 
     const request: PermissionRequest = { id: nanoid(10), capability, target, actor: { id: actor.id, name: actor.name, client: actor.client, kind: actor.kind }, source, reason: ask.reason, at: Date.now(), expiresAt: Date.now() + this.timeoutMs }
@@ -147,9 +147,9 @@ const PERSON = { id: 'human:owner', name: 'You', client: 'ui', kind: 'human' as 
 export function deniedMessage(ask: PermissionAsk, r: PermissionResult) {
   const what = `${CAPABILITIES[ask.capability].verb} ${ask.target}`
   const subject = subjectOf(ask.actor, ask.source)
-  const hint = `aifig permissions allow ${subject} ${ask.capability} ${ask.target}`
-  if (r.via === 'no-ui') return `Permission needed to ${what}. Open the ai-figma canvas to approve it, or allow it ahead of time with \`${hint}\`.`
+  const hint = `nodboard permissions allow ${subject} ${ask.capability} ${ask.target}`
+  if (r.via === 'no-ui') return `Permission needed to ${what}. Open the nodboard canvas to approve it, or allow it ahead of time with \`${hint}\`.`
   if (r.via === 'timeout') return `Permission to ${what} was not answered in time, so nothing was fetched. Ask the person to approve it in the canvas and try again.`
-  if (r.via === 'policy') return `Permission to ${what} is turned off on this machine (AIFIG_PERMISSIONS=deny).`
+  if (r.via === 'policy') return `Permission to ${what} is turned off on this machine (NODBOARD_PERMISSIONS=deny).`
   return `The person declined permission to ${what}. Don't retry unless they ask you to.`
 }

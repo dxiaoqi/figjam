@@ -1,7 +1,7 @@
 // Deterministic large boards for `npm run bench`: frames, stickies, cards, text, typed blocks, images,
 // inline web snippets and connectors (curved / elbow / labelled / relations).
 import { PNG } from 'pngjs'
-import { BLOCK_TYPES, cardContentHeight, measureCard, STICKY_SIZES, stickyContentHeight, type Block, type BlockTypeId, type Connector } from '@aifig/shared'
+import { BLOCK_TYPES, cardContentHeight, measureCard, STICKY_SIZES, stickyContentHeight, type Block, type BlockTypeId, type Connector } from '@nodboard/shared'
 import { Board } from '../../packages/core/src/board'
 
 const WORDS = 'onboarding offline sync latency pricing churn trust delight search export template agent canvas review layout frame insight quote cluster metric roadmap feedback friction habit mobile desktop team share comment focus speed calm clarity'.split(' ')
@@ -48,7 +48,7 @@ export interface FixtureInfo {
   typed: number
 }
 
-/** Build a board with exactly `total` blocks and save it under the current AIFIG_HOME. */
+/** Build a board with exactly `total` blocks and save it under the current NODBOARD_HOME. */
 export function buildBoard(total: number, seed = 42): FixtureInfo {
   const r = rng(seed)
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(r() * xs.length)]

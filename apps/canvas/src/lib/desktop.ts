@@ -1,7 +1,7 @@
 /** Bridge exposed by the Electron preload (undefined in the browser). */
 export interface DesktopBridge {
   platform: string
-  /** the core's access token, read by the shell from AIFIG_HOME */
+  /** the core's access token, read by the shell from NODBOARD_HOME */
   token?: string
   /** web snippets run in <webview> with a partition per snippet */
   snippetWebviews?: boolean
@@ -30,7 +30,7 @@ export interface DesktopBridge {
 export interface TelemetryStatus {
   /** an endpoint is configured for this build (otherwise telemetry is a no-op and the UI hides it) */
   configured: boolean
-  /** AIFIG_TELEMETRY=off or DO_NOT_TRACK=1 */
+  /** NODBOARD_TELEMETRY=off or DO_NOT_TRACK=1 */
   envDisabled: boolean
   consent: 'granted' | 'denied' | null
   enabled: boolean
@@ -38,4 +38,4 @@ export interface TelemetryStatus {
   preview: Record<string, string | number | undefined>
 }
 
-export const desktop: DesktopBridge | undefined = (globalThis as { aifigDesktop?: DesktopBridge }).aifigDesktop
+export const desktop: DesktopBridge | undefined = (globalThis as { nodboardDesktop?: DesktopBridge }).nodboardDesktop

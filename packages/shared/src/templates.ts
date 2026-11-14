@@ -1,4 +1,4 @@
-/** Board templates: ordinary typed blocks laid out by the core's layout engine (content lives in @aifig/core). */
+/** Board templates: ordinary typed blocks laid out by the core's layout engine (content lives in @nodboard/core). */
 export const TEMPLATE_IDS = [
   'research-synthesis',
   'competitor-analysis',

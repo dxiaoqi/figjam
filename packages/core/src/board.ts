@@ -2,12 +2,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { customAlphabet } from 'nanoid'
 import * as Y from 'yjs'
-import { assetFileName, assetIdFor, blockAssetRefs, skillTypeRegistry, type AssetRole, type WebSnippet } from '@aifig/shared'
-import type { Asset, Block, BoardSkill, BoardSummary, ChangeSet, Connector, Rect, Thread, TypeRegistry } from '@aifig/shared'
+import { assetFileName, assetIdFor, blockAssetRefs, skillTypeRegistry, type AssetRole, type WebSnippet } from '@nodboard/shared'
+import type { Asset, Block, BoardSkill, BoardSummary, ChangeSet, Connector, Rect, Thread, TypeRegistry } from '@nodboard/shared'
 import { AssetStore, siblingAssetsDir } from './assets'
 import { cleanStaleTemps, writeFileAtomic } from './atomic'
 import { backupFile, backupPools, listBackups, quarantine } from './backups'
-import { aifigHome } from './config'
+import { nodboardHome } from './config'
 import {
   compareSchema,
   CorruptFileError,
@@ -15,8 +15,12 @@ import {
   decodeContainer,
   encodeContainer,
   formatSchema,
+  BOARD_EXT,
   FutureVersionError,
+  isBoardFileName,
+  LEGACY_BOARD_EXT,
   LEGACY_SCHEMA,
+  stripBoardExt,
   type SchemaVersion,
 } from './fileformat'
 import { migrate, type MigrationResult } from './migrations'
@@ -25,12 +29,19 @@ import { readableCopies } from './readable-copy'
 import { DataSafety } from './safety'
 import { listVersions, migrateHistory, readVersion } from './versions'
 
-export { aifigHome }
+export { nodboardHome }
 
 export const newId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 10)
 
+/** Prefer an existing `.aifig` file so boards saved before the rename keep their path. */
+function storedBoardFile(dir: string, id: string) {
+  const next = path.join(dir, `${id}${BOARD_EXT}`)
+  const prev = path.join(dir, `${id}${LEGACY_BOARD_EXT}`)
+  return fs.existsSync(prev) && !fs.existsSync(next) ? prev : next
+}
+
 export function boardsDir() {
-  return path.join(aifigHome(), 'boards')
+  return path.join(nodboardHome(), 'boards')
 }
 
 /** Quiet period before a burst of edits is written… */
@@ -62,10 +73,10 @@ export interface ChangeCounts {
 }
 
 /**
- * One board = one Yjs document, persisted as `<id>.aifig` (checksummed container, see fileformat.ts), its
+ * One board = one Yjs document, persisted as `<id>.nodboard` (checksummed container, see fileformat.ts), its
  * files in `<id>.assets/` (content-addressed, see assets.ts), plus a readable `<id>.json` copy (debounced,
  * built off the event loop; see readable-copy.ts). Saves are coalesced and atomic. A board opened from or
- * saved to a user file (`Name.aifig`) mirrors every save there, with its files in `Name.assets/` next to it.
+ * saved to a user file (`Name.nodboard`) mirrors every save there, with its files in `Name.assets/` next to it.
  */
 export class Board {
   readonly doc = new Y.Doc()
@@ -94,7 +105,7 @@ export class Board {
   pending: ChangeCounts = { added: 0, removed: 0, updated: 0 }
   private updatedKeys = new Set<string>()
   lastSavedAt = 0
-  /** A user-chosen .aifig file (Open / Save As) that every save is mirrored to. */
+  /** A user-chosen .nodboard file (Open / Save As) that every save is mirrored to. */
   externalPath: string | null = null
   /** Called right before a write replaces the file on disk (the old bytes are still there). */
   beforeWrite: ((b: Board, pending: ChangeCounts) => void) | null = null
@@ -130,7 +141,7 @@ export class Board {
   }
 
   get file() {
-    return path.join(boardsDir(), `${this.id}.aifig`)
+    return storedBoardFile(boardsDir(), this.id)
   }
 
   get jsonFile() {
@@ -147,7 +158,7 @@ export class Board {
     return this.storeCache
   }
 
-  /** `Name.assets/` next to the user's `Name.aifig` (Open / Save As), if there is one. */
+  /** `Name.assets/` next to the user's `Name.nodboard` (Open / Save As), if there is one. */
   get externalStore() {
     return this.externalPath ? new AssetStore(siblingAssetsDir(this.externalPath)) : null
   }
@@ -465,7 +476,7 @@ export class BoardRegistry {
   }
 
   private externalIndex() {
-    return path.join(aifigHome(), 'external.json')
+    return path.join(nodboardHome(), 'external.json')
   }
 
   private saveExternalIndex() {
@@ -474,7 +485,7 @@ export class BoardRegistry {
     writeFileAtomic(this.externalIndex(), JSON.stringify(map, null, 2))
   }
 
-  /** Open a .aifig file from anywhere; saves are mirrored back to it. */
+  /** Open a .nodboard file from anywhere; saves are mirrored back to it. */
   openFile(file: string): Board {
     const abs = path.resolve(file)
     const open = [...this.boards.values()].find((b) => b.externalPath === abs)
@@ -482,7 +493,7 @@ export class BoardRegistry {
     const data = fs.readFileSync(abs)
     const { board: b, migration } = Board.fromBytes(`b${newId()}`, data, abs)
     this.importSiblingAssets(b, abs)
-    if (!b.meta.get('title')) b.meta.set('title', path.basename(abs, '.aifig'))
+    if (!b.meta.get('title')) b.meta.set('title', stripBoardExt(path.basename(abs)))
     if (migration.applied.length) backupFile(b.id, b.title, data, `before-format-${formatSchema(migration.from)}`)
     b.externalPath = abs
     b.saveNow(true)
@@ -524,8 +535,8 @@ export class BoardRegistry {
       /* none yet */
     }
     for (const f of fs.readdirSync(boardsDir())) {
-      if (!f.endsWith('.aifig')) continue
-      const id = f.slice(0, -'.aifig'.length)
+      if (!isBoardFileName(f)) continue
+      const id = stripBoardExt(f)
       const b = this.loadOne(id, external[id] ?? null)
       if (b) this.add(b)
     }
@@ -533,7 +544,7 @@ export class BoardRegistry {
 
   /** Load a board file, recovering from the newest good copy if it's damaged. Null if it can't be opened. */
   private loadOne(id: string, externalPath: string | null): Board | null {
-    const file = path.join(boardsDir(), `${id}.aifig`)
+    const file = storedBoardFile(boardsDir(), id)
     let data: Buffer
     try {
       data = fs.readFileSync(file)
@@ -565,7 +576,7 @@ export class BoardRegistry {
           kind: 'future-version',
           level: 'warning',
           boardId: id,
-          title: 'Board saved by a newer ai-figma',
+          title: 'Board saved by a newer nodboard',
           detail: e.message,
           file,
         })

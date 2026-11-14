@@ -1,7 +1,7 @@
 import { Check, Copy, FolderOpen, Loader2, Puzzle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { SCENARIO_IDS, SCENARIOS, type ScenarioId, type TemplateId } from '@aifig/shared'
+import { SCENARIO_IDS, SCENARIOS, type ScenarioId, type TemplateId } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -167,8 +167,8 @@ export function NewBoardDialog({ theme, onCreate, onOpenSample }: { theme: Theme
       setTitle('')
       setOpen(true)
     }
-    window.addEventListener('aifig:new-board', on)
-    return () => window.removeEventListener('aifig:new-board', on)
+    window.addEventListener('nodboard:new-board', on)
+    return () => window.removeEventListener('nodboard:new-board', on)
   }, [])
 
   const selected: TemplateChoice = tab === 'scenarios' ? scenarioTemplate : choice
@@ -264,7 +264,7 @@ export function NewBoardDialog({ theme, onCreate, onOpenSample }: { theme: Theme
         </div>
         <DialogFooter className="items-center gap-2 sm:justify-between">
           <p className="hidden text-xs text-muted-foreground sm:block">
-            {tn('newBoard.cli', { cmd: <code className="font-mono text-[11px]">{selected === 'blank' ? 'aifig new-board' : `aifig new-board --template ${selected}`}</code> })}
+            {tn('newBoard.cli', { cmd: <code className="font-mono text-[11px]">{selected === 'blank' ? 'nodboard new-board' : `nodboard new-board --template ${selected}`}</code> })}
           </p>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>

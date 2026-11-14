@@ -1,4 +1,4 @@
-import { COLORS, SURFACES, type ColorToken, type TemplateId } from '@aifig/shared'
+import { COLORS, SURFACES, type ColorToken, type TemplateId } from '@nodboard/shared'
 import type { ThemeMode } from '../board-context'
 
 type Id = TemplateId | 'blank'

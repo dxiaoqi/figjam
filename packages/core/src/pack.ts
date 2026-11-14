@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import * as Y from 'yjs'
-import { ASSET_FILE_RE, type Asset, type Block, type BoardSkill } from '@aifig/shared'
+import { ASSET_FILE_RE, type Asset, type Block, type BoardSkill } from '@nodboard/shared'
 import { AssetStore, sha256Hex } from './assets'
 import { readToken } from './auth'
 import type { Board, BoardRegistry } from './board'
@@ -14,28 +14,30 @@ import { docAssetFiles, historyDir, listVersions, readVersion } from './versions
 import { ZipWriter } from './zip'
 
 /**
- * `.aifigpack`: one board to hand to someone else. A zip with
+ * `.nodboardpack`: one board to hand to someone else. A zip with
  *
  *   manifest.json        format + version, what's included, SHA-256 and size of every other file
- *   board.aifig          the board (comments optional)
+ *   board.nodboard          the board (comments optional)
  *   assets/<sha256>.ext  every file the board (and included history) uses
  *   skills/<name>/…      the skills enabled on the board (SKILL.md, canvas/)
- *   history/<v>.aifig    version history (optional)
+ *   history/<v>.nodboard    version history (optional)
  *
  * Never inside: the access token, permission grants, secrets, snippet grants, or anything outside the board.
  * Import checks everything before a byte lands in the chosen folder (see unzip.ts and importPack).
  */
 
-export const PACK_FORMAT = 'aifigpack'
+export const PACK_FORMAT = 'nodboardpack'
+const LEGACY_PACK_FORMAT = 'aifigpack'
 export const PACK_VERSION = 1
-export const PACK_EXT = '.aifigpack'
+export const PACK_EXT = '.nodboardpack'
+export const LEGACY_PACK_EXT = '.aifigpack'
 
 export interface PackManifest {
-  format: typeof PACK_FORMAT
+  format: 'nodboardpack' | 'aifigpack'
   version: number
   createdAt: string
   app: string
-  board: { title: string; schema: string; blocks: number; file: 'board.aifig' }
+  board: { title: string; schema: string; blocks: number; file: 'board.nodboard' | 'board.aifig' }
   includes: { history: boolean; comments: boolean; skills: string[] }
   files: { path: string; size: number; sha256: string }[]
   /** Files the board names that weren't found when packing. */
@@ -121,10 +123,10 @@ export function exportPack(board: Board, skills: SkillLibrary, out: string, opts
   const doc = shareableDoc(board.doc, { comments, drop: new Set(unusedEntries(board).map((a) => a.id)) })
   const payload = Y.encodeStateAsUpdate(doc)
   const token = readToken()
-  if (token && Buffer.from(payload).includes(Buffer.from(token))) throw new Error('This board contains the ai-figma access token (pasted into a block?). Remove it before sharing — nothing was written.')
+  if (token && Buffer.from(payload).includes(Buffer.from(token))) throw new Error('This board contains the nodboard access token (pasted into a block?). Remove it before sharing — nothing was written.')
   const files = docAssetFiles(doc)
   const boardBytes = encodeContainer(payload, { savedAt: Date.now(), title: board.title, schema: board.schemaLabel, assets: files })
-  const entries: { path: string; data?: Uint8Array; file?: string; store?: boolean }[] = [{ path: 'board.aifig', data: boardBytes }]
+  const entries: { path: string; data?: Uint8Array; file?: string; store?: boolean }[] = [{ path: 'board.nodboard', data: boardBytes }]
   const wanted = new Set(files)
   if (history) {
     for (const v of listVersions(board.id)) {
@@ -138,7 +140,7 @@ export function exportPack(board: Board, skills: SkillLibrary, out: string, opts
           bytes = encodeContainer(Y.encodeStateAsUpdate(clean), { savedAt: r.header!.savedAt, title: r.header!.title, schema: r.header!.schema, version: r.header!.version, assets: docAssetFiles(clean) })
         }
         for (const f of readHeader(bytes).header.assets ?? []) wanted.add(f)
-        entries.push({ path: `history/${v.id}.aifig`, data: bytes })
+        entries.push({ path: `history/${v.id}.nodboard`, data: bytes })
       } catch {
         warnings.push(`Version ${v.id} can’t be read and was left out`)
       }
@@ -157,7 +159,7 @@ export function exportPack(board: Board, skills: SkillLibrary, out: string, opts
   }
   if (missing.length) warnings.push(`${missing.length} file(s) the board names are missing and were left out`)
   const skillNames: string[] = []
-  const staging = fs.mkdtempSync(path.join(path.dirname(out), '.aifigpack-skills-'))
+  const staging = fs.mkdtempSync(path.join(path.dirname(out), '.nodboardpack-skills-'))
   try {
     for (const s of board.skills.values()) {
       const lib = skills.get(s.name)
@@ -179,7 +181,7 @@ export function exportPack(board: Board, skills: SkillLibrary, out: string, opts
       version: PACK_VERSION,
       createdAt: new Date().toISOString(),
       app: APP_VERSION,
-      board: { title: board.title, schema: board.schemaLabel, blocks: doc.getMap('blocks').size, file: 'board.aifig' },
+      board: { title: board.title, schema: board.schemaLabel, blocks: doc.getMap('blocks').size, file: 'board.nodboard' },
       includes: { history, comments, skills: skillNames },
       files: [],
       ...(missing.length ? { missing } : {}),
@@ -197,7 +199,7 @@ export function exportPack(board: Board, skills: SkillLibrary, out: string, opts
       zip.addBuffer('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2)))
       for (const e of entries) {
         if (e.file) zip.addFile(e.path, e.file)
-        else zip.addBuffer(e.path, e.data!, /\.aifig$/.test(e.path))
+        else zip.addBuffer(e.path, e.data!, /\.nodboard$/.test(e.path))
       }
       zip.finish()
       fs.renameSync(tmp, out)
@@ -224,15 +226,15 @@ export function inspectPack(file: string) {
 
 function readManifest(fd: number, items: ZipItem[]): PackManifest {
   const it = items.find((i) => i.name === 'manifest.json')
-  if (!it) throw new ZipError('Not an ai-figma pack (no manifest.json)')
+  if (!it) throw new ZipError('Not a nodboard pack (no manifest.json)')
   let m: PackManifest
   try {
     m = JSON.parse(extractEntry(fd, it).data!.toString('utf8'))
   } catch (e) {
     throw e instanceof ZipError ? e : new ZipError('The pack’s manifest is damaged')
   }
-  if (m?.format !== PACK_FORMAT) throw new ZipError('Not an ai-figma pack')
-  if (typeof m.version !== 'number' || m.version > PACK_VERSION) throw new ZipError(`This pack was made by a newer ai-figma (pack format ${m.version}). Update ai-figma to open it.`)
+  if (m?.format !== PACK_FORMAT && m?.format !== LEGACY_PACK_FORMAT) throw new ZipError('Not a nodboard pack')
+  if (typeof m.version !== 'number' || m.version > PACK_VERSION) throw new ZipError(`This pack was made by a newer nodboard (pack format ${m.version}). Update nodboard to open it.`)
   if (!Array.isArray(m.files) || m.files.some((f) => typeof f?.path !== 'string' || typeof f.sha256 !== 'string' || typeof f.size !== 'number')) throw new ZipError('The pack’s manifest is damaged')
   const listed = new Map(m.files.map((f) => [f.path, f]))
   if (listed.size !== m.files.length) throw new ZipError('The pack’s manifest lists a file twice')
@@ -243,16 +245,16 @@ function readManifest(fd: number, items: ZipItem[]): PackManifest {
     if (f.size !== i.size) throw new ZipError(`“${i.name}” doesn’t match the size in the manifest`)
   }
   for (const f of m.files) if (!items.some((i) => i.name === f.path)) throw new ZipError(`“${f.path}” is listed in the manifest but missing from the pack`)
-  if (!listed.has('board.aifig')) throw new ZipError('The pack has no board')
+  if (!listed.has('board.nodboard') && !listed.has('board.aifig')) throw new ZipError('The pack has no board')
   return m
 }
 
 /** Where a pack entry may go, relative to the staging folder; null means it has no business in a pack. */
 function packTarget(name: string): string | null {
-  if (name === 'board.aifig') return name
+  if (name === 'board.nodboard' || name === 'board.aifig') return name
   const a = name.match(/^assets\/([^/]+)$/)
   if (a) return ASSET_FILE_RE.test(a[1]) ? name : null
-  if (/^history\/v[0-9a-z]{4,40}\.aifig$/.test(name)) return name
+  if (/^history\/v[0-9a-z]{4,40}\.(nodboard|aifig)$/.test(name)) return name
   const s = name.match(/^skills\/([a-z0-9][a-z0-9-]{0,63})\/(.+)$/)
   if (s && !SKILL_FILE_NEVER.test(s[2]) && SKILL_FILE_OK.test(s[2]) && s[2].split('/').length <= 4) return name
   return null
@@ -269,13 +271,13 @@ export interface ImportResult {
 
 /**
  * Check a pack completely (paths, sizes, CRCs, manifest checksums, the board's own checksum), then put the
- * board in `destDir` as `<Title>.aifig` + `<Title>.assets/` (never replacing anything there) and open it.
+ * board in `destDir` as `<Title>.nodboard` + `<Title>.assets/` (never replacing anything there) and open it.
  * Skills are installed only when asked; version history joins the new board's history.
  */
 export function importPack(registry: BoardRegistry, skills: SkillLibrary, file: string, destDir: string, opts: { installSkills?: boolean } = {}): ImportResult {
   const dest = path.resolve(destDir)
   fs.mkdirSync(dest, { recursive: true })
-  const staging = fs.mkdtempSync(path.join(dest, '.aifigpack-'))
+  const staging = fs.mkdtempSync(path.join(dest, '.nodboardpack-'))
   const warnings: string[] = []
   const fd = fs.openSync(file, 'r')
   try {
@@ -285,7 +287,7 @@ export function importPack(registry: BoardRegistry, skills: SkillLibrary, file: 
     for (const it of items) {
       if (it.name === 'manifest.json') continue
       const rel = packTarget(it.name)
-      if (!rel) throw new ZipError(`“${it.name}” doesn’t belong in an ai-figma pack`)
+      if (!rel) throw new ZipError(`“${it.name}” doesn’t belong in a nodboard pack`)
       const target = path.join(staging, ...rel.split('/'))
       if (!target.startsWith(staging + path.sep)) throw new ZipError(`Unsafe path in the pack: “${it.name}”`)
       fs.mkdirSync(path.dirname(target), { recursive: true })
@@ -294,16 +296,17 @@ export function importPack(registry: BoardRegistry, skills: SkillLibrary, file: 
       const asset = rel.match(/^assets\/([0-9a-f]{64})\./)
       if (asset && asset[1] !== sha256) throw new ZipError(`“${it.name}” doesn’t match its name`)
     }
-    const boardBytes = fs.readFileSync(path.join(staging, 'board.aifig'))
-    const decoded = decodeContainer(boardBytes, 'board.aifig')
+    const packedBoard = fs.existsSync(path.join(staging, 'board.nodboard')) ? 'board.nodboard' : 'board.aifig'
+    const boardBytes = fs.readFileSync(path.join(staging, packedBoard))
+    const decoded = decodeContainer(boardBytes, packedBoard)
     for (const f of decoded.header?.assets ?? []) if (!fs.existsSync(path.join(staging, 'assets', f))) warnings.push(`${f} is missing from the pack`)
 
     const base = safeName(manifest.board?.title ?? '')
     let name = base
-    for (let n = 2; fs.existsSync(path.join(dest, `${name}.aifig`)) || fs.existsSync(path.join(dest, `${name}.assets`)); n++) name = `${base} ${n}`
-    const boardFile = path.join(dest, `${name}.aifig`)
+    for (let n = 2; fs.existsSync(path.join(dest, `${name}.nodboard`)) || fs.existsSync(path.join(dest, `${name}.assets`)); n++) name = `${base} ${n}`
+    const boardFile = path.join(dest, `${name}.nodboard`)
     const assetsDir = path.join(dest, `${name}.assets`)
-    fs.renameSync(path.join(staging, 'board.aifig'), boardFile)
+    fs.renameSync(path.join(staging, packedBoard), boardFile)
     if (fs.existsSync(path.join(staging, 'assets'))) {
       fs.renameSync(path.join(staging, 'assets'), assetsDir)
       for (const f of fs.readdirSync(assetsDir)) fs.chmodSync(path.join(assetsDir, f), 0o444)

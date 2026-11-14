@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { AgentPresence } from '@aifig/shared'
+import type { AgentPresence } from '@nodboard/shared'
 import { useAgentsOnBoard, useBoard } from '../board-context'
 import { ConnectDialog } from './ConnectDialog'
 import { HistoryMenu } from './HistoryMenu'
@@ -71,8 +71,8 @@ export function TopRight() {
   const t = useT()
   useEffect(() => {
     const open = () => setConnectOpen(true)
-    window.addEventListener('aifig:connect', open)
-    return () => window.removeEventListener('aifig:connect', open)
+    window.addEventListener('nodboard:connect', open)
+    return () => window.removeEventListener('nodboard:connect', open)
   }, [])
   return (
     <div className="pointer-events-auto m-3 flex items-center gap-2">

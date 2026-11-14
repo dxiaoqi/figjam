@@ -2,7 +2,7 @@ import { t } from '../i18n'
 import { Code2, ExternalLink, Globe, Play, TriangleAlert } from 'lucide-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { toast } from 'sonner'
-import { intersects, type BlockRenderProps, type Editor } from '@aifig/canvas-engine'
+import { intersects, type BlockRenderProps, type Editor } from '@nodboard/canvas-engine'
 import {
   checkSnippetPermission,
   EMBED_ALLOW,
@@ -15,7 +15,7 @@ import {
   snippetThumbKey,
   type Block,
   type WebSnippet,
-} from '@aifig/shared'
+} from '@nodboard/shared'
 import { cn } from '@/lib/utils'
 import { useBoard } from '../board-context'
 import { callCore } from '../lib/core'
@@ -36,7 +36,7 @@ function releaseCapture() {
   captureBusy = false
 }
 
-type BridgeMsg = { aifig: 1; type: string; id?: number; data?: unknown; mem?: number; nodes?: number; message?: string; error?: string }
+type BridgeMsg = { nodboard: 1; type: string; id?: number; data?: unknown; mem?: number; nodes?: number; message?: string; error?: string }
 
 /** Posts to the running snippet, whichever element hosts it. */
 type Post = (msg: unknown) => void
@@ -83,12 +83,12 @@ function SnippetFrame({
       const wv = node as WebviewElement
       const on = (e: Event) => {
         const ev = e as Event & { channel: string; args: unknown[] }
-        if (ev.channel === 'aifig') handler.current(ev.args[0])
+        if (ev.channel === 'nodboard') handler.current(ev.args[0])
       }
       wv.addEventListener('ipc-message', on)
       post.current = (m) => {
         try {
-          wv.send('aifig', m)
+          wv.send('nodboard', m)
         } catch {
           // not attached yet: the snippet asks again once it is ready
         }
@@ -108,8 +108,8 @@ function SnippetFrame({
     }
   }, [src, post, frameRef])
   const common = capture
-    ? { title: 'preview', 'aria-hidden': true, tabIndex: -1, className: 'aifig-web-capture', 'data-web-capture': '' }
-    : { title, className: 'aifig-web-frame', 'data-web-frame': '' }
+    ? { title: 'preview', 'aria-hidden': true, tabIndex: -1, className: 'nodboard-web-capture', 'data-web-capture': '' }
+    : { title, className: 'nodboard-web-frame', 'data-web-frame': '' }
   if (useWebview) return <webview ref={el as RefObject<HTMLElement>} src={src} partition={partition} webpreferences="contextIsolation=yes,sandbox=yes,nodeIntegration=no" {...common} />
   return (
     <iframe
@@ -130,10 +130,10 @@ function useBridge(opts: { block: Block; editor: Editor; readOnly?: boolean; onH
   ref.current = opts
   const post = useRef<Post | null>(null)
   const onMessage = useRef((raw: unknown) => {
-    const reply = (id: number | undefined, data?: unknown, error?: string) => post.current?.({ aifig: 1, type: 'reply', id, data, error })
+    const reply = (id: number | undefined, data?: unknown, error?: string) => post.current?.({ nodboard: 1, type: 'reply', id, data, error })
     {
       const m = raw as BridgeMsg
-      if (!m || m.aifig !== 1 || typeof m.type !== 'string') return
+      if (!m || m.nodboard !== 1 || typeof m.type !== 'string') return
       const { editor, block } = ref.current
       const cur = editor.block(block.id)
       const web = cur?.web
@@ -177,13 +177,13 @@ function useBridge(opts: { block: Block; editor: Editor; readOnly?: boolean; onH
 
 function Poster({ web, thumbUrl }: { web: WebSnippet; thumbUrl: string | null }) {
   const img = thumbUrl ?? (web.mode === 'url' ? web.posterUrl : undefined)
-  if (img) return <img className="aifig-web-thumb" src={img} alt="" draggable={false} referrerPolicy="no-referrer" />
+  if (img) return <img className="nodboard-web-thumb" src={img} alt="" draggable={false} referrerPolicy="no-referrer" />
   const Icon = web.mode === 'url' ? Globe : Code2
   return (
-    <div className="aifig-web-poster">
+    <div className="nodboard-web-poster">
       <Icon className="size-6 opacity-60" strokeWidth={1.5} />
-      <div className="aifig-web-title">{snippetLabel(web)}</div>
-      <div className="aifig-web-sub">{web.mode === 'url' ? web.url : 'HTML · CSS · JS'}</div>
+      <div className="nodboard-web-title">{snippetLabel(web)}</div>
+      <div className="nodboard-web-sub">{web.mode === 'url' ? web.url : 'HTML · CSS · JS'}</div>
     </div>
   )
 }
@@ -255,7 +255,7 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
     const json = JSON.stringify(web?.state ?? null)
     if (json === lastState.current) return
     lastState.current = json
-    live.post.current?.({ aifig: 1, type: 'state', data: web?.state ?? null })
+    live.post.current?.({ nodboard: 1, type: 'state', data: web?.state ?? null })
   }, [running, web?.state])
 
   // preview capture: run the snippet briefly (sandboxed, offscreen) and let it snapshot itself
@@ -303,15 +303,15 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
     },
   })
 
-  if (!web) return <div className="aifig-web" />
+  if (!web) return <div className="nodboard-web" />
   return (
-    <div className={cn('aifig-web', running && 'is-running')} data-web-mode={web.mode}>
+    <div className={cn('nodboard-web', running && 'is-running')} data-web-mode={web.mode}>
       {!running && <Poster web={web} thumbUrl={thumbUrl} />}
       {running && src && (
         <SnippetFrame key={hash} src={src} title={snippetLabel(web)} embed={web.mode === 'url'} partition={partitionFor(boardId, block.id)} onMessage={live.onMessage} post={live.post} frameRef={frame} />
       )}
       {captureSlot && needCapture && <SnippetFrame src={`${src}&capture=1`} title="preview" embed={false} partition={partitionFor(boardId, block.id)} onMessage={preview.onMessage} post={preview.post} capture />}
-      <div className="aifig-web-badge">
+      <div className="nodboard-web-badge">
         {web.mode === 'url' ? <Play className="size-3" fill="currentColor" /> : <Code2 className="size-3" />}
         <span className="truncate">{running ? t('snippet.escStop', { label: snippetLabel(web) }) : snippetLabel(web)}</span>
       </div>
@@ -319,7 +319,7 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
         <a
           data-ui
           data-watch-link
-          className={cn('aifig-web-watch', running && 'is-running')}
+          className={cn('nodboard-web-watch', running && 'is-running')}
           href={web.url}
           target="_blank"
           rel="noopener noreferrer"
@@ -331,9 +331,9 @@ export function WebBlock({ block, editing, editor }: BlockRenderProps) {
           <ExternalLink className="size-3" />
         </a>
       )}
-      {!running && !stopped && <div className="aifig-web-hint">{t(web.mode === 'url' ? 'snippet.hintOpen' : 'snippet.hintRun')}</div>}
+      {!running && !stopped && <div className="nodboard-web-hint">{t(web.mode === 'url' ? 'snippet.hintOpen' : 'snippet.hintRun')}</div>}
       {stopped && !running && (
-        <div className="aifig-web-stopped" data-web-stopped>
+        <div className="nodboard-web-stopped" data-web-stopped>
           <TriangleAlert className="size-4 shrink-0" />
           <span>{t('snippet.tryAgain', { reason: stopped })}</span>
         </div>

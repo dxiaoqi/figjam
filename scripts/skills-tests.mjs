@@ -1,6 +1,6 @@
 // Skill v1: format + validation, discovery/install, enable per board, skill types, layouts, L1 actions with
-// permission prompts and the activity log, `aifig skill new/validate/dev`, "Save as block type", MCP exposure.
-// usage: node scripts/skills-tests.mjs   (starts its own isolated core on a spare port with a temporary AIFIG_HOME)
+// permission prompts and the activity log, `nodboard skill new/validate/dev`, "Save as block type", MCP exposure.
+// usage: node scripts/skills-tests.mjs   (starts its own isolated core on a spare port with a temporary NODBOARD_HOME)
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -14,22 +14,22 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const port = 48010 + Math.floor(Math.random() * 40) * 2
 const base = `http://127.0.0.1:${port}`
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-skills-'))
-const work = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-skill-work-'))
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-skills-'))
+const work = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-skill-work-'))
 fs.writeFileSync(path.join(home, 'mcp.json'), JSON.stringify({ mcpServers: { web: { command: process.execPath, args: [path.join(root, 'tests/fixtures/mock-mcp-server.mjs')] } } }))
-const env = { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: String(port) }
+const env = { ...process.env, NODBOARD_HOME: home, NODBOARD_CORE_PORT: String(port) }
 let failures = 0
 const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? ` — ${detail}` : ''}`)
   if (!ok) failures++
 }
-const core = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
+const core = spawn(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
 for (let i = 0; i < 100 && !(await fetch(`${base}/api/health`).then((r) => r.ok, () => false)); i++) await sleep(100)
 const api = (p, init) => authedFetch(`${base}${p}`, init, home)
 const HUMAN = { id: 'human:skills', name: 'You', client: 'test', kind: 'human' }
 const AGENT = { id: `claude-code:${Date.now()}`, name: '', client: 'claude-code', kind: 'agent' }
 const call = async (caller, tool, args = {}) => (await api('/api/call', { method: 'POST', body: JSON.stringify({ tool, args, caller }) })).json()
-const cli = (...args) => spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), ...args], { encoding: 'utf8', env })
+const cli = (...args) => spawnSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), ...args], { encoding: 'utf8', env })
 const board = (await call(HUMAN, 'create_board', { title: 'Skills test' })).result.board.id
 const get = async () => (await call(HUMAN, 'get_board', { board, format: 'json' })).result
 const allBlocks = async () => {
@@ -48,9 +48,9 @@ check('list_skills says which tools are configured', rk.tools[0].name === 'web.s
 const gs = (await call(AGENT, 'get_skill', { name: 'research-kit' })).result
 check('get_skill returns SKILL.md instructions, types with templates, layouts, prompts', gs.instructions.includes('# Research Kit') && gs.types.find((t) => t.id === 'research-kit.insight').template.rows.includes('confidence') && gs.layouts.some((l) => l.id === 'research-kit.opportunity-matrix') && gs.prompts[0].text.includes('query_blocks'))
 const mcp = new Client({ name: 'skills-test', version: '1' })
-await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/aifig.mjs'), 'mcp'], env, stderr: 'ignore' }))
+await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/nodboard.mjs'), 'mcp'], env, stderr: 'ignore' }))
 const resources = await mcp.listResources()
-const skillRes = resources.resources.find((r) => r.uri === 'aifig://skills/research-kit/SKILL.md')
+const skillRes = resources.resources.find((r) => r.uri === 'nodboard://skills/research-kit/SKILL.md')
 const read = skillRes ? await mcp.readResource({ uri: skillRes.uri }) : null
 check('MCP exposes each skill’s SKILL.md as a resource', !!read && read.contents[0].text.includes('research-kit.quote'), resources.resources.map((r) => r.uri).join(', '))
 const tools = (await mcp.listTools()).tools.map((t) => t.name)
@@ -117,7 +117,7 @@ await call(HUMAN, 'load_dev_skill', { path: path.join(root, 'tests/fixtures/skil
 await call(HUMAN, 'enable_skill', { board, name: 'probe-kit' })
 const probe = (await call(HUMAN, 'create_blocks', { board, at: { x: 1600, y: 0 }, blocks: [{ title: 'Onboarding benchmarks', type: 'probe-kit.probe', fields: { level: 2 } }] })).result.created[0].id
 const noCanvas = await call(AGENT, 'run_skill_action', { board, skill: 'probe-kit', action: 'search', ids: [probe] })
-check('with no canvas open to ask, a skill tool call is refused with how to approve it', !noCanvas.ok && noCanvas.error.includes('Open the ai-figma canvas'), noCanvas.error)
+check('with no canvas open to ask, a skill tool call is refused with how to approve it', !noCanvas.ok && noCanvas.error.includes('Open the nodboard canvas'), noCanvas.error)
 // a canvas: receives the prompt over the sync socket, answers through the permissions API
 const ws = new WebSocket(`ws://127.0.0.1:${port}/sync/${board}`, wsProtocols(home))
 await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = j)))
@@ -159,10 +159,10 @@ check('the shared activity log records enable, permission decisions and tool cal
 const noTool = await call(AGENT, 'run_skill_action', { board, skill: 'product-kit', action: 'fetch-homepage', ids: [probe] })
 check('actions of skills not enabled, or with unconfigured tools, fail clearly', !noTool.ok && noTool.error.includes('not enabled'), noTool.error)
 
-// ---- aifig skill new / validate / dev (hot reload) -----------------------------------------------
+// ---- nodboard skill new / validate / dev (hot reload) -----------------------------------------------
 const nw = cli('skill', 'new', 'persona-kit', '--dir', work)
 const kit = path.join(work, 'persona-kit')
-check('`aifig skill new` scaffolds a valid skill', nw.status === 0 && fs.existsSync(path.join(kit, 'SKILL.md')) && fs.existsSync(path.join(kit, 'canvas/blocks.json')), nw.stdout + nw.stderr)
+check('`nodboard skill new` scaffolds a valid skill', nw.status === 0 && fs.existsSync(path.join(kit, 'SKILL.md')) && fs.existsSync(path.join(kit, 'canvas/blocks.json')), nw.stdout + nw.stderr)
 const blocksPath = path.join(kit, 'canvas/blocks.json')
 const good = fs.readFileSync(blocksPath, 'utf8')
 const broken = JSON.parse(good)
@@ -171,9 +171,9 @@ broken.types.item.template.rows.push('nope')
 broken.layouts.push({ id: 'x', label: 'X', intent: 'matrix' })
 fs.writeFileSync(blocksPath, JSON.stringify(broken))
 const v = cli('skill', 'validate', kit)
-check('`aifig skill validate` reports problems with their location', v.status === 1 && v.stdout.includes('canvas/blocks.json › types.item.color') && v.stdout.includes('"nope" is not one of this type\'s fields') && v.stdout.includes('needs "rows" and "cols"'), v.stdout)
+check('`nodboard skill validate` reports problems with their location', v.status === 1 && v.stdout.includes('canvas/blocks.json › types.item.color') && v.stdout.includes('"nope" is not one of this type\'s fields') && v.stdout.includes('needs "rows" and "cols"'), v.stdout)
 fs.writeFileSync(blocksPath, good)
-const dev = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), '--board', board, 'skill', 'dev', kit, '--enable'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+const dev = spawn(process.execPath, [path.join(root, 'bin/nodboard.mjs'), '--board', board, 'skill', 'dev', kit, '--enable'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
 let devOut = ''
 dev.stdout.on('data', (d) => (devOut += d))
 for (let i = 0; i < 50 && !devOut.includes('enabled persona-kit'); i++) await sleep(100)
@@ -185,7 +185,7 @@ for (let i = 0; i < 40 && !reloaded; i++) {
   await sleep(100)
   reloaded = (await call(HUMAN, 'list_types', { board })).result.types.find((t) => t.id === 'persona-kit.item')?.fields.some((f) => f.key === 'due')
 }
-check('`aifig skill dev` hot-reloads changes into boards that use the skill', reloaded, devOut.split('\n').slice(-3).join(' | '))
+check('`nodboard skill dev` hot-reloads changes into boards that use the skill', reloaded, devOut.split('\n').slice(-3).join(' | '))
 fs.writeFileSync(blocksPath, '{ "types": ')
 await sleep(900)
 const kept = (await call(HUMAN, 'list_types', { board })).result.types.find((t) => t.id === 'persona-kit.item')
@@ -193,14 +193,14 @@ check('a broken save shows the error and keeps the last good version', devOut.in
 dev.kill()
 fs.writeFileSync(blocksPath, JSON.stringify(withField, null, 2))
 const inst = await call(HUMAN, 'install_skill', { path: kit })
-check('installing copies a skill into ~/.aifig/skills', inst.ok && fs.existsSync(path.join(home, 'skills/persona-kit/SKILL.md')), inst.error)
+check('installing copies a skill into ~/.nodboard/skills', inst.ok && fs.existsSync(path.join(home, 'skills/persona-kit/SKILL.md')), inst.error)
 
 // ---- no-code "Save as block type" ------------------------------------------------------------------
 const vendor = (await call(HUMAN, 'create_blocks', { board, at: { x: 2400, y: 0 }, blocks: [{ kind: 'card', title: 'Acme Boards', text: 'Price: $49/mo\nSegment: SMB\nOpen source: no' }] })).result.created[0].id
 const saved = await call(HUMAN, 'save_block_type', { board, block: vendor, label: 'Vendor', color: 'teal', icon: 'Store' })
 const vb = (await allBlocks()).find((b) => b.id === vendor)
 const skillDir = saved.result?.path
-const exported = skillDir ? spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'skill', 'validate', skillDir], { encoding: 'utf8', env }) : null
+const exported = skillDir ? spawnSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'skill', 'validate', skillDir], { encoding: 'utf8', env }) : null
 check('“Save as block type” infers fields and types the block', saved.ok && saved.result.fields.map((f) => `${f.key}:${f.kind}`).join() === 'price:number,segment:text,open_source:boolean' && vb.type === saved.result.type && vb.typeData[saved.result.type].price === 49, JSON.stringify(saved.error ?? saved.result?.fields))
 check('…and writes a standard skill folder that validates', exported?.status === 0 && fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8').startsWith('---\nname: skills-test-types'), exported?.stdout)
 const zip = Buffer.from(await (await api(saved.result.export)).arrayBuffer())
@@ -221,7 +221,7 @@ check('open_sample and add_comment stay human-only (not MCP tools)', !agentSampl
 check('scenario skill types carry zh-CN labels, field labels and option labels', (await call(AGENT, 'get_skill', { name: 'lit-kit' })).result.types.find((t) => t.id === 'lit-kit.claim').locales['zh-CN'].options.contested === '有争议')
 const badI18n = path.join(work, 'i18n-kit')
 fs.mkdirSync(path.join(badI18n, 'canvas'), { recursive: true })
-fs.writeFileSync(path.join(badI18n, 'SKILL.md'), '---\nname: i18n-kit\ndescription: test\nmetadata:\n  aifig:\n    canvas: canvas/blocks.json\n---\nx\n')
+fs.writeFileSync(path.join(badI18n, 'SKILL.md'), '---\nname: i18n-kit\ndescription: test\nmetadata:\n  nodboard:\n    canvas: canvas/blocks.json\n---\nx\n')
 fs.writeFileSync(path.join(badI18n, 'canvas/blocks.json'), JSON.stringify({ types: { a: { label: 'A', fields: [{ key: 'k', kind: 'text' }], i18n: { 'zh-CN': { label: '甲', fields: { nope: '无' } }, fr: 'x' } } } }))
 const v18 = cli('skill', 'validate', badI18n)
 check('skill validation checks translations (unknown fields warn, malformed locales fail)', v18.status !== 0 && /i18n\.fr/.test(v18.stdout + v18.stderr) && /"nope" is not one of this type's fields/.test(v18.stdout + v18.stderr), (v18.stdout + v18.stderr).trim().split('\n').slice(0, 3).join(' | '))

@@ -1,5 +1,5 @@
 // Anonymous install counting. Opt-in: nothing is stored or sent until the user turns it on (welcome tour or
-// Settings), and AIFIG_TELEMETRY=off / DO_NOT_TRACK=1 turn it off regardless. With no endpoint configured this
+// Settings), and NODBOARD_TELEMETRY=off / DO_NOT_TRACK=1 turn it off regardless. With no endpoint configured this
 // module does nothing at all.
 //
 // What a ping contains — and nothing else: a random install ID (generated when the user opts in, deleted when
@@ -13,7 +13,7 @@ export const PING_FIELDS = ['v', 'event', 'installId', 'appVersion', 'os', 'arch
 const OFF = /^(0|off|false|no|disabled?)$/i
 
 export function disabledByEnv(env = process.env) {
-  return OFF.test(env.AIFIG_TELEMETRY ?? '') || env.DO_NOT_TRACK === '1'
+  return OFF.test(env.NODBOARD_TELEMETRY ?? '') || env.DO_NOT_TRACK === '1'
 }
 
 /** `en-US`, `zh-CN`, `de`: language and region only; anything else becomes `und`. */

@@ -21,9 +21,9 @@ export interface PackPreview {
 /** Browser export: the core builds the pack and the browser downloads it. */
 export async function downloadPack(boardId: string, opts: { history: boolean; comments: boolean }) {
   const q = new URLSearchParams({ history: opts.history ? '1' : '0', comments: opts.comments ? '1' : '0' })
-  const r = await apiFetch(`/api/boards/${encodeURIComponent(boardId)}/pack.aifigpack?${q}`)
+  const r = await apiFetch(`/api/boards/${encodeURIComponent(boardId)}/pack.nodboardpack?${q}`)
   if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `Export failed (${r.status})`)
-  const name = decodeURIComponent(r.headers.get('content-disposition')?.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? 'board.aifigpack')
+  const name = decodeURIComponent(r.headers.get('content-disposition')?.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? 'board.nodboardpack')
   const url = URL.createObjectURL(await r.blob())
   const a = document.createElement('a')
   a.href = url
@@ -55,6 +55,6 @@ export function uploadPack(file: File, onProgress?: (p: number) => void): Promis
   })
 }
 
-export const openExportPack = () => window.dispatchEvent(new Event('aifig:export-pack'))
+export const openExportPack = () => window.dispatchEvent(new Event('nodboard:export-pack'))
 /** Open the import dialog, with a pack already on disk (desktop file association) or a file picker. */
-export const openImportPack = (path?: string) => window.dispatchEvent(new CustomEvent('aifig:import-pack', { detail: { path } }))
+export const openImportPack = (path?: string) => window.dispatchEvent(new CustomEvent('nodboard:import-pack', { detail: { path } }))

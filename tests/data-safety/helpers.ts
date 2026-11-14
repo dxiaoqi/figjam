@@ -2,11 +2,11 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-/** Point AIFIG_HOME (boards, history, backups, notices) at a fresh temp folder. */
+/** Point NODBOARD_HOME (boards, history, backups, notices) at a fresh temp folder. */
 export function tempHome(label = 'ds') {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), `aifig-${label}-`))
-  process.env.AIFIG_HOME = home
-  delete process.env.AIFIG_BACKUP_DIR
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), `nodboard-${label}-`))
+  process.env.NODBOARD_HOME = home
+  delete process.env.NODBOARD_BACKUP_DIR
   return home
 }
 

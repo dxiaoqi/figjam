@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
 
 /**
- * `.aifig` container (schema 1.x):
+ * `.nodboard` container (schema 1.x):
  *
- *   "AIFIG\0"        6-byte magic
+ *   "NODBD\0"        6-byte magic (older files use "AIFIG\0"; both open)
  *   u32 LE           header length
  *   header           UTF-8 JSON: { format, schema, app, savedAt, board?, version?, assets?, payload: { encoding, bytes, sha256 } }
  *   payload          Yjs update (Y.encodeStateAsUpdate) of the board document
@@ -16,7 +16,17 @@ import { createHash } from 'node:crypto'
  * the assets folder next to it, so history, backups and copies can find (and keep) them from the header alone.
  */
 
-export const MAGIC = Buffer.from('AIFIG\0', 'latin1')
+export const MAGIC = Buffer.from('NODBD\0', 'latin1')
+/** Files written before the nodboard rename. */
+export const LEGACY_MAGIC = Buffer.from('AIFIG\0', 'latin1')
+export const BOARD_EXT = '.nodboard'
+export const LEGACY_BOARD_EXT = '.aifig'
+
+export const isBoardFileName = (name: string) => name.endsWith(BOARD_EXT) || name.endsWith(LEGACY_BOARD_EXT)
+
+export function stripBoardExt(name: string) {
+  return name.replace(/\.(nodboard|aifig)$/i, '')
+}
 export const APP_VERSION = '0.1.0'
 
 export interface SchemaVersion {
@@ -39,7 +49,7 @@ export function compareSchema(a: SchemaVersion, b: SchemaVersion) {
 }
 
 export interface ContainerHeader {
-  format: 'aifig'
+  format: 'nodboard' | 'aifig'
   schema: string
   app: string
   savedAt: number
@@ -52,7 +62,7 @@ export interface ContainerHeader {
   payload: { encoding: 'yjs-update'; bytes: number; sha256: string }
 }
 
-/** The file is damaged: truncated, bit-flipped, or not an ai-figma file at all. */
+/** The file is damaged: truncated, bit-flipped, or not a nodboard file at all. */
 export class CorruptFileError extends Error {
   constructor(
     readonly reason: string,
@@ -62,7 +72,7 @@ export class CorruptFileError extends Error {
   }
 }
 
-/** The file was written by a newer ai-figma whose format this build can't safely read. */
+/** The file was written by a newer nodboard whose format this build can't safely read. */
 export class FutureVersionError extends Error {
   constructor(
     readonly schema: string,
@@ -70,8 +80,8 @@ export class FutureVersionError extends Error {
     readonly file?: string,
   ) {
     super(
-      `This board was saved by a newer version of ai-figma${app ? ` (${app})` : ''} using file format ${schema}; this version reads format ${CURRENT_SCHEMA.major}.x and older. ` +
-        `Update ai-figma to open it — the file has not been changed.`,
+      `This board was saved by a newer version of nodboard${app ? ` (${app})` : ''} using file format ${schema}; this version reads format ${CURRENT_SCHEMA.major}.x and older. ` +
+        `Update nodboard to open it — the file has not been changed.`,
     )
   }
 }
@@ -80,7 +90,7 @@ export const sha256 = (data: Uint8Array) => createHash('sha256').update(data).di
 
 export function encodeContainer(payload: Uint8Array, meta: Omit<ContainerHeader, 'format' | 'payload' | 'schema' | 'app'> & { schema?: string }): Buffer {
   const header: ContainerHeader = {
-    format: 'aifig',
+    format: 'nodboard',
     schema: meta.schema ?? formatSchema(CURRENT_SCHEMA),
     app: APP_VERSION,
     savedAt: meta.savedAt,
@@ -96,11 +106,15 @@ export function encodeContainer(payload: Uint8Array, meta: Omit<ContainerHeader,
   return Buffer.concat([MAGIC, len, h, payload])
 }
 
-export const isContainer = (data: Uint8Array) => data.byteLength >= MAGIC.byteLength && Buffer.from(data.buffer, data.byteOffset, MAGIC.byteLength).equals(MAGIC)
+export const isContainer = (data: Uint8Array) => {
+  if (data.byteLength < MAGIC.byteLength) return false
+  const head = Buffer.from(data.buffer, data.byteOffset, MAGIC.byteLength)
+  return head.equals(MAGIC) || head.equals(LEGACY_MAGIC)
+}
 
 /** Parse only the header (for listings). Throws CorruptFileError. */
 export function readHeader(data: Uint8Array, file?: string): { header: ContainerHeader; offset: number } {
-  if (!isContainer(data)) throw new CorruptFileError('not an ai-figma container', file)
+  if (!isContainer(data)) throw new CorruptFileError('not a nodboard container', file)
   const buf = Buffer.from(data.buffer, data.byteOffset, data.byteLength)
   if (buf.byteLength < MAGIC.byteLength + 4) throw new CorruptFileError('file is truncated: no header', file)
   const len = buf.readUInt32LE(MAGIC.byteLength)
@@ -112,7 +126,7 @@ export function readHeader(data: Uint8Array, file?: string): { header: Container
   } catch {
     throw new CorruptFileError('header is damaged', file)
   }
-  if (header?.format !== 'aifig' || !parseSchema(header.schema) || !header.payload) throw new CorruptFileError('header is not an ai-figma header', file)
+  if ((header?.format !== 'nodboard' && header?.format !== 'aifig') || !parseSchema(header.schema) || !header.payload) throw new CorruptFileError('header is not a nodboard header', file)
   return { header, offset: start + len }
 }
 

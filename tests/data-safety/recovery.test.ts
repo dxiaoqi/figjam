@@ -80,9 +80,9 @@ test('recovery prefers the newest good copy (a backup newer than the last versio
   b.blocks.set('late', sticky('late'))
   b.saveNow()
   // a backup taken after the version
-  const dir = path.join(process.env.AIFIG_HOME!, 'backups', `recovery-board--${b.id}`)
+  const dir = path.join(process.env.NODBOARD_HOME!, 'backups', `recovery-board--${b.id}`)
   fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(path.join(dir, '2999-01-01_000000.aifig'), encodeContainer(Y.encodeStateAsUpdate(b.doc), { savedAt: Date.now() + 5000, board: b.id }))
+  fs.writeFileSync(path.join(dir, '2999-01-01_000000.nodboard'), encodeContainer(Y.encodeStateAsUpdate(b.doc), { savedAt: Date.now() + 5000, board: b.id }))
   fs.writeFileSync(b.file, Buffer.from('garbage that is not a board'))
   const back = reload().get(b.id)
   assert.equal(back?.blocks.size, 3)
@@ -91,7 +91,7 @@ test('recovery prefers the newest good copy (a backup newer than the last versio
 test('with no good copy anywhere the board is not replaced by an empty one — it is reported', () => {
   tempHome()
   const { b } = boardWith(3)
-  for (const d of [path.join(process.env.AIFIG_HOME!, 'history'), path.join(process.env.AIFIG_HOME!, 'backups')]) fs.rmSync(d, { recursive: true, force: true })
+  for (const d of [path.join(process.env.NODBOARD_HOME!, 'history'), path.join(process.env.NODBOARD_HOME!, 'backups')]) fs.rmSync(d, { recursive: true, force: true })
   fs.writeFileSync(b.file, fs.readFileSync(b.file).subarray(0, 40))
   const reg2 = reload()
   assert.equal(reg2.get(b.id), undefined)
@@ -111,7 +111,7 @@ test('a board file from a future version is refused, reported, and left untouche
   assert.equal(reg2.get(b.id), undefined)
   const n = reg2.notices.list().find((x) => x.boardId === b.id)
   assert.equal(n?.kind, 'future-version')
-  assert.match(n!.detail, /newer version of ai-figma.*format 3\.0/)
+  assert.match(n!.detail, /newer version of nodboard.*format 3\.0/)
   assert.ok(fs.readFileSync(b.file).equals(future), 'file bytes unchanged')
   reg2.flush()
   assert.ok(fs.readFileSync(b.file).equals(future), 'still unchanged after a flush')
@@ -122,10 +122,10 @@ test('a legacy (schema 0) file is migrated, with a backup of the original', () =
   fs.mkdirSync(boardsDir(), { recursive: true })
   const d = new Y.Doc()
   d.getMap('meta').set('title', 'Old board')
-  d.getMap('meta').set('format', 'aifig/0')
+  d.getMap('meta').set('format', 'nodboard/0')
   d.getMap('blocks').set('a', sticky('a'))
   const legacy = Buffer.from(Y.encodeStateAsUpdate(d))
-  const file = path.join(boardsDir(), 'blegacy01.aifig')
+  const file = path.join(boardsDir(), 'blegacy01.nodboard')
   fs.writeFileSync(file, legacy)
   const reg = reload()
   const b = reg.get('blegacy01')
@@ -139,9 +139,9 @@ test('a legacy (schema 0) file is migrated, with a backup of the original', () =
 test('opening a future-version file from disk fails with a clear message', () => {
   tempHome()
   const reg = new BoardRegistry()
-  const f = path.join(process.env.AIFIG_HOME!, 'from-the-future.aifig')
+  const f = path.join(process.env.NODBOARD_HOME!, 'from-the-future.nodboard')
   fs.writeFileSync(f, encodeContainer(Y.encodeStateAsUpdate(new Y.Doc()), { savedAt: 1, schema: '3.1' }))
-  assert.throws(() => reg.openFile(f), /newer version of ai-figma.*3\.1/)
+  assert.throws(() => reg.openFile(f), /newer version of nodboard.*3\.1/)
 })
 
 test('large edits keep the state from just before them as a version', () => {
@@ -157,9 +157,9 @@ test('large edits keep the state from just before them as a version', () => {
   assert.equal(v!.blockCount, 30)
 })
 
-test('backups respect AIFIG_BACKUP_DIR and keep a final copy of a deleted board', () => {
+test('backups respect NODBOARD_BACKUP_DIR and keep a final copy of a deleted board', () => {
   const home = tempHome()
-  process.env.AIFIG_BACKUP_DIR = path.join(home, 'elsewhere')
+  process.env.NODBOARD_BACKUP_DIR = path.join(home, 'elsewhere')
   try {
     const { reg, b } = boardWith(1, 'Doomed')
     reg.delete(b.id)
@@ -167,6 +167,6 @@ test('backups respect AIFIG_BACKUP_DIR and keep a final copy of a deleted board'
     assert.ok(bk.some((x) => x.file.startsWith(path.join(home, 'elsewhere')) && x.file.includes('deleted')))
     assert.ok(Board.fromBytes(b.id, fs.readFileSync(bk[0].file), undefined, { persist: false }).board.blocks.size === 1)
   } finally {
-    delete process.env.AIFIG_BACKUP_DIR
+    delete process.env.NODBOARD_BACKUP_DIR
   }
 })

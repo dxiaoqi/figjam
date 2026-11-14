@@ -1,5 +1,5 @@
-import type { BoardSummary } from '@aifig/shared'
-import type { AnyToolName, CallResponse, CallerInfo } from '@aifig/shared'
+import type { BoardSummary } from '@nodboard/shared'
+import type { AnyToolName, CallResponse, CallerInfo } from '@nodboard/shared'
 import { apiFetch } from './auth'
 
 export const HUMAN: CallerInfo = { id: 'human:ui', name: 'You', client: 'ui', kind: 'human' }
@@ -54,19 +54,19 @@ export async function fetchBoards(): Promise<{ boards: BoardSummary[]; active: s
 const q = (s: string) => (/[\s"']/.test(s) ? JSON.stringify(s) : s)
 
 export function mcpSnippets(health: Health | null, example: [string, string, string] = ['First idea', 'Second idea', 'Ideas']) {
-  const bin = health?.bin ?? '/path/to/ai-figma/bin/aifig.mjs'
+  const bin = health?.bin ?? '/path/to/nodboard/bin/nodboard.mjs'
   const launch = health?.mcp ?? { command: 'node', args: [bin, 'mcp'] }
   const env = launch.env ?? {}
   const envFlags = Object.entries(env).map(([k, v]) => `-e ${k}=${q(v)}`).join(' ')
   const url = health?.mcpUrl ?? 'http://127.0.0.1:47821/mcp'
-  const token = health?.token ?? '<run: aifig token>'
+  const token = health?.token ?? '<run: nodboard token>'
   const headers = { Authorization: `Bearer ${token}` }
   const cliRun = launch.command === 'node' ? `node ${q(bin)}` : `${Object.entries(env).map(([k, v]) => `${k}=${q(v)}`).join(' ')} ${q(launch.command)} ${q(bin)}`
   return {
-    claude: `claude mcp add ai-figma ${envFlags ? `${envFlags} ` : ''}-- ${[launch.command, ...launch.args].map(q).join(' ')}`,
-    cursor: JSON.stringify({ mcpServers: { 'ai-figma': { command: launch.command, args: launch.args, ...(Object.keys(env).length ? { env } : {}) } } }, null, 2),
-    claudeHttp: `claude mcp add --transport http ai-figma ${url} --header ${q(`Authorization: Bearer ${token}`)}`,
-    cursorHttp: JSON.stringify({ mcpServers: { 'ai-figma': { url, headers } } }, null, 2),
+    claude: `claude mcp add nodboard ${envFlags ? `${envFlags} ` : ''}-- ${[launch.command, ...launch.args].map(q).join(' ')}`,
+    cursor: JSON.stringify({ mcpServers: { 'nodboard': { command: launch.command, args: launch.args, ...(Object.keys(env).length ? { env } : {}) } } }, null, 2),
+    claudeHttp: `claude mcp add --transport http nodboard ${url} --header ${q(`Authorization: Bearer ${token}`)}`,
+    cursorHttp: JSON.stringify({ mcpServers: { 'nodboard': { url, headers } } }, null, 2),
     cli: `${cliRun} add "${example[0]}" "${example[1]}" --frame "${example[2]}"`,
     url,
   }

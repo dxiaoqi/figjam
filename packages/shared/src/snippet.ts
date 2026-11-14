@@ -3,13 +3,16 @@
  * only in interactive mode, inside a sandboxed frame on a separate origin.
  */
 
+import { applyLegacyEnv } from './legacy-env'
+
+applyLegacyEnv()
 const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
 
 /**
  * Port of the snippet host. Served as `localhost` while the app uses `127.0.0.1`, so snippets are a
  * different *site* (own process under site isolation), not just a different origin.
  */
-export const SNIPPET_PORT = Number(env.AIFIG_SNIPPET_PORT ?? (env.AIFIG_CORE_PORT ? Number(env.AIFIG_CORE_PORT) + 1 : 47822))
+export const SNIPPET_PORT = Number(env.NODBOARD_SNIPPET_PORT ?? (env.NODBOARD_CORE_PORT ? Number(env.NODBOARD_CORE_PORT) + 1 : 47822))
 export const SNIPPET_HOST = 'localhost'
 export const snippetOrigin = (port = SNIPPET_PORT) => `http://${SNIPPET_HOST}:${port}`
 
@@ -108,7 +111,7 @@ export function normalizeEmbedUrl(input: string): { embedUrl: string; provider: 
   if (host === 'vimeo.com' && /^\/\d+/.test(u.pathname)) return { embedUrl: `https://player.vimeo.com/video${u.pathname.match(/^\/\d+/)![0]}`, provider: 'Vimeo', title: 'Vimeo video' }
   if (host === 'figma.com' || host.endsWith('.figma.com')) {
     if (u.pathname.startsWith('/embed')) return { embedUrl: u.toString(), provider: 'Figma', title: 'Figma' }
-    return { embedUrl: `https://www.figma.com/embed?embed_host=aifig&url=${encodeURIComponent(u.toString())}`, provider: 'Figma', title: /\/proto\//.test(u.pathname) ? 'Figma prototype' : 'Figma file' }
+    return { embedUrl: `https://www.figma.com/embed?embed_host=nodboard&url=${encodeURIComponent(u.toString())}`, provider: 'Figma', title: /\/proto\//.test(u.pathname) ? 'Figma prototype' : 'Figma file' }
   }
   if (host === 'codepen.io') {
     const m = u.pathname.match(/^\/([\w-]+)\/(?:pen|full|details|embed)\/(\w+)/)

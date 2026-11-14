@@ -1,6 +1,6 @@
 // Screenshots for the distribution work: website Download page, counter dashboard, and the installed desktop app's
 // consent UI. Expects the website (47900), the release server (47920) and the counter in mock mode (47910) running,
-// and the app installed from the .deb (or pass AIFIG_APP=/path/to/ai-figma).
+// and the app installed from the .deb (or pass NODBOARD_APP=/path/to/ai-figma).
 // usage: node scripts/distribution-media.mjs <out-dir>
 import fs from 'node:fs'
 import os from 'node:os'
@@ -60,12 +60,12 @@ await browser.close()
 
 // ---- the installed app: welcome step and Settings with the opt-in switch -----------------------------------
 {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-media-'))
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-media-'))
   const port = String(48700 + Math.floor(Math.random() * 100))
   const app = await electron.launch({
-    executablePath: process.env.AIFIG_APP ?? '/opt/ai-figma/ai-figma',
+    executablePath: process.env.NODBOARD_APP ?? '/opt/nodboard/nodboard',
     args: [`--user-data-dir=${path.join(tmp, 'profile')}`, '--disable-gpu'],
-    env: { ...process.env, AIFIG_HOME: path.join(tmp, 'home'), AIFIG_CORE_PORT: port, AIFIG_TELEMETRY_URL: counter, AIFIG_DESKTOP_KEYCHAIN: 'mock' },
+    env: { ...process.env, NODBOARD_HOME: path.join(tmp, 'home'), NODBOARD_CORE_PORT: port, NODBOARD_TELEMETRY_URL: counter, NODBOARD_DESKTOP_KEYCHAIN: 'mock' },
   })
   const win = await app.firstWindow()
   await win.setViewportSize({ width: 1280, height: 820 })
@@ -84,7 +84,7 @@ await browser.close()
   await win.waitForSelector('[data-usage-sharing="settings"]', { timeout: 10000 })
   await win.waitForTimeout(600)
   await win.screenshot({ path: shot('app-settings-usage') })
-  const status = await win.evaluate(() => window.aifigDesktop.telemetry.status())
+  const status = await win.evaluate(() => window.nodboardDesktop.telemetry.status())
   console.log('telemetry status after opting in:', JSON.stringify(status))
   await app.close()
   fs.rmSync(tmp, { recursive: true, force: true })

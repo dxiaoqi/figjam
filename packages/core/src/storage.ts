@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { assetFileName, blockAssetRefs, type Asset, type Block, type ChangeEntry } from '@aifig/shared'
+import { assetFileName, blockAssetRefs, type Asset, type Block, type ChangeEntry } from '@nodboard/shared'
 import { siblingAssetsDir } from './assets'
 import { backupPools, boardBackupDir, collectBackupPools, listBackups } from './backups'
 import type { Board } from './board'

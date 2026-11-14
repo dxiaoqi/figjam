@@ -9,7 +9,7 @@ import { createTelemetry, disabledByEnv, normalizeLocale, PING_FIELDS } from '..
 const DAY = 86_400_000
 
 function setup({ env = {}, endpoint = 'https://t.example/', fail = false } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-tel-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-tel-'))
   const sent = []
   let now = Date.parse('2026-09-26T10:00:00Z')
   const t = createTelemetry({
@@ -93,8 +93,8 @@ test('opting out stops pings and deletes the install ID; opting in again starts 
   assert.notEqual(sent[1].body.installId, first)
 })
 
-test('AIFIG_TELEMETRY=off and DO_NOT_TRACK=1 win over consent', async () => {
-  for (const env of [{ AIFIG_TELEMETRY: 'off' }, { AIFIG_TELEMETRY: '0' }, { AIFIG_TELEMETRY: 'false' }, { DO_NOT_TRACK: '1' }]) {
+test('NODBOARD_TELEMETRY=off and DO_NOT_TRACK=1 win over consent', async () => {
+  for (const env of [{ NODBOARD_TELEMETRY: 'off' }, { NODBOARD_TELEMETRY: '0' }, { NODBOARD_TELEMETRY: 'false' }, { DO_NOT_TRACK: '1' }]) {
     const { t, sent } = setup({ env })
     t.setConsent(true)
     await t.tick()
@@ -102,7 +102,7 @@ test('AIFIG_TELEMETRY=off and DO_NOT_TRACK=1 win over consent', async () => {
     assert.equal(t.status().envDisabled, true)
     assert.equal(t.status().enabled, false)
   }
-  assert.equal(disabledByEnv({ AIFIG_TELEMETRY: 'on' }), false)
+  assert.equal(disabledByEnv({ NODBOARD_TELEMETRY: 'on' }), false)
 })
 
 test('no endpoint configured: a no-op even with consent', async () => {

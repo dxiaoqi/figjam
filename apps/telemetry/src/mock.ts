@@ -1,4 +1,4 @@
-// Plausible fake history for local development and screenshots: `npm run mock -w @aifig/telemetry`.
+// Plausible fake history for local development and screenshots: `npm run mock -w @nodboard/telemetry`.
 import type { DatabaseSync } from 'node:sqlite'
 import { dayOf, daysBefore } from './store.ts'
 

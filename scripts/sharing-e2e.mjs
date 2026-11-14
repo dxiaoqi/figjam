@@ -2,7 +2,7 @@
 //   storage   asset files, a 1.0 board migrated on startup, MCP add_video / replace_asset / list_assets,
 //             live snippet files (person → applied, agent → change set, syntax error → refused), the storage
 //             panel and an inline video in headless Chrome
-//   packs     .aifigpack export over MCP / CLI / the canvas (download), import with a folder choice, history
+//   packs     .nodboardpack export over MCP / CLI / the canvas (download), import with a folder choice, history
 //             and comments, skills; a malicious pack is refused in the import dialog
 //   web page  export as a folder, zip and single file (MCP, CLI, canvas); opened from file:// in headless Chrome:
 //             every block renders, snippets run with no network, videos play, comments and fields toggle
@@ -35,13 +35,13 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? ` — ${detail}` : ''}`)
   if (!ok) failures++
 }
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-sharing-'))
-const home = path.join(tmp, 'aifig')
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-sharing-'))
+const home = path.join(tmp, 'nodboard')
 const port = 48110 + Math.floor(Math.random() * 40) * 2
 const base = `http://127.0.0.1:${port}`
-const env = { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: String(port), AIFIG_REVEAL: 'off' }
-delete env.AIFIG_TOKEN
-const bin = path.join(root, 'bin/aifig.mjs')
+const env = { ...process.env, NODBOARD_HOME: home, NODBOARD_CORE_PORT: String(port), NODBOARD_REVEAL: 'off' }
+delete env.NODBOARD_TOKEN
+const bin = path.join(root, 'bin/nodboard.mjs')
 const media = makeMedia(path.join(tmp, 'media'))
 const HUMAN = { id: 'human:sharing', name: 'You', client: 'test', kind: 'human' }
 const AGENT = { id: 'sharing-agent:1', name: 'Share Bot', client: 'sharing', kind: 'agent' }
@@ -58,7 +58,7 @@ fs.mkdirSync(path.join(home, 'boards'), { recursive: true, mode: 0o700 })
   const bytes = fs.readFileSync(media.png)
   d.getMap('assets').set('aold', { id: 'aold', mime: 'image/png', w: 640, h: 400, bytes: new Uint8Array(bytes), name: 'whiteboard.png', createdAt: 1 })
   d.getMap('blocks').set('img', { id: 'img', kind: 'image', x: 0, y: 0, w: 320, h: 200, asset: 'aold', text: '', color: 'gray', size: 'm', createdAt: 1, updatedAt: 1 })
-  fs.writeFileSync(path.join(home, 'boards', 'blastyear.aifig'), encodeContainer(Y.encodeStateAsUpdate(d), { savedAt: Date.now() - 86_400_000, board: 'blastyear', title: 'Board from last year', schema: '1.0' }))
+  fs.writeFileSync(path.join(home, 'boards', 'blastyear.nodboard'), encodeContainer(Y.encodeStateAsUpdate(d), { savedAt: Date.now() - 86_400_000, board: 'blastyear', title: 'Board from last year', schema: '1.0' }))
 }
 
 const core = spawn(process.execPath, [bin, 'core', '--port', String(port)], { env, stdio: 'ignore' })
@@ -67,7 +67,7 @@ const health = await (await fetch(`${base}/api/health`, { headers: authHeaders(h
 
 // ---- migration on startup ----------------------------------------------------------------------------------
 {
-  const file = fs.readFileSync(path.join(home, 'boards', 'blastyear.aifig'))
+  const file = fs.readFileSync(path.join(home, 'boards', 'blastyear.nodboard'))
   const header = JSON.parse(file.subarray(10, 10 + file.readUInt32LE(6)).toString('utf8'))
   const info = (await call(HUMAN, 'get_storage', { board: 'blastyear' })).result
   check('a 1.0 board is migrated on startup: schema 2.0, the image is a file next to it', header.schema === '2.0' && header.assets?.length === 1 && info.assets[0]?.status === 'used' && fs.existsSync(info.assets[0].file), `${file.length} bytes, ${info.assets[0]?.file}`)
@@ -138,19 +138,19 @@ await mcp.close()
 
 // ---- CLI ---------------------------------------------------------------------------------------------------
 const cv = cli('--board', board, '--human', 'video', media.webm)
-check('aifig video adds a WebM', cv.status === 0 && /added video \w+ \(3 s\)/.test(cv.stdout), cv.stdout.trim() || cv.stderr.trim())
+check('nodboard video adds a WebM', cv.status === 0 && /added video \w+ \(3 s\)/.test(cv.stdout), cv.stdout.trim() || cv.stderr.trim())
 const ca = cli('--board', board, 'assets')
-check('aifig assets lists files, users and locations', ca.status === 0 && /files\s+\//.test(ca.stdout) && /video\s+/.test(ca.stdout) && /history /.test(ca.stdout), ca.stdout.split('\n')[0])
+check('nodboard assets lists files, users and locations', ca.status === 0 && /files\s+\//.test(ca.stdout) && /video\s+/.test(ca.stdout) && /history /.test(ca.stdout), ca.stdout.split('\n')[0])
 const cc = cli('--board', board, 'assets', '--cleanup', '--dry-run')
-check('aifig assets --cleanup --dry-run reports without deleting', cc.status === 0 && /would remove/.test(cc.stdout), cc.stdout.trim())
+check('nodboard assets --cleanup --dry-run reports without deleting', cc.status === 0 && /would remove/.test(cc.stdout), cc.stdout.trim())
 
 // ---- the canvas: video plays inline, storage panel ---------------------------------------------------------
 const browser = await chromium.launch({ executablePath: process.env.CHROME ?? '/usr/local/bin/google-chrome', args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required'] })
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 })
 await ctx.addInitScript((t) => {
   try {
-    localStorage.setItem('aifig:token', t)
-    localStorage.setItem('aifig:welcome', 'done')
+    localStorage.setItem('nodboard:token', t)
+    localStorage.setItem('nodboard:welcome', 'done')
   } catch {}
 }, tokenFor(home))
 const page = await ctx.newPage()
@@ -161,18 +161,18 @@ await page.goto(`${base}/?board=${board}`)
 await page.waitForSelector('[data-video-block]', { timeout: 15000 })
 const stopClip = mediaDir ? await startClip(page, tmp) : null
 await page.waitForTimeout(1500)
-const imgs = await page.evaluate(() => [...document.querySelectorAll('.aifig-image img')].map((i) => i.naturalWidth))
+const imgs = await page.evaluate(() => [...document.querySelectorAll('.nodboard-image img')].map((i) => i.naturalWidth))
 check('images load from the assets folder', imgs.length >= 2 && imgs.every((w) => w > 0), imgs.join(','))
 if (mediaDir) await page.screenshot({ path: path.join(mediaDir, 'canvas-files.png') })
 await page.locator('[data-video-play]').first().click()
 await page.waitForTimeout(1600)
 const playing = await page.evaluate(() => {
-  const el = document.querySelector('.aifig-video video')
+  const el = document.querySelector('.nodboard-video video')
   return el ? { t: el.currentTime, paused: el.paused, error: el.error?.code ?? null } : null
 })
 check('a video block plays inline', !!playing && playing.t > 0.3 && !playing.paused && !playing.error, JSON.stringify(playing))
 await page.keyboard.press('Escape')
-await page.evaluate(() => window.dispatchEvent(new Event('aifig:storage')))
+await page.evaluate(() => window.dispatchEvent(new Event('nodboard:storage')))
 await page.waitForSelector('[data-storage-list] [data-storage-asset]', { timeout: 8000 })
 await page.waitForTimeout(600)
 const rows = await page.$$eval('[data-storage-asset]', (els) => els.map((e) => ({ role: e.dataset.role, status: e.dataset.status })))
@@ -200,7 +200,7 @@ await stopClip?.(path.join(mediaDir, 'storage-walkthrough.mp4'))
 await call(HUMAN, 'add_comment', { board, target: v.id, text: 'Can we trim the first second?' })
 await call(HUMAN, 'enable_skill', { board, name: 'prototype-kit' })
 await call(HUMAN, 'create_version', { board, name: 'Before sharing' })
-const packOut = path.join(tmp, 'out', 'Launch video review.aifigpack')
+const packOut = path.join(tmp, 'out', 'Launch video review.nodboardpack')
 fs.mkdirSync(path.dirname(packOut), { recursive: true })
 const mcp2 = new Client({ name: 'claude-code', version: 'sharing' })
 await mcp2.connect(new StdioClientTransport({ command: process.execPath, args: [bin, 'mcp'], env, stderr: 'ignore' }))
@@ -212,15 +212,15 @@ const packBytes = fs.readFileSync(packOut)
 check('the pack holds no access token and no grants file', !packBytes.includes(Buffer.from(tokenFor(home))) && !packBytes.includes(Buffer.from('permissions.json')))
 await mcp2.close()
 const un = cli('unpack', packOut, '--to', path.join(tmp, 'Shared'))
-check('aifig unpack checks the pack and opens the board in the chosen folder', un.status === 0 && fs.existsSync(path.join(tmp, 'Shared', 'Launch video review.aifig')) && fs.existsSync(path.join(tmp, 'Shared', 'Launch video review.assets')) && /1 comment threads/.test(un.stdout), un.stdout.trim() || un.stderr.trim())
-const cp = cli('--board', board, 'pack', '-o', path.join(tmp, 'out', 'cli.aifigpack'), '--no-comments')
-check('aifig pack --no-comments', cp.status === 0 && /no comments/.test(cp.stdout), cp.stdout.trim() || cp.stderr.trim())
+check('nodboard unpack checks the pack and opens the board in the chosen folder', un.status === 0 && fs.existsSync(path.join(tmp, 'Shared', 'Launch video review.nodboard')) && fs.existsSync(path.join(tmp, 'Shared', 'Launch video review.assets')) && /1 comment threads/.test(un.stdout), un.stdout.trim() || un.stderr.trim())
+const cp = cli('--board', board, 'pack', '-o', path.join(tmp, 'out', 'cli.nodboardpack'), '--no-comments')
+check('nodboard pack --no-comments', cp.status === 0 && /no comments/.test(cp.stdout), cp.stdout.trim() || cp.stderr.trim())
 
 // the canvas: export (download) and import (upload → preview → folder → open)
 await page.keyboard.press('Escape')
 const dlWait = page.waitForEvent('download', { timeout: 15000 })
 await page.click('[data-menu-export-pack]', { timeout: 1000 }).catch(async () => {
-  await page.evaluate(() => window.dispatchEvent(new Event('aifig:export-pack')))
+  await page.evaluate(() => window.dispatchEvent(new Event('nodboard:export-pack')))
 })
 await page.waitForSelector('[data-export-pack]')
 await page.waitForTimeout(500)
@@ -230,9 +230,9 @@ const dl = await dlWait
 fs.mkdirSync(path.join(tmp, 'downloads'), { recursive: true })
 const dlPath = path.join(tmp, 'downloads', await dl.suggestedFilename())
 await dl.saveAs(dlPath)
-check('“Share as pack” downloads a .aifigpack in the browser', dlPath.endsWith('.aifigpack') && fs.statSync(dlPath).size > 10_000, `${path.basename(dlPath)} ${fs.statSync(dlPath).size} bytes`)
+check('“Share as pack” downloads a .nodboardpack in the browser', dlPath.endsWith('.nodboardpack') && fs.statSync(dlPath).size > 10_000, `${path.basename(dlPath)} ${fs.statSync(dlPath).size} bytes`)
 const stopPackClip = mediaDir ? await startClip(page, tmp) : null
-await page.evaluate(() => window.dispatchEvent(new CustomEvent('aifig:import-pack', { detail: {} })))
+await page.evaluate(() => window.dispatchEvent(new CustomEvent('nodboard:import-pack', { detail: {} })))
 await page.waitForSelector('[data-import-pack]')
 await page.setInputFiles('[data-pack-input]', packOut)
 await page.waitForSelector('[data-pack-preview]', { timeout: 15000 })
@@ -245,7 +245,7 @@ await page.waitForSelector('[data-import-pack]', { state: 'detached', timeout: 1
 await page.waitForTimeout(1800)
 const opened = await page.evaluate(() => new URL(location.href).searchParams.get('board'))
 const importedInfo = (await call(HUMAN, 'get_storage', { board: opened })).result
-check('importing in the canvas saves the board where chosen and switches to it', importedInfo.board.externalPath === path.join(dest, 'Launch video review.aifig') && importedInfo.assets.length >= 5, importedInfo.board.externalPath)
+check('importing in the canvas saves the board where chosen and switches to it', importedInfo.board.externalPath === path.join(dest, 'Launch video review.nodboard') && importedInfo.assets.length >= 5, importedInfo.board.externalPath)
 const importedThreads = (await call(HUMAN, 'get_threads', { board: opened })).result.threads.length
 check('…with its history and comments', importedInfo.history.versions >= 1 && importedThreads === 1, `${importedInfo.history.versions} versions, ${importedThreads} threads`)
 await page.waitForSelector('[data-video-block]', { timeout: 10000 })
@@ -256,9 +256,9 @@ await stopPackClip?.(path.join(mediaDir, 'pack-import.mp4'))
 // a malicious pack (zip-slip) is refused in the dialog, nothing is written
 {
   const { zipEntries } = await import('../packages/core/src/zip.ts')
-  const evil = path.join(tmp, 'out', 'evil.aifigpack')
-  fs.writeFileSync(evil, zipEntries([{ name: 'manifest.json', data: Buffer.from('{"format":"aifigpack","version":1,"files":[]}') }, { name: '../../escape.txt', data: Buffer.from('pwned') }]))
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('aifig:import-pack', { detail: {} })))
+  const evil = path.join(tmp, 'out', 'evil.nodboardpack')
+  fs.writeFileSync(evil, zipEntries([{ name: 'manifest.json', data: Buffer.from('{"format":"nodboardpack","version":1,"files":[]}') }, { name: '../../escape.txt', data: Buffer.from('pwned') }]))
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('nodboard:import-pack', { detail: {} })))
   await page.setInputFiles('[data-pack-input]', evil)
   await page.waitForSelector('[data-pack-error]', { timeout: 10000 })
   const msg = await page.textContent('[data-pack-error]')
@@ -279,7 +279,7 @@ await call(HUMAN, 'connect', { board: web, connectors: [{ from: h1, to: card, la
 const calc = (await call(HUMAN, 'create_snippet', { board: web, below: card, title: 'Seat calculator',
   html: '<main><h1>Seats</h1><button id=b>Seats: 1</button><p id=net>checking network…</p></main>',
   css: 'main{padding:16px;font:15px system-ui}button{font:inherit;padding:6px 12px}',
-  js: "let n=1;const b=document.getElementById('b');b.onclick=()=>{n++;b.textContent='Seats: '+n;aifig.setState({n})};fetch('https://example.com/ping').then(()=>net.textContent='network: open',()=>net.textContent='network: blocked');const i=new Image();i.onerror=()=>document.body.dataset.img='blocked';i.src='https://example.com/p.png'" })).result
+  js: "let n=1;const b=document.getElementById('b');b.onclick=()=>{n++;b.textContent='Seats: '+n;nodboard.setState({n})};fetch('https://example.com/ping').then(()=>net.textContent='network: open',()=>net.textContent='network: blocked');const i=new Image();i.onerror=()=>document.body.dataset.img='blocked';i.src='https://example.com/p.png'" })).result
 await call(HUMAN, 'add_video', { board: web, path: media.mp4, poster: media.png, right_of: calc.id, caption: 'Checkout walkthrough' })
 await call(HUMAN, 'add_image', { board: web, path: media.png, below: calc.id, caption: 'Whiteboard' })
 const embed = (await call(HUMAN, 'create_snippet', { board: web, url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', below: card })).result
@@ -287,7 +287,7 @@ await call(HUMAN, 'add_comment', { board: web, target: card, text: 'Legal wants 
 await call(HUMAN, 'tidy', { board: web })
 const webOut = path.join(tmp, 'web', 'Pricing experiment')
 const wx = cli('--board', web, 'export-web', '-o', webOut)
-check('aifig export-web writes index.html, the viewer, board.js, files, snippet documents and PUBLISHING.md', wx.status === 0 && ['index.html', 'viewer.js', 'viewer.css', 'board.js', 'PUBLISHING.md', `snippets/${calc.id}.html`].every((f) => fs.existsSync(path.join(webOut, f))) && fs.readdirSync(path.join(webOut, 'assets')).length >= 2, wx.stdout.trim() || wx.stderr.trim())
+check('nodboard export-web writes index.html, the viewer, board.js, files, snippet documents and PUBLISHING.md', wx.status === 0 && ['index.html', 'viewer.js', 'viewer.css', 'board.js', 'PUBLISHING.md', `snippets/${calc.id}.html`].every((f) => fs.existsSync(path.join(webOut, f))) && fs.readdirSync(path.join(webOut, 'assets')).length >= 2, wx.stdout.trim() || wx.stderr.trim())
 const boardJs = fs.readFileSync(path.join(webOut, 'board.js'), 'utf8')
 check('the page carries no token, no grants and no core code', !boardJs.includes(tokenFor(home)) && !/"grants"/.test(boardJs) && !fs.readFileSync(path.join(webOut, 'viewer.js'), 'utf8').includes('writeFileAtomic'))
 const snippetDoc = fs.readFileSync(path.join(webOut, 'snippets', `${calc.id}.html`), 'utf8')
@@ -311,7 +311,7 @@ const stopWebClip = mediaDir ? await startClip(wp, tmp) : null
 await wp.goto(`file://${path.join(webOut, 'index.html')}`)
 await wp.waitForSelector('[data-viewer] .ae-block', { timeout: 15000 })
 await wp.waitForTimeout(2200)
-const rendered = await wp.evaluate(() => ({ dataConnectors: window.__AIFIG_BOARD__.connectors.length, paths: document.querySelectorAll('.ae-connectors path').length, blocks: document.querySelectorAll('.ae-block').length, kinds: [...new Set([...document.querySelectorAll('.ae-block')].map((b) => [...b.classList].find((c) => c.startsWith('ae-kind-'))))],  title: document.querySelector('[data-viewer-title]')?.textContent, images: [...document.querySelectorAll('.aifig-image img')].map((i) => i.naturalWidth) }))
+const rendered = await wp.evaluate(() => ({ dataConnectors: window.__NODBOARD_BOARD__.connectors.length, paths: document.querySelectorAll('.ae-connectors path').length, blocks: document.querySelectorAll('.ae-block').length, kinds: [...new Set([...document.querySelectorAll('.ae-block')].map((b) => [...b.classList].find((c) => c.startsWith('ae-kind-'))))],  title: document.querySelector('[data-viewer-title]')?.textContent, images: [...document.querySelectorAll('.nodboard-image img')].map((i) => i.naturalWidth) }))
 check('from file://, every block renders (frame, typed stickies, card, snippet, video, image, embed) with connectors', ['ae-kind-frame', 'ae-kind-sticky', 'ae-kind-card', 'ae-kind-web', 'ae-kind-video', 'ae-kind-image'].every((k) => rendered.kinds.includes(k)) && rendered.dataConnectors >= 2 && rendered.paths >= rendered.dataConnectors && rendered.title === 'Pricing experiment', JSON.stringify(rendered))
 check('images load', rendered.images.length >= 1 && rendered.images.every((w) => w > 0), rendered.images.join(','))
 const frame = wp.frames().find((f) => f.url().endsWith(`snippets/${calc.id}.html`))
@@ -341,7 +341,7 @@ const camDragged = await wp.evaluate(() => ({ ...window.editor.camera }))
 const zoomBefore = await wp.textContent('[data-viewer-zoom]')
 await wp.keyboard.press('Minus')
 await wp.waitForTimeout(350)
-check('pan (wheel, also over a snippet; drag) and zoom work', !(await wp.locator('.aifig-web.is-running').count()) && camPanned.y !== camBefore.y && camDragged.x !== camPanned.x && (await wp.textContent('[data-viewer-zoom]')) !== zoomBefore, `${JSON.stringify([camBefore, camPanned, camDragged])} ${zoomBefore} → ${await wp.textContent('[data-viewer-zoom]')}`)
+check('pan (wheel, also over a snippet; drag) and zoom work', !(await wp.locator('.nodboard-web.is-running').count()) && camPanned.y !== camBefore.y && camDragged.x !== camPanned.x && (await wp.textContent('[data-viewer-zoom]')) !== zoomBefore, `${JSON.stringify([camBefore, camPanned, camDragged])} ${zoomBefore} → ${await wp.textContent('[data-viewer-zoom]')}`)
 await wp.evaluate(() => window.editor.zoomToFit(false))
 await wp.waitForTimeout(300)
 await wp.click('[data-video-block] [data-video-play]')
@@ -382,7 +382,7 @@ await sp.waitForSelector('[data-viewer] .ae-block', { timeout: 15000 })
 await sp.waitForTimeout(1500)
 let sNet
 for (const f of sp.frames()) if (f !== sp.mainFrame()) sNet ??= await f.evaluate(() => document.getElementById('net')?.textContent).catch(() => undefined)
-check('the single-file page is self-contained: snippets run (srcdoc), images inline, no network', single.files === 1 && sNet === 'network: blocked' && (await sp.evaluate(() => [...document.querySelectorAll('.aifig-image img')].every((i) => i.naturalWidth > 0 && i.src.startsWith('data:')))) && net.length === 0, `${sNet}, ${net.join(',')}`)
+check('the single-file page is self-contained: snippets run (srcdoc), images inline, no network', single.files === 1 && sNet === 'network: blocked' && (await sp.evaluate(() => [...document.querySelectorAll('.nodboard-image img')].every((i) => i.naturalWidth > 0 && i.src.startsWith('data:')))) && net.length === 0, `${sNet}, ${net.join(',')}`)
 const { readZipIndex } = await import('../packages/core/src/unzip.ts')
 const zipped = JSON.parse(cli('--json', '--board', web, 'export-web', '--zip', '-o', path.join(tmp, 'web', 'pricing.zip')).stdout)
 const zfd = fs.openSync(zipped.path, 'r')
@@ -398,7 +398,7 @@ await mcpWeb.close()
 // the export dialog in the canvas (browser: zip / single file download)
 await page.goto(`${base}/?board=${web}`)
 await page.waitForSelector('.ae-block', { timeout: 15000 })
-await page.evaluate(() => window.dispatchEvent(new Event('aifig:export-web')))
+await page.evaluate(() => window.dispatchEvent(new Event('nodboard:export-web')))
 await page.waitForSelector('[data-web-export] [data-web-mode="zip"]')
 await page.waitForTimeout(600)
 if (mediaDir) await page.screenshot({ path: path.join(mediaDir, 'web-export-dialog.png') })

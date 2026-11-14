@@ -11,7 +11,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'web-snippets')
 fs.mkdirSync(out, { recursive: true })
 const base = 'http://127.0.0.1:47820'
-const cli = (...args) => execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), ...args], { encoding: 'utf8' })
+const cli = (...args) => execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), ...args], { encoding: 'utf8' })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const board = JSON.parse(cli('--json', 'new-board', 'Pricing experiment — prototypes')).board.id
@@ -26,8 +26,8 @@ const calc = {
 const price=(n)=>n*12-Math.max(0,n-10)*2
 const paint=()=>{const n=+s.value;o.textContent=n;p.textContent='$'+price(n);bars.innerHTML='';for(let i=1;i<=12;i++){const b=document.createElement('i');b.style.height=Math.round(price(i*4)/price(48)*100)+'%';if(i*4<=n)b.style.background='#6366f1';bars.appendChild(b)}}
 s.oninput=paint
-aifig.getState().then((st)=>{if(st&&st.seats){s.value=st.seats;saved.textContent='saved: '+st.seats+' seats'}paint()})
-document.getElementById('save').onclick=async()=>{await aifig.setState({seats:+s.value});saved.textContent='saved: '+s.value+' seats'}`,
+nodboard.getState().then((st)=>{if(st&&st.seats){s.value=st.seats;saved.textContent='saved: '+st.seats+' seats'}paint()})
+document.getElementById('save').onclick=async()=>{await nodboard.setState({seats:+s.value});saved.textContent='saved: '+s.value+' seats'}`,
 }
 call(['--human'], 'create_blocks', { at: { x: 0, y: 0 }, layout: 'row', blocks: [{ text: 'Price per seat drops after 10 seats — does it feel fair?', type: 'question' }, { text: 'Teams compare against FigJam before buying', type: 'insight' }] })
 const snip = call(['--as', 'Claude Code'], 'create_snippet', { ...calc, at: { x: 0, y: 260 }, width: 480, height: 320 }).id

@@ -1,7 +1,7 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { tokenManifest, toolDefs, type CallResponse, type CallerInfo, type ToolName } from '@aifig/shared'
+import { tokenManifest, toolDefs, type CallResponse, type CallerInfo, type ToolName } from '@nodboard/shared'
 
-const INSTRUCTIONS = `ai-figma is a local infinite canvas shared by the user and you. Everything you write appears live in the
+const INSTRUCTIONS = `nodboard is a local infinite canvas shared by the user and you. Everything you write appears live in the
 user's canvas app with your cursor, grouped into a change set they can accept or reject.
 
 Best practices:
@@ -17,9 +17,9 @@ Best practices:
 
 const READ_ONLY = ['list_boards', 'get_board', 'lint_layout', 'render_snapshot', 'list_change_sets', 'get_design_tokens', 'get_threads', 'export_board', 'list_versions', 'list_templates', 'list_types', 'query_blocks', 'list_skills', 'get_skill', 'list_assets']
 
-/** The ai-figma MCP server, shared by the stdio transport (CLI) and the core's local HTTP endpoint. */
+/** The nodboard MCP server, shared by the stdio transport (CLI) and the core's local HTTP endpoint. */
 export function buildMcpServer(invoke: (tool: ToolName, args: Record<string, unknown>, caller: CallerInfo) => Promise<CallResponse>, callerFor: (clientName: string) => CallerInfo) {
-  const server = new McpServer({ name: 'ai-figma', version: '0.1.0' }, { instructions: INSTRUCTIONS })
+  const server = new McpServer({ name: 'nodboard', version: '0.1.0' }, { instructions: INSTRUCTIONS })
   const caller = () => callerFor(server.server.getClientVersion()?.name ?? 'mcp')
   for (const [name, def] of Object.entries(toolDefs)) {
     server.registerTool(
@@ -48,14 +48,14 @@ export function buildMcpServer(invoke: (tool: ToolName, args: Record<string, unk
   // every skill's SKILL.md, so agents that browse resources learn them too
   server.registerResource(
     'skill',
-    new ResourceTemplate('aifig://skills/{name}/SKILL.md', {
+    new ResourceTemplate('nodboard://skills/{name}/SKILL.md', {
       list: async () => {
         const r = await invoke('list_skills', {}, caller())
         const skills = r.ok ? ((r.result as { skills: { name: string; description: string }[] }).skills ?? []) : []
-        return { resources: skills.map((s) => ({ uri: `aifig://skills/${s.name}/SKILL.md`, name: s.name, description: s.description, mimeType: 'text/markdown' })) }
+        return { resources: skills.map((s) => ({ uri: `nodboard://skills/${s.name}/SKILL.md`, name: s.name, description: s.description, mimeType: 'text/markdown' })) }
       },
     }),
-    { title: 'Skill instructions', description: 'SKILL.md of an ai-figma skill', mimeType: 'text/markdown' },
+    { title: 'Skill instructions', description: 'SKILL.md of a nodboard skill', mimeType: 'text/markdown' },
     async (uri, vars) => {
       const r = await invoke('get_skill', { name: String(vars.name) }, caller())
       const s = r.ok ? (r.result as { name: string; description: string; instructions: string }) : null
@@ -64,13 +64,13 @@ export function buildMcpServer(invoke: (tool: ToolName, args: Record<string, unk
   )
   server.registerResource(
     'design-tokens',
-    'aifig://design/tokens',
+    'nodboard://design/tokens',
     { title: 'Design tokens', description: 'Colors, sizes and spacing blocks may use', mimeType: 'application/json' },
     async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(tokenManifest(), null, 2) }] }),
   )
   server.registerPrompt(
     'layout-best-practices',
-    { title: 'Canvas layout best practices', description: 'How to produce tidy, reviewable boards with ai-figma' },
+    { title: 'Canvas layout best practices', description: 'How to produce tidy, reviewable boards with nodboard' },
     async () => ({ messages: [{ role: 'user', content: { type: 'text', text: INSTRUCTIONS } }] }),
   )
   return { server, caller }

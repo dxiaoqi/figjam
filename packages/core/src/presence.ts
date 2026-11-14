@@ -1,6 +1,6 @@
-import type { AgentPresence, Point, Rect } from '@aifig/shared'
-import type { CallerInfo } from '@aifig/shared'
-import { AGENT_COLORS } from '@aifig/shared'
+import type { AgentPresence, Point, Rect } from '@nodboard/shared'
+import type { CallerInfo } from '@nodboard/shared'
+import { AGENT_COLORS } from '@nodboard/shared'
 
 const KNOWN: { match: RegExp; name: string; color: string }[] = [
   { match: /claude/i, name: 'Claude Code', color: '#D97757' },

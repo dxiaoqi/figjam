@@ -2,10 +2,10 @@ import type { Block, Connector, Thread } from './model'
 import type { TypeRegistry } from './types'
 
 /**
- * What an exported web page carries (`board.js`: `window.__AIFIG_BOARD__ = …`). A classic script rather than
+ * What an exported web page carries (`board.js`: `window.__NODBOARD_BOARD__ = …`). A classic script rather than
  * JSON fetched at runtime, so the page works from `file://` as well as from any static host.
  */
-export const WEB_EXPORT_FORMAT = 'aifig-web/1'
+export const WEB_EXPORT_FORMAT = 'nodboard-web/1'
 
 export interface WebExportAsset {
   /** Relative path (`assets/<sha256>.<ext>`) or, in single-file pages, a data: URI. */

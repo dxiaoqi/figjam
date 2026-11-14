@@ -1,4 +1,4 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@aifig/canvas-engine/styles.css";
+@import "@nodboard/canvas-engine/styles.css";
 @import "./canvas.css";

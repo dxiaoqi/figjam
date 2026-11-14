@@ -1,6 +1,6 @@
 import http from 'node:http'
 import vm from 'node:vm'
-import { SNIPPET_LIMITS, SNIPPET_PORT, snippetCsp, type Block } from '@aifig/shared'
+import { SNIPPET_LIMITS, SNIPPET_PORT, snippetCsp, type Block } from '@nodboard/shared'
 import type { BoardRegistry } from './board'
 
 /**
@@ -10,20 +10,20 @@ import type { BoardRegistry } from './board'
 const BRIDGE = `(() => {
   // iframe (browser): postMessage to the parent. <webview> (desktop): the preload's host channel, since a
   // webview is its own top-level page.
-  const host = window.aifigHost
+  const host = window.nodboardHost
   const P = window.parent
   if (!host && P === window) return
   const pending = new Map()
   const listeners = []
   let seq = 0
-  const send = host ? (m) => host.send(Object.assign({ aifig: 1 }, m)) : (m) => P.postMessage(Object.assign({ aifig: 1 }, m), '*')
+  const send = host ? (m) => host.send(Object.assign({ nodboard: 1 }, m)) : (m) => P.postMessage(Object.assign({ nodboard: 1 }, m), '*')
   const call = (type, data) => new Promise((resolve, reject) => {
     const id = ++seq
     pending.set(id, { resolve, reject })
     send({ type, id, data })
   })
   const receive = (m) => {
-    if (!m || m.aifig !== 1) return
+    if (!m || m.nodboard !== 1) return
     if (m.type === 'reply') {
       const p = pending.get(m.id)
       if (!p) return
@@ -35,7 +35,7 @@ const BRIDGE = `(() => {
   }
   if (host) host.onMessage(receive)
   else window.addEventListener('message', (e) => { if (e.source === P) receive(e.data) })
-  Object.defineProperty(window, 'aifig', {
+  Object.defineProperty(window, 'nodboard', {
     value: Object.freeze({
       getState: () => call('state:get'),
       setState: (value) => call('state:set', value),
@@ -53,7 +53,7 @@ const BRIDGE = `(() => {
     const put = () => {
       if (!overlay) {
         overlay = document.createElement('div')
-        overlay.setAttribute('data-aifig-error', '')
+        overlay.setAttribute('data-nodboard-error', '')
         overlay.setAttribute('role', 'alert')
         overlay.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:2147483647;display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 4px 16px rgba(0,0,0,.12)'
         const close = document.createElement('button')
@@ -198,7 +198,7 @@ export async function startSnippetHost(registry: BoardRegistry, port = SNIPPET_P
     })
   await listen('127.0.0.1')
   const ok = servers.length > 0
-  if (!ok) console.error(`ai-figma: snippet host port ${port} is busy — web snippets will show previews only`)
+  if (!ok) console.error(`nodboard: snippet host port ${port} is busy — web snippets will show previews only`)
   await listen('::1')
   return { port, ok, close: () => servers.forEach((s) => s.close()) }
 }
@@ -225,7 +225,7 @@ export const STATIC_SNIPPET_CSP = [
 const staticBridge = (state: unknown) => `(() => {
   let s = ${JSON.stringify(state ?? null).replace(/</g, '\\u003c')}
   const ls = []
-  Object.defineProperty(window, 'aifig', {
+  Object.defineProperty(window, 'nodboard', {
     value: Object.freeze({
       getState: async () => s,
       setState: async (v) => { s = JSON.parse(JSON.stringify(v === undefined ? null : v)); for (const f of ls) try { f(s) } catch (e) { console.error(e) } return true },
@@ -234,7 +234,7 @@ const staticBridge = (state: unknown) => `(() => {
     }),
   })
   // Esc hands the pointer back to the page (the viewer listens for this one message)
-  addEventListener('keydown', (e) => { if (e.key === 'Escape' && parent !== window) parent.postMessage({ aifig: 1, type: 'exit' }, '*') }, true)
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && parent !== window) parent.postMessage({ nodboard: 1, type: 'exit' }, '*') }, true)
 })()`
 
 /** A self-contained document for an inline snippet in an exported page. */

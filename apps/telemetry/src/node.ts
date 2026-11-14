@@ -1,4 +1,4 @@
-// Node entry: `npm start -w @aifig/telemetry` (SQLite file) or `npm run mock -w @aifig/telemetry` (in-memory,
+// Node entry: `npm start -w @nodboard/telemetry` (SQLite file) or `npm run mock -w @nodboard/telemetry` (in-memory,
 // seeded with 90 days of fake data, admin token printed on start).
 //   PORT (47910)  HOST (127.0.0.1)  DB_FILE (./data/telemetry.sqlite)  ADMIN_TOKEN  RATE_LIMIT (30/min)
 //   TRUST_PROXY=1 → rate-limit on X-Forwarded-For (behind a reverse proxy)
@@ -30,7 +30,7 @@ const app = createApp({
 })
 
 serve({ fetch: app.fetch, port, hostname: host }, (info) => {
-  console.log(`ai-figma telemetry on http://${host}:${info.port}  (dashboard: /admin)`)
+  console.log(`nodboard telemetry on http://${host}:${info.port}  (dashboard: /admin)`)
   if (mock) console.log(`admin token: ${adminToken}`)
   else if (process.env.ADMIN_TOKEN === undefined) console.log(`tip: ADMIN_TOKEN=${randomBytes(24).toString('base64url')}`)
 })

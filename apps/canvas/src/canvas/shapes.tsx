@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp, FileWarning, Film, Play, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
-import { intersects, snapTo, type BlockDraft, type BlockRenderProps, type Editor, type ShapeDef, type Vec } from '@aifig/canvas-engine'
+import { intersects, snapTo, type BlockDraft, type BlockRenderProps, type Editor, type ShapeDef, type Vec } from '@nodboard/canvas-engine'
 import {
   cardContentHeight,
   fitHeight,
@@ -21,7 +21,7 @@ import {
   type Block,
   type ColorToken,
   type SizeToken,
-} from '@aifig/shared'
+} from '@nodboard/shared'
 import { cn } from '@/lib/utils'
 import { useBoard } from '../board-context'
 import { reportLayout } from '../lib/layout-report'
@@ -143,7 +143,7 @@ function MoreToggle({ block, editing }: { block: Block; editing: boolean }) {
     <button
       data-ui
       data-more-toggle={expanded ? 'more' : 'less'}
-      className="aifig-more-btn"
+      className="nodboard-more-btn"
       onPointerDown={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
       onClick={(e) => {
@@ -155,7 +155,7 @@ function MoreToggle({ block, editing }: { block: Block; editing: boolean }) {
       {expanded ? <ChevronDown className="size-3" strokeWidth={2.25} /> : <ChevronUp className="size-3" strokeWidth={2.25} />}
     </button>
   )
-  return collapsed ? <div className="aifig-fade">{btn(true)}</div> : <div className="aifig-less">{btn(false)}</div>
+  return collapsed ? <div className="nodboard-fade">{btn(true)}</div> : <div className="nodboard-less">{btn(false)}</div>
 }
 
 // ---- renderers ----------------------------------------------------------------
@@ -181,13 +181,13 @@ function Sticky({ block, editing, editor }: BlockRenderProps) {
   const onChange = (text: string) => {
     editor.updateBlock(block.id, { text })
     const slash = !block.type && /^\/[a-z]*$/i.test(text.trim())
-    if (slash) window.dispatchEvent(new CustomEvent('aifig:type-palette', { detail: { ids: [block.id], query: text.trim().slice(1), slash: true } }))
-    else if (slashOpen.current) window.dispatchEvent(new Event('aifig:type-palette-close'))
+    if (slash) window.dispatchEvent(new CustomEvent('nodboard:type-palette', { detail: { ids: [block.id], query: text.trim().slice(1), slash: true } }))
+    else if (slashOpen.current) window.dispatchEvent(new Event('nodboard:type-palette-close'))
     slashOpen.current = slash
   }
   return (
-    <div className={cn('aifig-sticky', editing && 'is-editing', typeCls)} style={{ fontSize: fs }} data-scroll={editing || undefined}>
-      <div ref={innerRef} className="aifig-sticky-inner">
+    <div className={cn('nodboard-sticky', editing && 'is-editing', typeCls)} style={{ fontSize: fs }} data-scroll={editing || undefined}>
+      <div ref={innerRef} className="nodboard-sticky-inner">
         <TypeHeader block={block} />
         {editing ? (
           <RichEditor engine={editor} value={block.text} placeholder={t(block.type ? 'block.writeTyped' : 'block.writeIdea')} onChange={onChange} onTab={() => continueSticky(editor, block)} />
@@ -207,8 +207,8 @@ function Card({ block, editing, editor }: BlockRenderProps) {
   useContentFit(block, editing, editor, innerRef, 2)
   const typeCls = useTypeState(block, editing, editor)
   return (
-    <div className={cn('aifig-card', editing && 'is-editing', typeCls)} data-scroll={editing || undefined}>
-      <div ref={innerRef} className="aifig-card-inner">
+    <div className={cn('nodboard-card', editing && 'is-editing', typeCls)} data-scroll={editing || undefined}>
+      <div ref={innerRef} className="nodboard-card-inner">
         <TypeHeader block={block} />
         {editing ? (
           <>
@@ -222,7 +222,7 @@ function Card({ block, editing, editor }: BlockRenderProps) {
                 if (e.nativeEvent.isComposing || e.keyCode === 229) return
                 if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
                   e.preventDefault()
-                  e.currentTarget.closest('.ae-block')?.querySelector('.aifig-rich-host')?.dispatchEvent(new Event('aifig-focus-end'))
+                  e.currentTarget.closest('.ae-block')?.querySelector('.nodboard-rich-host')?.dispatchEvent(new Event('nodboard-focus-end'))
                 }
               }}
             />
@@ -230,7 +230,7 @@ function Card({ block, editing, editor }: BlockRenderProps) {
           </>
         ) : (
           <>
-            <div className={`title ${block.title ? '' : 'aifig-placeholder'}`}>{block.title || t('block.untitledCard')}</div>
+            <div className={`title ${block.title ? '' : 'nodboard-placeholder'}`}>{block.title || t('block.untitledCard')}</div>
             {block.text && <RichText className="body" value={block.text} />}
           </>
         )}
@@ -250,7 +250,7 @@ function Text({ block, editing, editor }: BlockRenderProps) {
   // Column titles and axis labels are plain text. They are not filter matches, so they dim with everything else that isn't.
   const dim = filterDimClass(block, useTypeFilter())
   return (
-    <div className={cn('aifig-text', dim)} style={style} ref={ref}>
+    <div className={cn('nodboard-text', dim)} style={style} ref={ref}>
       {editing ? (
         <RichEditor
           engine={editor}
@@ -270,7 +270,7 @@ function Text({ block, editing, editor }: BlockRenderProps) {
 }
 
 function Frame() {
-  return <div className="aifig-frame" />
+  return <div className="nodboard-frame" />
 }
 
 // ---- images and videos ----------------------------------------------------------
@@ -297,7 +297,7 @@ export function useAssetUrl(editor: Editor, id: string | undefined) {
 
 function MissingFile({ label }: { label: string }) {
   return (
-    <div className="aifig-image-loading aifig-missing" data-missing-asset>
+    <div className="nodboard-image-loading nodboard-missing" data-missing-asset>
       <FileWarning className="size-4 opacity-60" strokeWidth={1.75} />
       <span>{label}</span>
     </div>
@@ -309,13 +309,13 @@ function ImageBlock({ block, editor }: BlockRenderProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const failed = !!url && failedUrl === url
   return (
-    <div className="aifig-image">
+    <div className="nodboard-image">
       {url && !failed ? (
         <img src={url} alt={block.text || t('block.image')} draggable={false} onError={() => setFailedUrl(url)} />
       ) : failed ? (
         <MissingFile label={t('storage.missingFile')} />
       ) : (
-        <div className="aifig-image-loading">{t('block.loadingImage')}</div>
+        <div className="nodboard-image-loading">{t('block.loadingImage')}</div>
       )}
     </div>
   )
@@ -371,7 +371,7 @@ function VideoBlock({ block, editor }: BlockRenderProps) {
 
   const label = block.text || video?.name || t('block.video')
   return (
-    <div ref={root} className={cn('aifig-video', playing && 'is-playing')} data-video-block>
+    <div ref={root} className={cn('nodboard-video', playing && 'is-playing')} data-video-block>
       {playing && url ? (
         <video
           ref={el}
@@ -389,7 +389,7 @@ function VideoBlock({ block, editor }: BlockRenderProps) {
         />
       ) : (
         <>
-          {posterUrl ? <img className="aifig-video-poster" src={posterUrl} alt="" draggable={false} /> : <div className="aifig-video-poster aifig-video-blank" />}
+          {posterUrl ? <img className="nodboard-video-poster" src={posterUrl} alt="" draggable={false} /> : <div className="nodboard-video-poster nodboard-video-blank" />}
           {failed || (!video && block.asset) ? (
             <MissingFile label={t('storage.missingFile')} />
           ) : (
@@ -397,7 +397,7 @@ function VideoBlock({ block, editor }: BlockRenderProps) {
               type="button"
               data-ui
               data-video-play
-              className="aifig-video-play"
+              className="nodboard-video-play"
               aria-label={t('video.play', { name: label })}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => url && setPlaying(true)}
@@ -407,13 +407,13 @@ function VideoBlock({ block, editor }: BlockRenderProps) {
           )}
         </>
       )}
-      <div className="aifig-video-badge">
+      <div className="nodboard-video-badge">
         <Film className="size-3" />
         <span className="truncate">{label}</span>
         {video?.duration ? <span className="tabular-nums opacity-70">{formatDuration(video.duration)}</span> : null}
       </div>
       {playing && (
-        <button type="button" data-ui className="aifig-video-close" aria-label={t('video.stop')} onPointerDown={(e) => e.stopPropagation()} onClick={() => setPlaying(false)}>
+        <button type="button" data-ui className="nodboard-video-close" aria-label={t('video.stop')} onPointerDown={(e) => e.stopPropagation()} onClick={() => setPlaying(false)}>
           <X className="size-3.5" />
         </button>
       )}

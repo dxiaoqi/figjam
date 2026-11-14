@@ -56,8 +56,8 @@ export function AssistantSettings() {
       setKey('')
       setOpen(true)
     }
-    window.addEventListener('aifig:assistant-settings', show)
-    return () => window.removeEventListener('aifig:assistant-settings', show)
+    window.addEventListener('nodboard:assistant-settings', show)
+    return () => window.removeEventListener('nodboard:assistant-settings', show)
   }, [])
 
   const save = async () => {
@@ -68,7 +68,7 @@ export function AssistantSettings() {
         const r = await (await apiFetch('/api/assistant/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider, model, baseUrl, key: key || undefined }) })).json()
         if (!r.ok) throw new Error(r.error)
       }
-      window.dispatchEvent(new Event('aifig:assistant-changed'))
+      window.dispatchEvent(new Event('nodboard:assistant-changed'))
       toast.success(t(provider ? 'assistant.on' : 'assistant.turnedOff'))
       setOpen(false)
     } catch (e) {

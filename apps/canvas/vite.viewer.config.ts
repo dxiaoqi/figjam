@@ -9,14 +9,14 @@ import { defineConfig } from 'vite'
  */
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  define: { __AIFIG_FEATURES__: JSON.stringify({ assistant: false }), 'process.env.NODE_ENV': JSON.stringify('production') },
+  define: { __NODBOARD_FEATURES__: JSON.stringify({ assistant: false }), 'process.env.NODE_ENV': JSON.stringify('production') },
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   build: {
     outDir: 'dist/viewer',
     emptyOutDir: true,
     cssCodeSplit: false,
     minify: true,
-    lib: { entry: path.resolve(import.meta.dirname, 'src/viewer/main.tsx'), name: 'AifigViewer', formats: ['iife'], fileName: () => 'viewer.js', cssFileName: 'viewer' },
+    lib: { entry: path.resolve(import.meta.dirname, 'src/viewer/main.tsx'), name: 'NodboardViewer', formats: ['iife'], fileName: () => 'viewer.js', cssFileName: 'viewer' },
     rollupOptions: { output: { inlineDynamicImports: true } },
   },
 })

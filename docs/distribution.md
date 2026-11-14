@@ -1,18 +1,18 @@
 # Distribution: installers, releases, updates and install counts
 
-Everything needed to ship ai-figma as a normal desktop app: installers that need no Node/npm, a release channel with
+Everything needed to ship nodboard as a normal desktop app: installers that need no Node/npm, a release channel with
 checksums and an auto-update feed, and a privacy-respecting install counter.
 
 ## What gets built
 
 | Platform | Files | Built on |
 |---|---|---|
-| macOS | `ai-figma-<v>-mac-arm64.dmg`, `…-mac-x64.dmg`, `…-mac-arm64.zip`, `…-mac-x64.zip` | a Mac (`npm run release:mac`) |
-| Windows | `ai-figma-<v>-win-x64-setup.exe`, `…-win-arm64-setup.exe` (NSIS, per-user, no admin) | Linux with wine, or Windows (`npm run release:win`) |
-| Linux | `ai-figma-<v>-linux-x86_64.AppImage`, `ai-figma-<v>-linux-amd64.deb` | Linux (`npm run release:linux`) |
+| macOS | `nodboard-<v>-mac-arm64.dmg`, `…-mac-x64.dmg`, `…-mac-arm64.zip`, `…-mac-x64.zip` | a Mac (`npm run release:mac`) |
+| Windows | `nodboard-<v>-win-x64-setup.exe`, `…-win-arm64-setup.exe` (NSIS, per-user, no admin) | Linux with wine, or Windows (`npm run release:win`) |
+| Linux | `nodboard-<v>-linux-x86_64.AppImage`, `nodboard-<v>-linux-amd64.deb` | Linux (`npm run release:linux`) |
 
 The `.zip` on macOS is what the updater downloads; people install from the `.dmg`. Every package contains the
-Electron app, the canvas UI, the core, the CLI and MCP server (one bundled `aifig.mjs`), the built-in skills, the
+Electron app, the canvas UI, the core, the CLI and MCP server (one bundled `nodboard.mjs`), the built-in skills, the
 agent skill (`resources/agent-skill`) and the resvg native module for the target platform. The core, CLI and MCP server
 run on Electron's own Node (`ELECTRON_RUN_AS_NODE=1`), so users need nothing else installed.
 
@@ -29,7 +29,7 @@ Requirements: macOS 12+, Xcode Command Line Tools (`xcode-select --install`), No
 ```bash
 git clone https://origin.cursor.com/git/we-ding/genesis.git && cd genesis
 npm install
-npm run release:mac            # → release/<version>/ai-figma-<v>-mac-{arm64,x64}.{dmg,zip}, latest-mac.yml, latest.json
+npm run release:mac            # → release/<version>/nodboard-<v>-mac-{arm64,x64}.{dmg,zip}, latest-mac.yml, latest.json
 ```
 
 That builds both Apple silicon and Intel; add `-- --arm64` (or `--x64`) for one. Without a certificate the app is
@@ -52,7 +52,7 @@ If the certificate is already in your login keychain, `CSC_NAME="Developer ID Ap
 works instead of `CSC_LINK`. An App Store Connect API key (`APPLE_API_KEY` = path to the `.p8`, `APPLE_API_KEY_ID`,
 `APPLE_API_ISSUER`) can replace the Apple ID trio. With a certificate the build uses the hardened runtime with
 `apps/desktop/resources/entitlements.mac.plist` (JIT for V8/Node mode, library validation off for the resvg module).
-Check the result with `spctl -a -vv /Applications/ai-figma.app` and `xcrun stapler validate release/*/ai-figma-*.dmg`.
+Check the result with `spctl -a -vv /Applications/nodboard.app` and `xcrun stapler validate release/*/nodboard-*.dmg`.
 
 Then publish from the Mac the same way as elsewhere (below); `latest.json` merges with what Linux already published.
 
@@ -64,7 +64,7 @@ sudo apt install wine64        # once, for Windows installers with the app icon 
 npm run release:win            # NSIS installers for x64 and arm64
 ```
 
-Without wine, `AIFIG_WIN_EDIT_EXE=0 npm run release:win` still produces working installers but the `.exe` keeps
+Without wine, `NODBOARD_WIN_EDIT_EXE=0 npm run release:win` still produces working installers but the `.exe` keeps
 Electron's icon and metadata. Windows signing: `WIN_CSC_LINK` (`.pfx`, path or base64) and `WIN_CSC_KEY_PASSWORD`;
 cross-signing from Linux uses osslsigncode, which electron-builder downloads. EV certificates on hardware tokens and
 Azure Trusted Signing need a Windows machine or CI runner (`win.azureSignOptions` in the config).
@@ -73,11 +73,11 @@ Azure Trusted Signing need a Windows machine or CI runner (`win.azureSignOptions
 
 | OS | What people see | What to do |
 |---|---|---|
-| macOS 15+ | "Apple could not verify ai-figma is free of malware" | System Settings › Privacy & Security › scroll down › **Open Anyway**, then confirm. Once. |
+| macOS 15+ | "Apple could not verify nodboard is free of malware" | System Settings › Privacy & Security › scroll down › **Open Anyway**, then confirm. Once. |
 | macOS 14 and earlier | "…can't be opened because it is from an unidentified developer" | Right-click the app › **Open** › Open. Once. |
 | Windows | SmartScreen: "Windows protected your PC" | **More info** › **Run anyway**. Signed builds build reputation over time; EV certificates skip it. |
-| Linux AppImage | nothing, or "cannot mount" | `chmod +x ai-figma-*.AppImage`; needs FUSE 2 (`sudo apt install libfuse2t64` on Ubuntu 24.04, `libfuse2` before). |
-| Linux .deb | — | `sudo apt install ./ai-figma-*.deb` (pulls in its dependencies). |
+| Linux AppImage | nothing, or "cannot mount" | `chmod +x nodboard-*.AppImage`; needs FUSE 2 (`sudo apt install libfuse2t64` on Ubuntu 24.04, `libfuse2` before). |
+| Linux .deb | — | `sudo apt install ./nodboard-*.deb` (pulls in its dependencies). |
 
 The website Download page shows the same steps.
 
@@ -99,8 +99,8 @@ Output goes to `release/<version>/`:
 `latest.json` looks like this (URLs are absolute when `downloadBaseUrl` is set, otherwise relative to the manifest):
 
 ```json
-{ "product": "ai-figma", "version": "0.2.0", "releasedAt": "2026-09-26T07:17:06.996Z", "baseUrl": "https://dl.example.com/ai-figma",
-  "files": [{ "name": "ai-figma-0.2.0-mac-arm64.dmg", "url": "https://dl.example.com/ai-figma/ai-figma-0.2.0-mac-arm64.dmg",
+{ "product": "nodboard", "version": "0.2.0", "releasedAt": "2026-09-26T07:17:06.996Z", "baseUrl": "https://dl.example.com/nodboard",
+  "files": [{ "name": "nodboard-0.2.0-mac-arm64.dmg", "url": "https://dl.example.com/nodboard/nodboard-0.2.0-mac-arm64.dmg",
               "platform": "macos", "arch": "arm64", "kind": "dmg", "size": 121634213, "sha256": "…" }] }
 ```
 
@@ -114,10 +114,10 @@ Set the target and URLs in `distribution.json` (committed) or with environment v
 
 | `distribution.json` | Env override | Meaning |
 |---|---|---|
-| `updateFeedUrl` | `AIFIG_UPDATE_URL` | Public URL of the release folder; baked into the app for auto-update. Empty = updater off |
-| `downloadBaseUrl` | `AIFIG_DOWNLOAD_BASE_URL` | Public URL the installers are downloaded from; defaults to `updateFeedUrl` |
-| `telemetryUrl` | `AIFIG_TELEMETRY_URL` | The counter service; baked into the app. Empty = telemetry is a no-op |
-| `publish.target` | `AIFIG_PUBLISH_TARGET` | `s3`, `http`, `dir` or `none` |
+| `updateFeedUrl` | `NODBOARD_UPDATE_URL` | Public URL of the release folder; baked into the app for auto-update. Empty = updater off |
+| `downloadBaseUrl` | `NODBOARD_DOWNLOAD_BASE_URL` | Public URL the installers are downloaded from; defaults to `updateFeedUrl` |
+| `telemetryUrl` | `NODBOARD_TELEMETRY_URL` | The counter service; baked into the app. Empty = telemetry is a no-op |
+| `publish.target` | `NODBOARD_PUBLISH_TARGET` | `s3`, `http`, `dir` or `none` |
 
 Targets (`scripts/release/publish.mjs`):
 
@@ -125,22 +125,22 @@ Targets (`scripts/release/publish.mjs`):
   `S3_REGION` (default `auto`), `S3_ENDPOINT` (e.g. `https://<account>.r2.cloudflarestorage.com`),
   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE=1` for MinIO. Feeds get `Cache-Control: no-cache`,
   installers `immutable`.
-- **`http`** — `PUT` of each file to `AIFIG_PUBLISH_URL/<name>`, with `AIFIG_PUBLISH_TOKEN` as a Bearer token (WebDAV,
+- **`http`** — `PUT` of each file to `NODBOARD_PUBLISH_URL/<name>`, with `NODBOARD_PUBLISH_TOKEN` as a Bearer token (WebDAV,
   nginx `dav_methods PUT`, a small upload function).
-- **`dir`** — copy into `AIFIG_PUBLISH_DIR` (a mounted share, an rsync staging folder, a static host's root).
+- **`dir`** — copy into `NODBOARD_PUBLISH_DIR` (a mounted share, an rsync staging folder, a static host's root).
 
 Origin (cursor.com/docs/origin) hosts the repository and pull requests but has no release/asset storage yet, so it
 isn't a target; `publish.mjs` is where one would go.
 
-A good default is a public R2 bucket on a custom domain (`dl.example.com/ai-figma/`) with CORS allowing `GET` from the
+A good default is a public R2 bucket on a custom domain (`dl.example.com/nodboard/`) with CORS allowing `GET` from the
 website's origin (so the Download page can read `latest.json` live). `node scripts/release/serve.mjs` serves
 `release/<version>/` locally with CORS and range requests, like a bucket.
 
 ## Auto-update
 
 `apps/desktop/src/updater.mjs` wires electron-updater's generic provider. It runs only in packaged builds with a feed
-URL (baked from `distribution.json`/`AIFIG_UPDATE_URL`, or `{"updates": {"feedUrl": "…"}}` in `~/.aifig/config.json`),
-checks 10 s after launch and every 6 hours, downloads in the background and installs on quit. `AIFIG_UPDATES=off`
+URL (baked from `distribution.json`/`NODBOARD_UPDATE_URL`, or `{"updates": {"feedUrl": "…"}}` in `~/.nodboard/config.json`),
+checks 10 s after launch and every 6 hours, downloads in the background and installs on quit. `NODBOARD_UPDATES=off`
 disables it on one machine; results go to `updates.log` in the app's profile folder.
 
 - **macOS**: Squirrel.Mac installs only Developer ID–signed updates, so ad-hoc builds check but can't apply them.
@@ -153,13 +153,13 @@ The Connect agent dialog writes an MCP entry that runs the app's own executable 
 
 | Install | `command` | `args` |
 |---|---|---|
-| macOS | `/Applications/ai-figma.app/Contents/MacOS/ai-figma` | `…/Contents/Resources/aifig.mjs mcp` |
-| Windows | `%LOCALAPPDATA%\Programs\ai-figma\ai-figma.exe` | `…\resources\aifig.mjs mcp` |
-| Linux .deb | `/opt/ai-figma/ai-figma` | `/opt/ai-figma/resources/aifig.mjs mcp` |
-| Linux AppImage | the `.AppImage` file itself | `~/.aifig/runtime/<version>/aifig.mjs mcp --no-sandbox` |
+| macOS | `/Applications/nodboard.app/Contents/MacOS/nodboard` | `…/Contents/Resources/nodboard.mjs mcp` |
+| Windows | `%LOCALAPPDATA%\Programs\nodboard\nodboard.exe` | `…\resources\nodboard.mjs mcp` |
+| Linux .deb | `/opt/nodboard/nodboard` | `/opt/nodboard/resources/nodboard.mjs mcp` |
+| Linux AppImage | the `.AppImage` file itself | `~/.nodboard/runtime/<version>/nodboard.mjs mcp --no-sandbox` |
 
-with `env: { ELECTRON_RUN_AS_NODE: "1", AIFIG_BIN, AIFIG_BUILTIN_SKILLS, AIFIG_UI_DIST }`. Two AppImage details: it runs
-from a new `/tmp/.mount_*` folder on every launch, so the app copies the CLI, UI and skills to `~/.aifig/runtime/<version>/`
+with `env: { ELECTRON_RUN_AS_NODE: "1", NODBOARD_BIN, NODBOARD_BUILTIN_SKILLS, NODBOARD_UI_DIST }`. Two AppImage details: it runs
+from a new `/tmp/.mount_*` folder on every launch, so the app copies the CLI, UI and skills to `~/.nodboard/runtime/<version>/`
 and points agents at the AppImage file (a stable path the updater replaces in place); and its launcher inserts
 `--no-sandbox` before the arguments when unprivileged user namespaces are off (Ubuntu 24.04's default), which Node mode
 rejects — unless `--no-sandbox` is already present, which is why the entry ends with it (the CLI ignores it). A CLI
@@ -196,9 +196,9 @@ the dashboard shows the opt-in rate among new users.
 The website's Privacy page (`/<locale>/privacy/`) explains all of this to users; privacy questions and deletion
 requests (by install ID) go to [dwt199718@gmail.com](mailto:dwt199718@gmail.com), the `contactEmail` in `distribution.json`.
 
-**Off switches.** `AIFIG_TELEMETRY=off` (also `0`, `false`, `no`) or `DO_NOT_TRACK=1` turn it off regardless of the
+**Off switches.** `NODBOARD_TELEMETRY=off` (also `0`, `false`, `no`) or `DO_NOT_TRACK=1` turn it off regardless of the
 switch; with no `telemetryUrl` configured the code is a no-op and the UI hides the switch. Consent lives in
-`telemetry.json` in the Electron profile folder, not in `~/.aifig`.
+`telemetry.json` in the Electron profile folder, not in `~/.nodboard`.
 
 ## The counter service (`apps/telemetry`)
 
@@ -209,7 +209,7 @@ version, downloads by day and file.
 
 ```bash
 npm run telemetry:dev                     # in-memory, 90 days of mock data, http://127.0.0.1:47910/admin, token mock-admin-token
-ADMIN_TOKEN=$(openssl rand -base64 24) DB_FILE=/var/lib/aifig/telemetry.sqlite HOST=0.0.0.0 npm start -w @aifig/telemetry
+ADMIN_TOKEN=$(openssl rand -base64 24) DB_FILE=/var/lib/nodboard/telemetry.sqlite HOST=0.0.0.0 npm start -w @nodboard/telemetry
 ```
 
 Node needs 22.13+ (built-in `node:sqlite`, nothing native to compile). Behind a reverse proxy set `TRUST_PROXY=1` so rate
@@ -217,9 +217,9 @@ limiting uses `X-Forwarded-For`. On Cloudflare Workers with D1:
 
 ```bash
 cd apps/telemetry
-npx wrangler d1 create aifig-telemetry          # paste the database_id into wrangler.toml
+npx wrangler d1 create nodboard-telemetry          # paste the database_id into wrangler.toml
 npx wrangler secret put ADMIN_TOKEN
-npx wrangler deploy                             # → https://aifig-telemetry.<you>.workers.dev
+npx wrangler deploy                             # → https://nodboard-telemetry.<you>.workers.dev
 ```
 
 Then set `telemetryUrl` in `distribution.json` (baked into the next build) and `NEXT_PUBLIC_TELEMETRY_URL` for the

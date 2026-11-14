@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import type http from 'node:http'
 import path from 'node:path'
-import { ASSET_LIMITS, assetFileName, extForMime, IMAGE_MIMES, imageInfo, videoInfo, type Asset, type AssetRole } from '@aifig/shared'
+import { ASSET_LIMITS, assetFileName, extForMime, IMAGE_MIMES, imageInfo, videoInfo, type Asset, type AssetRole } from '@nodboard/shared'
 import type { Board } from './board'
 
 /**
@@ -11,7 +11,7 @@ import type { Board } from './board'
  * Files are served as opaque downloads — never as HTML on the app's origin — with Range support for video.
  */
 
-export const assetKeyFor = (token: string) => createHmac('sha256', token).update('aifig-assets-v1').digest('base64url').slice(0, 32)
+export const assetKeyFor = (token: string) => createHmac('sha256', token).update('nodboard-assets-v1').digest('base64url').slice(0, 32)
 
 export const ASSET_PATH_RE = /^\/api\/assets\/([\w-]+)\/([\w-]+)(?:\/[^/]*)?$/
 

@@ -2,13 +2,13 @@ import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import * as Y from 'yjs'
-import type { AgentPresence, ClientMessage, Rect, ServerMessage } from '@aifig/shared'
+import type { AgentPresence, ClientMessage, Rect, ServerMessage } from '@nodboard/shared'
 import { wsProtocols } from '../lib/auth'
 
 const MSG_SYNC = 0
 
 /** Permission prompts and activity entries, re-broadcast as a window event for the chrome that shows them. */
-export const SECURITY_EVENT = 'aifig:security'
+export const SECURITY_EVENT = 'nodboard:security'
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'offline'
 
@@ -62,7 +62,7 @@ export class CoreProvider {
         } else if (msg.type === 'permission' || msg.type === 'permission-settled' || msg.type === 'activity') {
           window.dispatchEvent(new CustomEvent(SECURITY_EVENT, { detail: msg }))
         } else if (msg.type === 'snippet-file' && msg.boardId === this.boardId) {
-          window.dispatchEvent(new CustomEvent('aifig:snippet-file', { detail: msg }))
+          window.dispatchEvent(new CustomEvent('nodboard:snippet-file', { detail: msg }))
         }
         return
       }

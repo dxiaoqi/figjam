@@ -1,5 +1,5 @@
 {
-  "name": "@aifig/core",
+  "name": "@nodboard/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
     "./auth": "./src/auth.ts"
   },
   "dependencies": {
-    "@aifig/shared": "*",
+    "@nodboard/shared": "*",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@resvg/resvg-js": "^2.6.2",
     "js-yaml": "^4.3.2",

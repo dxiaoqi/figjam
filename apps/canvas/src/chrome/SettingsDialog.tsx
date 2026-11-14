@@ -1,6 +1,6 @@
 import { BarChart3, Languages, Monitor, Moon, Sparkles, Sun, WandSparkles } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
-import { FEATURES } from '@aifig/shared'
+import { FEATURES } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -9,7 +9,7 @@ import { UsageSharing, useTelemetry } from './UsageSharing'
 
 export type ThemePref = 'system' | 'light' | 'dark'
 
-export const openSettings = () => window.dispatchEvent(new Event('aifig:settings'))
+export const openSettings = () => window.dispatchEvent(new Event('nodboard:settings'))
 
 function Segmented<T extends string>({ value, options, onChange, name, id }: { value: T; options: { id: T; label: ReactNode; icon?: ReactNode }[]; onChange: (v: T) => void; name: string; id: string }) {
   return (
@@ -66,8 +66,8 @@ export function SettingsDialog({ themePref, setTheme, onShowWelcome }: { themePr
   const [open, setOpen] = useState(false)
   useEffect(() => {
     const on = () => setOpen(true)
-    window.addEventListener('aifig:settings', on)
-    return () => window.removeEventListener('aifig:settings', on)
+    window.addEventListener('nodboard:settings', on)
+    return () => window.removeEventListener('nodboard:settings', on)
   }, [])
   const sysName = LOCALES.find((l) => l.id === systemLocale())?.label ?? 'English'
 
@@ -123,7 +123,7 @@ export function SettingsDialog({ themePref, setTheme, onShowWelcome }: { themePr
               className="w-full"
               onClick={() => {
                 setOpen(false)
-                window.dispatchEvent(new Event('aifig:assistant-settings'))
+                window.dispatchEvent(new Event('nodboard:assistant-settings'))
               }}
             >
               {t('settings.assistantOpen')}

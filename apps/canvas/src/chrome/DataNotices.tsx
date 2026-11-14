@@ -1,6 +1,6 @@
 import { AlertTriangle, FolderOpen, History, ShieldAlert, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import type { DataNotice } from '@aifig/shared'
+import type { DataNotice } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useBoard } from '../board-context'

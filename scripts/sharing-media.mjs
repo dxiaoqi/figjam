@@ -1,8 +1,8 @@
 // Screenshots, clips and samples for local files and sharing: the storage panel (en, zh), a video block, share
 // packs (export, import, a refused pack), and an exported web page opened from file://.
 // usage: node scripts/sharing-media.mjs <out-dir> [--skip-build]
-//   Builds the canvas and runs its own core on a spare port with a temporary AIFIG_HOME. Writes PNGs, MP4 clips,
-//   sample-board.aifigpack and sample-web-page.zip to <out-dir>.
+//   Builds the canvas and runs its own core on a spare port with a temporary NODBOARD_HOME. Writes PNGs, MP4 clips,
+//   sample-board.nodboardpack and sample-web-page.zip to <out-dir>.
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -19,13 +19,13 @@ const out = path.resolve(process.argv[2] ?? 'sharing-media')
 fs.mkdirSync(out, { recursive: true })
 if (!process.argv.includes('--skip-build')) execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'ignore' })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-sharing-media-'))
-const home = path.join(tmp, 'aifig')
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-sharing-media-'))
+const home = path.join(tmp, 'nodboard')
 const port = 48310 + Math.floor(Math.random() * 40) * 2
 const base = `http://127.0.0.1:${port}`
-const env = { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: String(port), AIFIG_REVEAL: 'off', AIFIG_PACK_DIR: path.join(tmp, 'Documents', 'ai-figma') }
-delete env.AIFIG_TOKEN
-const bin = path.join(root, 'bin/aifig.mjs')
+const env = { ...process.env, NODBOARD_HOME: home, NODBOARD_CORE_PORT: String(port), NODBOARD_REVEAL: 'off', NODBOARD_PACK_DIR: path.join(tmp, 'Documents', 'ai-figma') }
+delete env.NODBOARD_TOKEN
+const bin = path.join(root, 'bin/nodboard.mjs')
 const HUMAN = { id: 'human:media', name: 'You', client: 'test', kind: 'human' }
 const call = async (tool, args = {}) => {
   const r = await (await fetch(`${base}/api/call`, { method: 'POST', headers: authHeaders(home), body: JSON.stringify({ tool, args, caller: HUMAN }) })).json()
@@ -49,7 +49,7 @@ const brief = all.find((b) => b.kind === 'frame' && b.title === 'Brief')
 async function renderSnippet(b, size, act) {
   const ctx = await browser.newContext({ viewport: size, deviceScaleFactor: 1 })
   const page = await ctx.newPage()
-  await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;font:14px/1.45 Inter,system-ui,sans-serif}${b.web.css ?? ''}</style></head><body>${b.web.html ?? ''}<script>window.aifig={getState:async()=>({}),setState:async()=>true,onState(){}};${b.web.js ?? ''}</script></body></html>`)
+  await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;font:14px/1.45 Inter,system-ui,sans-serif}${b.web.css ?? ''}</style></head><body>${b.web.html ?? ''}<script>window.nodboard={getState:async()=>({}),setState:async()=>true,onState(){}};${b.web.js ?? ''}</script></body></html>`)
   await page.waitForTimeout(400)
   const r = await act(page)
   await ctx.close()
@@ -79,8 +79,8 @@ await call('create_version', { board, name: 'Ready to share' })
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 })
 await ctx.addInitScript((t) => {
   try {
-    localStorage.setItem('aifig:token', t)
-    localStorage.setItem('aifig:welcome', 'done')
+    localStorage.setItem('nodboard:token', t)
+    localStorage.setItem('nodboard:welcome', 'done')
   } catch {}
 }, tokenFor(home))
 const page = await ctx.newPage()
@@ -88,7 +88,7 @@ const shot = (name, p = page) => p.screenshot({ path: path.join(out, name) })
 const open = async (id, locale) => {
   await page.goto(`${base}/?board=${id}&perf`)
   if (locale) {
-    await page.evaluate((l) => localStorage.setItem('aifig:locale', l), locale)
+    await page.evaluate((l) => localStorage.setItem('nodboard:locale', l), locale)
     await page.reload()
   }
   await page.waitForSelector('.ae-canvas', { timeout: 20000 })
@@ -117,7 +117,7 @@ await page.evaluate(() => window.editor.zoomToFit(false))
 await page.waitForTimeout(600)
 let stop = await startClip(page, tmp)
 await page.waitForTimeout(500)
-await page.evaluate(() => window.dispatchEvent(new Event('aifig:storage')))
+await page.evaluate(() => window.dispatchEvent(new Event('nodboard:storage')))
 await page.waitForSelector('[data-storage-asset]')
 await page.waitForTimeout(1400)
 await shot('storage-panel.png')
@@ -131,7 +131,7 @@ await page.locator('[data-storage-used-by]').first().click()
 await page.waitForTimeout(1500)
 await stop(path.join(out, 'storage-panel.mp4'))
 await open(board, 'zh-CN')
-await page.evaluate(() => window.dispatchEvent(new Event('aifig:storage')))
+await page.evaluate(() => window.dispatchEvent(new Event('nodboard:storage')))
 await page.waitForSelector('[data-storage-asset]')
 await page.waitForTimeout(1200)
 await shot('storage-panel-zh.png')
@@ -139,10 +139,10 @@ await page.keyboard.press('Escape')
 await open(board, 'en')
 
 // ---- share pack ------------------------------------------------------------------------------------------------
-const pack = path.join(out, 'sample-board.aifigpack')
+const pack = path.join(out, 'sample-board.nodboardpack')
 fs.rmSync(pack, { force: true })
 const px = await call('export_pack', { board, path: pack, include_history: true, include_comments: true })
-await page.evaluate(() => window.dispatchEvent(new Event('aifig:export-pack')))
+await page.evaluate(() => window.dispatchEvent(new Event('nodboard:export-pack')))
 await page.waitForSelector('[data-export-pack]')
 await page.click('[data-pack-history]')
 await page.waitForTimeout(700)
@@ -153,7 +153,7 @@ const other = (await call('create_board', { title: 'Inbox' })).board.id
 await open(other, 'en')
 stop = await startClip(page, tmp)
 await page.waitForTimeout(600)
-await page.evaluate(() => window.dispatchEvent(new CustomEvent('aifig:import-pack', { detail: {} })))
+await page.evaluate(() => window.dispatchEvent(new CustomEvent('nodboard:import-pack', { detail: {} })))
 await page.waitForSelector('[data-import-pack]')
 await page.waitForTimeout(700)
 await page.setInputFiles('[data-pack-input]', pack)
@@ -167,9 +167,9 @@ await shot('pack-imported-board.png')
 await stop(path.join(out, 'pack-import.mp4'))
 {
   const { zipEntries } = await import('../packages/core/src/zip.ts')
-  const evil = path.join(tmp, 'totally-safe.aifigpack')
-  fs.writeFileSync(evil, zipEntries([{ name: 'manifest.json', data: Buffer.from('{"format":"aifigpack","version":1,"files":[]}') }, { name: '../../.ssh/authorized_keys', data: Buffer.from('ssh-ed25519 AAAA… attacker') }]))
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('aifig:import-pack', { detail: {} })))
+  const evil = path.join(tmp, 'totally-safe.nodboardpack')
+  fs.writeFileSync(evil, zipEntries([{ name: 'manifest.json', data: Buffer.from('{"format":"nodboardpack","version":1,"files":[]}') }, { name: '../../.ssh/authorized_keys', data: Buffer.from('ssh-ed25519 AAAA… attacker') }]))
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('nodboard:import-pack', { detail: {} })))
   await page.setInputFiles('[data-pack-input]', evil)
   await page.waitForSelector('[data-pack-error]', { timeout: 10000 })
   await page.waitForTimeout(500)
@@ -179,7 +179,7 @@ await stop(path.join(out, 'pack-import.mp4'))
 
 // ---- web page --------------------------------------------------------------------------------------------------
 await open(board, 'en')
-await page.evaluate(() => window.dispatchEvent(new Event('aifig:export-web')))
+await page.evaluate(() => window.dispatchEvent(new Event('nodboard:export-web')))
 await page.waitForSelector('[data-web-export] [data-web-mode="zip"]')
 await page.waitForTimeout(900)
 await shot('web-export-dialog.png')

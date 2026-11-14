@@ -15,10 +15,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 export async function startCore() {
   const port = 48110 + Math.floor(Math.random() * 40) * 2
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-scenarios-'))
-  const env = { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: String(port) }
-  delete env.AIFIG_TOKEN
-  const proc = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-scenarios-'))
+  const env = { ...process.env, NODBOARD_HOME: home, NODBOARD_CORE_PORT: String(port) }
+  delete env.NODBOARD_TOKEN
+  const proc = spawn(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
   const base = `http://127.0.0.1:${port}`
   for (let i = 0; i < 150 && !(await fetch(`${base}/api/health`).then((r) => r.ok, () => false)); i++) await sleep(100)
   const PERSON = { id: 'human:scenario', name: 'You', client: 'test', kind: 'human' }
@@ -52,7 +52,7 @@ export async function startCore() {
 /** An agent connected over MCP stdio, the way Claude Code or Cursor connect. `tool()` returns the parsed result. */
 export async function connectAgent(env, name = 'claude-code') {
   const client = new Client({ name, version: '1.0.0' })
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/aifig.mjs'), 'mcp'], env, stderr: 'ignore' }))
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/nodboard.mjs'), 'mcp'], env, stderr: 'ignore' }))
   const log = []
   const tool = async (toolName, args = {}) => {
     const r = await client.callTool({ name: toolName, arguments: args })

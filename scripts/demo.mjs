@@ -46,7 +46,7 @@ await page.evaluate(() => {
 await sleep(900)
 
 // Claude Code connects over MCP
-const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/aifig.mjs'), 'mcp'], env: process.env, stderr: 'inherit' })
+const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/nodboard.mjs'), 'mcp'], env: process.env, stderr: 'inherit' })
 const mcp = new Client({ name: 'claude-code', version: '1.0.0' })
 await mcp.connect(transport)
 const call = async (name, args = {}) => {

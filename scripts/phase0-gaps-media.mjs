@@ -11,7 +11,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'phase0-gaps')
 fs.mkdirSync(out, { recursive: true })
 const base = 'http://127.0.0.1:47820'
-const cli = (...args) => execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), ...args], { encoding: 'utf8' })
+const cli = (...args) => execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), ...args], { encoding: 'utf8' })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const agent = (tool, args) => cli('--board', board, '--as', 'Claude Code', 'call', tool, JSON.stringify({ board, ...args }))
 

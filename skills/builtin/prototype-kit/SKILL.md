@@ -1,8 +1,8 @@
 ---
 name: prototype-kit
-description: Build an AI prototype wall on an ai-figma board — several interactive HTML/CSS/JS variants of the same screen side by side as sandboxed web snippets, each with its rationale, review feedback and a final decision — then iterate on what people say. Use when asked to explore UI directions, compare designs or prototype a flow on the canvas.
+description: Build an AI prototype wall on a nodboard board — several interactive HTML/CSS/JS variants of the same screen side by side as sandboxed web snippets, each with its rationale, review feedback and a final decision — then iterate on what people say. Use when asked to explore UI directions, compare designs or prototype a flow on the canvas.
 metadata:
-  aifig:
+  nodboard:
     version: 1.0.0
     canvas: canvas/blocks.json
     capability: L0
@@ -24,7 +24,7 @@ on the canvas and leave feedback, you iterate, and the board ends with a decisio
 
 The prototype itself is a **web snippet** (`create_snippet` with inline `html` / `css` / `js`). Snippets run
 sandboxed on a separate origin with **no network**: inline everything (no CDN scripts, fonts or images; use
-`data:` URLs or CSS), keep each under ~200 lines, and use `aifig.getState()` / `aifig.setState()` if a prototype
+`data:` URLs or CSS), keep each under ~200 lines, and use `nodboard.getState()` / `nodboard.setState()` if a prototype
 needs to remember something. They show a static preview until a person double-clicks them.
 
 Layouts: `prototype-kit.feedback-by-variant` (a column per variant), `prototype-kit.feedback-matrix`

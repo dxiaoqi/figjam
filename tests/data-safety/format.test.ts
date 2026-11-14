@@ -27,7 +27,7 @@ test('container round-trips and records the schema version', () => {
 test('a truncated file is detected, wherever it was cut', () => {
   const file = encodeContainer(docBytes(20), { savedAt: 1 })
   for (const cut of [3, 8, 20, file.length - 200, file.length - 1]) {
-    assert.throws(() => decodeContainer(file.subarray(0, cut)), (e: unknown) => e instanceof CorruptFileError && /truncated|not an ai-figma/.test(e.reason), `cut at ${cut}`)
+    assert.throws(() => decodeContainer(file.subarray(0, cut)), (e: unknown) => e instanceof CorruptFileError && /truncated|not a nodboard/.test(e.reason), `cut at ${cut}`)
   }
 })
 
@@ -45,7 +45,7 @@ test('a file from a newer major version is refused with a clear message', () => 
   const file = encodeContainer(docBytes(), { savedAt: 1, schema: '3.0' })
   assert.throws(
     () => decodeContainer(file),
-    (e: unknown) => e instanceof FutureVersionError && e.schema === '3.0' && /newer version of ai-figma/.test(e.message) && /Update ai-figma/.test(e.message) && /has not been changed/.test(e.message),
+    (e: unknown) => e instanceof FutureVersionError && e.schema === '3.0' && /newer version of nodboard/.test(e.message) && /Update nodboard/.test(e.message) && /has not been changed/.test(e.message),
   )
 })
 
@@ -68,7 +68,7 @@ test('files without the magic are schema 0 (bare Yjs updates)', () => {
 
 test('migration 0.0 → 1.0 stamps the schema and fills missing metadata', () => {
   const doc = new Y.Doc()
-  doc.getMap('meta').set('format', 'aifig/0')
+  doc.getMap('meta').set('format', 'nodboard/0')
   doc.getMap('blocks').set('a', { id: 'a', createdAt: 5000 })
   const r = migrate(doc, { major: 0, minor: 0 }, undefined, { major: 1, minor: 0 })
   assert.equal(r.applied.length, 1)

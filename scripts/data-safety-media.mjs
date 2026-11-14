@@ -1,5 +1,5 @@
 // Media for data safety: version history with a read-only preview, an undoable restore, and the recovery notice.
-// usage: node scripts/data-safety-media.mjs <out-dir> seed|shots|recovered   (expects `npm run dev`; honours AIFIG_UI_PORT / AIFIG_HOME)
+// usage: node scripts/data-safety-media.mjs <out-dir> seed|shots|recovered   (expects `npm run dev`; honours NODBOARD_UI_PORT / NODBOARD_HOME)
 //   seed       build a board with a history (checkpoint, agent work, a large deletion)
 //   shots      version-history.png, restored.png, version-history-dark.png
 //   recovered  recovered-notice.png — run after truncating a board file and restarting the core
@@ -13,8 +13,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'data-safety')
 const phase = process.argv[3] ?? 'shots'
 fs.mkdirSync(out, { recursive: true })
-const base = `http://127.0.0.1:${process.env.AIFIG_UI_PORT ?? 47820}`
-const cli = (...args) => execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), ...args], { encoding: 'utf8' })
+const base = `http://127.0.0.1:${process.env.NODBOARD_UI_PORT ?? 47820}`
+const cli = (...args) => execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), ...args], { encoding: 'utf8' })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const TITLE = 'Onboarding research'
 
@@ -61,7 +61,7 @@ const shoot = async (dark, fn) => {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: dark ? 'dark' : 'light' })
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
   await page.goto(`${base}/?board=${board}`)
-  await page.waitForSelector('.aifig-canvas')
+  await page.waitForSelector('.nodboard-canvas')
   await sleep(1500)
   await fn(page)
   await page.close()

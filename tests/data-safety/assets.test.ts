@@ -53,7 +53,7 @@ function legacyBoard(id: string, opts: { big?: number } = {}) {
 }
 
 test('content-addressed store: identical bytes are one read-only file', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-store-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-store-'))
   const s = new AssetStore(dir)
   const a = s.put(png(7), 'png')
   const b = s.put(png(7), 'png')
@@ -70,11 +70,11 @@ test('a 1.0 board migrates forward: files out of the document, snippet source as
   tempHome()
   fs.mkdirSync(boardsDir(), { recursive: true })
   const { file, bytes, web } = legacyBoard('blegacy', { big: 200_000 })
-  const boardFile = path.join(boardsDir(), 'blegacy.aifig')
+  const boardFile = path.join(boardsDir(), 'blegacy.nodboard')
   fs.writeFileSync(boardFile, file)
   // an old version with the same image embedded
   fs.mkdirSync(historyDir('blegacy'), { recursive: true })
-  const vfile = path.join(historyDir('blegacy'), 'vold1.aifig')
+  const vfile = path.join(historyDir('blegacy'), 'vold1.nodboard')
   const vdoc = new Y.Doc()
   Y.applyUpdate(vdoc, decodeContainer(file).payload)
   fs.writeFileSync(vfile, encodeContainer(Y.encodeStateAsUpdate(vdoc), { savedAt: 1000, board: 'blegacy', schema: '1.0', version: { id: 'vold1', kind: 'checkpoint', name: 'Old', createdAt: 1000 } }))
@@ -185,7 +185,7 @@ test('garbage collection never deletes a file a version, a pending change or the
   assert.ok(b.store.has(pending.hash, 'png'), 'rejecting the pending change can still bring the old image back')
 
   // a damaged version header: collection stops rather than guess
-  const bad = path.join(historyDir(b.id), 'vbroken.aifig')
+  const bad = path.join(historyDir(b.id), 'vbroken.nodboard')
   fs.writeFileSync(bad, Buffer.from('AIFIG\0garbage'))
   assert.ok(listVersions(b.id).length >= 2, 'the first save made an automatic version too')
   for (const x of listVersions(b.id)) deleteVersion(b.id, x.id)
@@ -213,35 +213,35 @@ test('Save As mirrors files to Name.assets; the moved pair opens elsewhere; tamp
   })
   const docs = path.join(home, 'Documents')
   fs.mkdirSync(docs)
-  const target = path.join(docs, 'Portable.aifig')
+  const target = path.join(docs, 'Portable.nodboard')
   reg.saveAs(b, target)
   const sibling = siblingAssetsDir(target)
   assert.equal(path.basename(sibling), 'Portable.assets')
   const name = `${sha256Hex(bytes)}.png`
   assert.ok(fs.existsSync(path.join(sibling, name)), 'Save As writes the files next to the board')
 
-  // move both to another folder (another machine: a fresh AIFIG_HOME)
+  // move both to another folder (another machine: a fresh NODBOARD_HOME)
   const moved = path.join(home, 'Moved')
   fs.mkdirSync(moved)
-  fs.copyFileSync(target, path.join(moved, 'Renamed.aifig'))
+  fs.copyFileSync(target, path.join(moved, 'Renamed.nodboard'))
   fs.mkdirSync(path.join(moved, 'Renamed.assets'))
   fs.copyFileSync(path.join(sibling, name), path.join(moved, 'Renamed.assets', name))
   tempHome()
   const reg2 = new BoardRegistry()
   reg2.loadAll()
-  const opened = reg2.openFile(path.join(moved, 'Renamed.aifig'))
+  const opened = reg2.openFile(path.join(moved, 'Renamed.nodboard'))
   assert.deepEqual(new Uint8Array(opened.readAsset(opened.blocks.get('i')!.asset)!), bytes)
   assert.ok(opened.store.has(sha256Hex(bytes), 'png'))
 
   // a file whose bytes don't match its name is not taken in
   const evil = path.join(home, 'Evil')
   fs.mkdirSync(path.join(evil, 'Evil.assets'), { recursive: true })
-  fs.copyFileSync(target, path.join(evil, 'Evil.aifig'))
+  fs.copyFileSync(target, path.join(evil, 'Evil.nodboard'))
   fs.writeFileSync(path.join(evil, 'Evil.assets', name), Buffer.from('not the image'))
   tempHome()
   const reg3 = new BoardRegistry()
   reg3.loadAll()
-  const e = reg3.openFile(path.join(evil, 'Evil.aifig'))
+  const e = reg3.openFile(path.join(evil, 'Evil.nodboard'))
   assert.equal(e.store.has(sha256Hex(bytes), 'png'), false)
   assert.equal(storageInfo(e).assets[0].status, 'missing')
 })

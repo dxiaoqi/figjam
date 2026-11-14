@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react'
 import type * as Y from 'yjs'
-import type { AgentPresence, Block, BoardSummary, ChangeSet, TemplateId } from '@aifig/shared'
+import type { AgentPresence, Block, BoardSummary, ChangeSet, TemplateId } from '@nodboard/shared'
 import type { Health } from './lib/core'
 import type { CoreProvider } from './sync/provider'
 

@@ -57,7 +57,7 @@ import {
 } from 'lucide-react'
 import { useSyncExternalStore } from 'react'
 import type * as Y from 'yjs'
-import { BUILTIN_TYPES, skillTypeRegistry, typeDef, type BoardSkill, type SkillIcon, type TypeId, type TypeRegistry } from '@aifig/shared'
+import { BUILTIN_TYPES, skillTypeRegistry, typeDef, type BoardSkill, type SkillIcon, type TypeId, type TypeRegistry } from '@nodboard/shared'
 
 const ICONS: Record<SkillIcon, LucideIcon> = {
   Sparkles, CircleHelp, Quote, FlaskConical, Lightbulb, SquareCheck, Tag, User, Users, Building2, Store, Swords,

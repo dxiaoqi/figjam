@@ -1,6 +1,6 @@
 import { Check, Filter, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { useCamera, useEditorVersion, type Editor } from '@aifig/canvas-engine'
+import { useCamera, useEditorVersion, type Editor } from '@nodboard/canvas-engine'
 import {
   COLORS,
   detectPrefix,
@@ -16,7 +16,7 @@ import {
   type BlockTypeDef,
   type FieldValue,
   type TypeId,
-} from '@aifig/shared'
+} from '@nodboard/shared'
 import { cn } from '@/lib/utils'
 import { en as LABEL_KEYS } from '../i18n/en'
 import { useBoard } from '../board-context'
@@ -64,7 +64,7 @@ function store<T>(key: string, initial: T) {
 }
 
 /** Leading-prefix auto typing ("? …" → Question). Can be turned off. */
-export const autoType = store<boolean>('aifig:auto-type', true)
+export const autoType = store<boolean>('nodboard:auto-type', true)
 export const useAutoType = () => useSyncExternalStore(autoType.subscribe, autoType.get)
 
 export interface TypeFilter {
@@ -76,7 +76,7 @@ export const useTypeFilter = () => useSyncExternalStore(typeFilter.subscribe, ty
 export const filterActive = (f: TypeFilter) => !!f.type
 export const matchesFilter = (b: Block, f: TypeFilter) => !f.type || matchesQuery(b, { type: f.type, where: f.where }, currentTypes())
 /** Class for blocks that are not the active filter's matches — including labels and column titles, which are not typed blocks. */
-export const filterDimClass = (b: Block, f: TypeFilter) => (filterActive(f) && !matchesFilter(b, f) ? 'aifig-dim' : false)
+export const filterDimClass = (b: Block, f: TypeFilter) => (filterActive(f) && !matchesFilter(b, f) ? 'nodboard-dim' : false)
 
 // ---- promote / demote (local, undoable) --------------------------------------------
 
@@ -112,7 +112,7 @@ export function TypeHeader({ block }: { block: Block }) {
   const def = typeDef(block.type, reg)
   const Icon = typeIcon(block.type, reg)
   return (
-    <div className="aifig-type-header" data-type-header={block.type} title={def.skill ? `${def.label} · ${def.skill}` : typeLabel(def)}>
+    <div className="nodboard-type-header" data-type-header={block.type} title={def.skill ? `${def.label} · ${def.skill}` : typeLabel(def)}>
       <Icon className="size-3.5" strokeWidth={2.25} />
       {typeLabel(def)}
     </div>
@@ -130,7 +130,7 @@ export function TypeFooter({ block, editor }: { block: Block; editor: Editor }) 
   const f = typeFields(block, reg)
   const open = (e: React.MouseEvent) => {
     e.stopPropagation()
-    window.dispatchEvent(new CustomEvent('aifig:edit-fields', { detail: block.id }))
+    window.dispatchEvent(new CustomEvent('nodboard:edit-fields', { detail: block.id }))
   }
   const stop = (e: React.PointerEvent) => e.stopPropagation()
   let body: React.ReactNode
@@ -177,17 +177,17 @@ export function TypeFooter({ block, editor }: { block: Block; editor: Editor }) 
     return (
       <>
         {rows.length > 0 && (
-          <div className="aifig-type-rows" data-type-rows>
+          <div className="nodboard-type-rows" data-type-rows>
             {rows.map((r) => (
-              <button key={r.key} data-ui onPointerDown={stop} onClick={open} className="aifig-type-row" data-field-row={r.key}>
-                <span className="aifig-type-row-label">{r.label}</span>
-                <span className={cn('aifig-type-row-value', !r.value && 'opacity-40')}>{r.value || '—'}</span>
+              <button key={r.key} data-ui onPointerDown={stop} onClick={open} className="nodboard-type-row" data-field-row={r.key}>
+                <span className="nodboard-type-row-label">{r.label}</span>
+                <span className={cn('nodboard-type-row-value', !r.value && 'opacity-40')}>{r.value || '—'}</span>
               </button>
             ))}
           </div>
         )}
         {showSummary && (
-          <div className="aifig-type-footer" data-type-footer>
+          <div className="nodboard-type-footer" data-type-footer>
             <button data-ui onPointerDown={stop} onClick={open} className={cn('truncate', !sum && 'opacity-50')}>
               {sum || t('types.addFields', { fields: new Intl.ListFormat(getLocale(), { type: 'conjunction' }).format(def.fields.slice(0, 2).map((d) => fieldLabel(def, d.key, d.label).toLowerCase())) })}
             </button>
@@ -197,7 +197,7 @@ export function TypeFooter({ block, editor }: { block: Block; editor: Editor }) 
     )
   }
   return (
-    <div className="aifig-type-footer" data-type-footer>
+    <div className="nodboard-type-footer" data-type-footer>
       {body}
     </div>
   )
@@ -334,8 +334,8 @@ export function FieldsPopover() {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const on = (e: Event) => setId((e as CustomEvent<string>).detail)
-    window.addEventListener('aifig:edit-fields', on)
-    return () => window.removeEventListener('aifig:edit-fields', on)
+    window.addEventListener('nodboard:edit-fields', on)
+    return () => window.removeEventListener('nodboard:edit-fields', on)
   }, [])
   const close = useMemo(() => () => setId(null), [])
   useOutside(ref, close, !!id)
@@ -434,7 +434,7 @@ export function TypePalette() {
     if (st.slash) {
       const b = editor.block(st.ids[0])
       if (b) {
-        document.querySelector(`[data-block-id="${b.id}"] .aifig-rich-host`)?.dispatchEvent(new Event('aifig-clear'))
+        document.querySelector(`[data-block-id="${b.id}"] .nodboard-rich-host`)?.dispatchEvent(new Event('nodboard-clear'))
         editor.updateBlock(b.id, { ...typePatch(b, o.id, {}, reg), text: '' })
       }
     } else setBlocksType(editor, st.ids, o.id)
@@ -447,11 +447,11 @@ export function TypePalette() {
       setIndex(0)
     }
     const closeEv = () => setSt(null)
-    window.addEventListener('aifig:type-palette', open)
-    window.addEventListener('aifig:type-palette-close', closeEv)
+    window.addEventListener('nodboard:type-palette', open)
+    window.addEventListener('nodboard:type-palette-close', closeEv)
     return () => {
-      window.removeEventListener('aifig:type-palette', open)
-      window.removeEventListener('aifig:type-palette-close', closeEv)
+      window.removeEventListener('nodboard:type-palette', open)
+      window.removeEventListener('nodboard:type-palette-close', closeEv)
     }
   }, [])
 

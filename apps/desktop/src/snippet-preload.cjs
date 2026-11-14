@@ -3,13 +3,13 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 const listeners = []
-ipcRenderer.on('aifig', (_e, msg) => {
+ipcRenderer.on('nodboard', (_e, msg) => {
   for (const fn of listeners) fn(msg)
 })
 
-contextBridge.exposeInMainWorld('aifigHost', {
+contextBridge.exposeInMainWorld('nodboardHost', {
   send(msg) {
-    ipcRenderer.sendToHost('aifig', msg)
+    ipcRenderer.sendToHost('nodboard', msg)
   },
   onMessage(fn) {
     if (typeof fn === 'function') listeners.push(fn)

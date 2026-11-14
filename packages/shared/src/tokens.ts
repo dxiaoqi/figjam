@@ -191,7 +191,7 @@ export function toSizeToken(input: unknown, fallback: SizeToken = 'm'): SizeToke
   return map[v] ?? fallback
 }
 
-/** Public token manifest for agents (aifig://design/tokens). */
+/** Public token manifest for agents (nodboard://design/tokens). */
 export function tokenManifest() {
   return {
     colors: COLOR_TOKENS,

@@ -1,4 +1,4 @@
-// Reports CI steps to Origin as check runs on the commit being tested (one suite "ai-figma CI", one run per step),
+// Reports CI steps to Origin as check runs on the commit being tested (one suite "nodboard CI", one run per step),
 // so they show up in the pull request's Checks tab and can be required before merging.
 //
 // Environment:
@@ -42,7 +42,7 @@ export function originReporter({ enabled, root, steps }) {
   async function post(step, run) {
     const body = {
       headSha: sha,
-      checkSuite: { key: 'aifig-ci', name: 'ai-figma CI', externalId: runId, ...(detailsUrl ? { detailsUrl } : {}) },
+      checkSuite: { key: 'nodboard-ci', name: 'nodboard CI', externalId: runId, ...(detailsUrl ? { detailsUrl } : {}) },
       checkRun: { key: step.id, name: step.name, externalId: `${runId}:${step.id}`, externalUpdatedAt: stamp(), ...(detailsUrl ? { detailsUrl } : {}), ...run },
     }
     try {

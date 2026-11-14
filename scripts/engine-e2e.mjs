@@ -10,7 +10,7 @@ import { authHeaders, homeOf, tokenFor } from './lib/core-auth.mjs'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const outDir = process.argv[2]
 const base = 'http://127.0.0.1:47820'
-const cli = (...args) => execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), ...args], { encoding: 'utf8' })
+const cli = (...args) => execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), ...args], { encoding: 'utf8' })
 const board = JSON.parse(cli('--json', 'new-board', `Engine check ${Date.now().toString(36)}`)).board.id
 
 const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--no-sandbox'] })
@@ -388,8 +388,8 @@ check('minimap click moves the camera', !!mm && (cam0.x !== cam1.x || cam0.y !==
 
 // export / copy-as-image endpoints (rendered by the core)
 const exp = await ed(async ({ board, ids }) => {
-  const png = await fetch(`/api/boards/${board}/snapshot.png?ids=${ids.join(',')}`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })
-  const svg = await fetch(`/api/boards/${board}/snapshot.svg?ids=${ids.join(',')}`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })
+  const png = await fetch(`/api/boards/${board}/snapshot.png?ids=${ids.join(',')}`, { headers: { authorization: `Bearer ${localStorage.getItem('nodboard:token')}` } })
+  const svg = await fetch(`/api/boards/${board}/snapshot.svg?ids=${ids.join(',')}`, { headers: { authorization: `Bearer ${localStorage.getItem('nodboard:token')}` } })
   const text = await svg.text()
   return { png: png.headers.get('content-type'), size: (await png.arrayBuffer()).byteLength, svg: svg.headers.get('content-type'), hasPath: text.includes('<path') }
 }, { board, ids: [obst.a, obst.b, obst.c] })
@@ -531,7 +531,7 @@ await wait(100)
 check('rotated blocks hit-test by their real shape', !(await ed((id) => window.editor.selection.has(id), fm.target)))
 cli('--board', board, 'update', fm.target, '--rotate', '30', '--human')
 await wait(200)
-const svgRot = await ed(async ({ board, id }) => (await (await fetch(`/api/boards/${board}/snapshot.svg?ids=${id}`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })).text()).includes('rotate(30'), { board, id: fm.target })
+const svgRot = await ed(async ({ board, id }) => (await (await fetch(`/api/boards/${board}/snapshot.svg?ids=${id}`, { headers: { authorization: `Bearer ${localStorage.getItem('nodboard:token')}` } })).text()).includes('rotate(30'), { board, id: fm.target })
 check('CLI rotation applies and export renders it', (await ed((id) => window.editor.block(id).rotation, fm.target)) === 30 && svgRot)
 
 // touch long-press opens the context menu
@@ -619,11 +619,11 @@ await wait(250)
 check('agent Markdown renders links and code', (await page.locator(`[data-block-id="${lab.b}"] a[href="https://example.com"]`).count()) === 1 && (await page.locator(`[data-block-id="${lab.b}"] code`).count()) === 1)
 
 // images: CLI add, paste, drop, aspect-locked resize, export
-fs.writeFileSync('/tmp/aifig-e2e.png', Buffer.from(await ed(async ({ board, id }) => {
-  const b = await (await fetch(`/api/boards/${board}/snapshot.png?ids=${id}`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })).arrayBuffer()
+fs.writeFileSync('/tmp/nodboard-e2e.png', Buffer.from(await ed(async ({ board, id }) => {
+  const b = await (await fetch(`/api/boards/${board}/snapshot.png?ids=${id}`, { headers: { authorization: `Bearer ${localStorage.getItem('nodboard:token')}` } })).arrayBuffer()
   return [...new Uint8Array(b)]
 }, { board, id: lab.a })))
-const imgRes = JSON.parse(cli('--json', '--board', board, 'image', '/tmp/aifig-e2e.png', '--width', '240', '--human'))
+const imgRes = JSON.parse(cli('--json', '--board', board, 'image', '/tmp/nodboard-e2e.png', '--width', '240', '--human'))
 const imgId = imgRes.created.find((c) => c.kind === 'image').id
 await ed((id) => { const r = window.editor.pageRect(id); window.editor.zoomToBounds({ x: r.x - 200, y: r.y - 200, w: r.w + 400, h: r.h + 400 }, { animate: false }) }, imgId)
 await wait(500)
@@ -654,7 +654,7 @@ const pasted = await ed(async (id) => {
   return window.editor.blocks().filter((b) => b.kind === 'image').length - before
 }, imgId)
 check('pasting and dropping image files creates image blocks', pasted === 2, `+${pasted}`)
-const svgImg = await ed(async ({ board, id }) => (await (await fetch(`/api/boards/${board}/snapshot.svg?ids=${id}`, { headers: { authorization: `Bearer ${localStorage.getItem('aifig:token')}` } })).text()).includes('<image'), { board, id: imgId })
+const svgImg = await ed(async ({ board, id }) => (await (await fetch(`/api/boards/${board}/snapshot.svg?ids=${id}`, { headers: { authorization: `Bearer ${localStorage.getItem('nodboard:token')}` } })).text()).includes('<image'), { board, id: imgId })
 check('images are included in export', svgImg)
 
 // ---- review UX v1: item-by-item review with the keyboard, undo by author (also after accepting) ----
@@ -793,7 +793,7 @@ check('resolved threads are hidden by default', (await pinOf(th2.id).count()) ==
 await page.locator('[data-show-resolved]').click()
 await wait(250)
 check('“Show resolved” reveals them, marked resolved', (await page.locator(`[data-thread="${th2.id}"][data-resolved]`).count()) === 1 && (await page.locator('[data-sidebar-thread]').count()) === 2)
-const prefs = await ed(() => JSON.parse(localStorage.getItem('aifig:comments') ?? '{}'))
+const prefs = await ed(() => JSON.parse(localStorage.getItem('nodboard:comments') ?? '{}'))
 const docJson = cli('--board', board, 'export', '--format', 'json')
 check('comment preferences are stored per user, not in the board', prefs.mode === true && prefs.showResolved === true && !/showResolved|comments-seen/.test(docJson), JSON.stringify(prefs))
 await page.reload()
@@ -820,7 +820,7 @@ const [mdDl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 
 const mdText = mdDl ? fs.readFileSync(await mdDl.path(), 'utf8') : ''
 check('Markdown export downloads a readable document incl. comments', mdText.includes('### Insight: onboarding is slow') && mdText.includes('💬'), mdDl?.suggestedFilename())
 const jsonOut = JSON.parse(cli('--board', board, 'export', '--format', 'json'))
-check('CLI JSON export has blocks, connectors and threads', jsonOut.format === 'aifig-export/1' && jsonOut.blocks.length > 10 && jsonOut.threads.length >= 1)
+check('CLI JSON export has blocks, connectors and threads', jsonOut.format === 'nodboard-export/1' && jsonOut.blocks.length > 10 && jsonOut.threads.length >= 1)
 
 // growing a block pushes the ones stacked below it (no overlap after an agent edit)
 const stackRes = JSON.parse(cli('--json', '--board', board, '--human', 'add', 'Top::short', 'Below::short', '--kind', 'card', '--layout', 'stack', '--frame', 'Stack', '--at', '14400,12000'))
@@ -841,7 +841,7 @@ const cardState = () => ed(([a, b]) => [window.editor.block(a), window.editor.bl
 let [lcS, ncS] = await cardState()
 const blockEl = (id) => page.locator(`[data-block-id="${id}"]`)
 check('a long card grows to its max height, then collapses behind “Show more”', lcS.h === 480 && lcS.contentH > 480 && (await blockEl(longId).locator('[data-more-toggle="more"]').isVisible()), JSON.stringify(lcS))
-const codeFits = await blockEl(longId).evaluate((el) => { const inner = el.querySelector('.aifig-card-inner'); const box = inner.getBoundingClientRect(); return [...inner.querySelectorAll('code')].every((c) => [...c.getClientRects()].every((r) => r.right <= box.right + 1)) && inner.scrollWidth <= inner.clientWidth + 1 })
+const codeFits = await blockEl(longId).evaluate((el) => { const inner = el.querySelector('.nodboard-card-inner'); const box = inner.getBoundingClientRect(); return [...inner.querySelectorAll('code')].every((c) => [...c.getClientRects()].every((r) => r.right <= box.right + 1)) && inner.scrollWidth <= inner.clientWidth + 1 })
 check('code spans wrap inside the card (no horizontal overflow)', codeFits)
 const lintOf = (frame) => JSON.parse(cli('--json', '--board', board, 'lint', ...(frame ? ['--frame', frame] : [])))
 let lintLong = lintOf(lc.frame)
@@ -860,7 +860,7 @@ check('“Show less” collapses it back and gives the space back', !lcS.expande
 const longPos = await screenOf(longId)
 await page.mouse.dblclick(longPos.x, longPos.y - 100)
 await wait(500)
-const editScroll = await blockEl(longId).locator('.aifig-card').evaluate((el) => ({ scroll: el.hasAttribute('data-scroll'), sh: el.scrollHeight, ch: el.clientHeight, overflow: getComputedStyle(el).overflowY }))
+const editScroll = await blockEl(longId).locator('.nodboard-card').evaluate((el) => ({ scroll: el.hasAttribute('data-scroll'), sh: el.scrollHeight, ch: el.clientHeight, overflow: getComputedStyle(el).overflowY }))
 check('editing a long card scrolls inside it instead of clipping', editScroll.scroll && editScroll.overflow === 'auto' && editScroll.sh > editScroll.ch, JSON.stringify(editScroll))
 await page.keyboard.press('Escape')
 await page.keyboard.press('Escape')
@@ -1033,13 +1033,13 @@ await page.keyboard.press('Escape')
 await wait(300)
 const plainQ = await ed(() => window.editor.blocks().find((b) => b.text === '? stays plain'))
 check('prefix detection can be turned off', !!plainQ && !plainQ.type, JSON.stringify(plainQ?.type))
-await ed(() => localStorage.setItem('aifig:auto-type', 'true'))
+await ed(() => localStorage.setItem('nodboard:auto-type', 'true'))
 await blockEl(slashId).locator('[data-todo-toggle]').click()
 await wait(250)
-check('a todo’s checkbox toggles done and strikes it through', (await blockOf(slashId)).typeData?.todo?.done === true && (await blockEl(slashId).locator('.aifig-sticky.is-done').count()) === 1)
+check('a todo’s checkbox toggles done and strikes it through', (await blockOf(slashId)).typeData?.todo?.done === true && (await blockEl(slashId).locator('.nodboard-sticky.is-done').count()) === 1)
 await page.locator('[data-filter-type="hypothesis"]').click()
 await wait(250)
-const dimmed = await ed((ids) => ids.map((id) => !!document.querySelector(`[data-block-id="${id}"] .aifig-dim`)), [tyA, tyB, tyC])
+const dimmed = await ed((ids) => ids.map((id) => !!document.querySelector(`[data-block-id="${id}"] .nodboard-dim`)), [tyA, tyB, tyC])
 await page.locator('[data-filter-field="status=supported"]').click()
 await wait(200)
 const filterCount = (await page.locator('[data-filter-count]').textContent()) ?? ''
@@ -1054,13 +1054,13 @@ const rel = await ed(([a, b]) => window.editor.connectors().find((c) => c.from =
 check('a connector from a quote to an insight is stored as “supports” and labelled', rel === 'supports' && (await page.locator('.ae-connector-label[data-relation="supports"]').count()) >= 1, rel)
 cli('--board', board, '--human', 'accept')
 const q = JSON.parse(cli('--json', '--board', board, 'query', '--type', 'hypothesis', '--status', 'supported'))
-check('aifig query --type hypothesis --status supported finds it', q.count === 1 && q.blocks[0].id === tyA, JSON.stringify(q))
+check('nodboard query --type hypothesis --status supported finds it', q.count === 1 && q.blocks[0].id === tyA, JSON.stringify(q))
 const agentType = JSON.parse(cli('--json', '--board', board, '--as', 'Claude Code', 'call', 'set_type', JSON.stringify({ board, ids: [tyA], fields: { status: 'refuted' } })))
 check('agent type/field changes go through review', !!agentType.changeSet && (await ed((i) => window.editor.block(i).pending, tyA)) === true, JSON.stringify(agentType))
 cli('--board', board, '--human', 'reject')
 let guard = ''
 try {
-  execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), '--board', board, '--human', 'call', 'set_type', JSON.stringify({ board, ids: [tyC], fields: { priority: 'high' } })], { encoding: 'utf8', stdio: 'pipe' })
+  execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), '--board', board, '--human', 'call', 'set_type', JSON.stringify({ board, ids: [tyC], fields: { priority: 'high' } })], { encoding: 'utf8', stdio: 'pipe' })
 } catch (e) {
   guard = String(e.stderr ?? e.message)
 }
@@ -1082,7 +1082,7 @@ check('matrix tidy adds row/column labels and stays clean', axes.some((t) => t.i
 
 // web snippets: static preview, interactive on double-click, sandboxed on its own origin, narrow bridge, watchdog
 cli('--board', board, '--human', 'accept')
-const counterJs = "let n = 0\nconst paint = () => (document.getElementById('n').textContent = n)\naifig.getState().then((s) => { n = (s && s.n) || 0; paint() })\ndocument.getElementById('b').onclick = () => { n++; paint(); aifig.setState({ n }) }"
+const counterJs = "let n = 0\nconst paint = () => (document.getElementById('n').textContent = n)\nnodboard.getState().then((s) => { n = (s && s.n) || 0; paint() })\ndocument.getElementById('b').onclick = () => { n++; paint(); nodboard.setState({ n }) }"
 const snipAdd = JSON.parse(cli('--json', '--board', board, '--as', 'Claude Code', 'call', 'create_snippet', JSON.stringify({ board, title: 'Counter', at: { x: 19600, y: 12000 }, html: '<main style="display:grid;place-items:center;height:100%"><button id="b">Clicked <span id="n">0</span></button></main>', css: 'button{font:600 16px system-ui;padding:10px 16px;border-radius:10px;border:0;background:#4f46e5;color:#fff}', js: counterJs })))
 const snip = snipAdd.id
 check('agents create snippets through change-set review', !!snipAdd.changeSet && (await ed((i) => !!window.editor.block(i)?.pending, snip)))
@@ -1091,7 +1091,7 @@ await ed((i) => { const r = window.editor.pageRect(i); window.editor.zoomToBound
 await page.waitForFunction((i) => { const w = window.editor.block(i)?.web; return !!(w && w.thumb && w.thumbFor) }, snip, { timeout: 10000 }).catch(() => {})
 const webOf = (i) => ed((id) => window.editor.block(id)?.web, i)
 let wv = await webOf(snip)
-check('an inline snippet shows a captured static preview and is not running', !!wv.thumb && (await blockEl(snip).locator('.aifig-web-thumb').count()) === 1 && (await page.locator('[data-web-frame]').count()) === 0, JSON.stringify({ thumb: wv.thumb, for: wv.thumbFor }))
+check('an inline snippet shows a captured static preview and is not running', !!wv.thumb && (await blockEl(snip).locator('.nodboard-web-thumb').count()) === 1 && (await page.locator('[data-web-frame]').count()) === 0, JSON.stringify({ thumb: wv.thumb, for: wv.thumbFor }))
 let snipPos = await screenOf(snip)
 await page.mouse.dblclick(snipPos.x, snipPos.y)
 await wait(1200)
@@ -1141,7 +1141,7 @@ await ed(() => window.editor.stopEditing())
 await wait(300)
 
 // access token, permission prompt, activity log
-check('the #token link signs the canvas in and is removed from the address bar', !page.url().includes('token=') && (await ed(() => localStorage.getItem('aifig:token'))) === tokenFor())
+check('the #token link signs the canvas in and is removed from the address bar', !page.url().includes('token=') && (await ed(() => localStorage.getItem('nodboard:token'))) === tokenFor())
 const agentCaller = { id: `e2e-agent:${Date.now()}`, name: 'Claude Code', client: 'claude-code', kind: 'agent' }
 const asked = callAs(agentCaller, 'add_image', { board, url: 'https://example.com/pic.png' })
 const promptEl = page.locator('[data-permission-prompt]')
@@ -1153,7 +1153,7 @@ await page.locator('[data-permission-deny]').click().catch(() => {})
 const askedRes = await asked
 await promptEl.waitFor({ state: 'detached', timeout: 3000 }).catch(() => {})
 check('Deny in the prompt reaches the agent as a clear refusal', !askedRes.ok && askedRes.error.includes('declined') && (await promptEl.count()) === 0, askedRes.error)
-await ed(() => window.dispatchEvent(new Event('aifig:activity')))
+await ed(() => window.dispatchEvent(new Event('nodboard:activity')))
 await page.locator('[data-activity-dialog]').waitFor({ timeout: 3000 }).catch(() => {})
 await wait(300)
 await shot('activity-log.png')
@@ -1212,10 +1212,10 @@ await wait(300)
 const mdSnip = cli('--board', board, 'export', '--format', 'md')
 const jsonSnip = JSON.parse(cli('--board', board, 'export', '--format', 'json'))
 const svgSnip = await fetch(`http://127.0.0.1:47821/api/boards/${board}/snapshot.svg?ids=${snip}`, { headers: authHeaders() }).then((r) => r.text())
-check('exports keep the source (MD/JSON) and a screenshot (PNG/SVG)', mdSnip.includes('### 🌐 Counter') && mdSnip.includes('```js') && jsonSnip.blocks.find((b) => b.id === snip)?.web?.js?.includes('aifig.setState') && svgSnip.includes('<image'), mdSnip.length)
+check('exports keep the source (MD/JSON) and a screenshot (PNG/SVG)', mdSnip.includes('### 🌐 Counter') && mdSnip.includes('```js') && jsonSnip.blocks.find((b) => b.id === snip)?.web?.js?.includes('nodboard.setState') && svgSnip.includes('<image'), mdSnip.length)
 
 // MCP report 2026-09-25: top-level await, syntax precheck, runtime error overlay, update summary, titles, watch link
-const tla = JSON.parse(cli('--json', '--board', board, '--human', 'call', 'create_snippet', JSON.stringify({ board, at: { x: 22600, y: 12000 }, html: '<h2>Await demo</h2><p id="o">…</p>', js: "const s = await aifig.getState()\ndocument.getElementById('o').textContent = 'ran'\nawait aifig.setState({ ran: true, before: s })" })))
+const tla = JSON.parse(cli('--json', '--board', board, '--human', 'call', 'create_snippet', JSON.stringify({ board, at: { x: 22600, y: 12000 }, html: '<h2>Await demo</h2><p id="o">…</p>', js: "const s = await nodboard.getState()\ndocument.getElementById('o').textContent = 'ran'\nawait nodboard.setState({ ran: true, before: s })" })))
 check('bug 4: a top-level await snippet saves with a warning and gets its heading as title', tla.warnings?.some((w) => w.includes('Top-level `await`')) && (await webOf(tla.id)).title === 'Await demo', JSON.stringify(tla.warnings))
 await ed((i) => { const r = window.editor.pageRect(i); window.editor.zoomToBounds({ x: r.x - 300, y: r.y - 200, w: r.w + 600, h: r.h + 400 }, { animate: false }) }, tla.id)
 await wait(400)
@@ -1223,11 +1223,11 @@ const tlaPos = await screenOf(tla.id)
 await page.mouse.dblclick(tlaPos.x, tlaPos.y)
 await page.waitForFunction((i) => window.editor.block(i)?.web?.state?.ran === true, tla.id, { timeout: 8000 }).catch(() => {})
 check('bug 4: top-level await runs (wrapped in an async function)', (await webOf(tla.id)).state?.ran === true, JSON.stringify((await webOf(tla.id)).state))
-check('DX 5: the block badge shows the snippet title', ((await blockEl(tla.id).locator('.aifig-web-badge').textContent()) ?? '').includes('Await demo'))
+check('DX 5: the block badge shows the snippet title', ((await blockEl(tla.id).locator('.nodboard-web-badge').textContent()) ?? '').includes('Await demo'))
 await ed(() => window.editor.stopEditing())
 let syntaxErr = ''
 try {
-  execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), '--board', board, '--human', 'call', 'create_snippet', JSON.stringify({ board, html: '<p>x</p>', js: 'const a = 1\nconst b = (\nconsole.log(a' })], { encoding: 'utf8', stdio: 'pipe' })
+  execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), '--board', board, '--human', 'call', 'create_snippet', JSON.stringify({ board, html: '<p>x</p>', js: 'const a = 1\nconst b = (\nconsole.log(a' })], { encoding: 'utf8', stdio: 'pipe' })
 } catch (e) {
   syntaxErr = String(e.stderr ?? e.message)
 }
@@ -1238,10 +1238,10 @@ await wait(400)
 const boomPos = await screenOf(boom)
 await page.mouse.dblclick(boomPos.x, boomPos.y)
 await wait(1500)
-const overlayText = await page.frameLocator('[data-web-frame]').locator('[data-aifig-error]').textContent({ timeout: 4000 }).catch(() => '')
+const overlayText = await page.frameLocator('[data-web-frame]').locator('[data-nodboard-error]').textContent({ timeout: 4000 }).catch(() => '')
 check('bug 4: runtime errors show a visible overlay inside the snippet', (overlayText ?? '').includes('boom at runtime'), overlayText)
 await ed(() => window.editor.stopEditing())
-const upd = JSON.parse(cli('--json', '--board', board, '--as', 'Claude Code', 'call', 'update_snippet', JSON.stringify({ board, id: tla.id, js: "const s = await aifig.getState()\nawait aifig.setState({ ran: 2 })" })))
+const upd = JSON.parse(cli('--json', '--board', board, '--as', 'Claude Code', 'call', 'update_snippet', JSON.stringify({ board, id: tla.id, js: "const s = await nodboard.getState()\nawait nodboard.setState({ ran: 2 })" })))
 check('DX 4: update_snippet reports what changed', /^\+\d+ \/ −\d+ lines$/.test(upd.changed?.js ?? '') && !!upd.changeSet, JSON.stringify(upd.changed))
 cli('--board', board, '--human', 'reject')
 await ed((i) => { const r = window.editor.pageRect(i); window.editor.zoomToBounds({ x: r.x - 300, y: r.y - 200, w: r.w + 600, h: r.h + 400 }, { animate: false }) }, yt.id)
@@ -1303,16 +1303,16 @@ await wait(250)
 await page.locator('[data-skill-action="probe-kit.peek"]').click()
 await wait(700)
 const skillPromptText = (await page.locator('[data-permission-prompt]').textContent().catch(() => '')) ?? ''
-check('an L1 action asks for permission on first use (shared prompt)', skillPromptText.includes('probe-kit') && skillPromptText.includes('aifig.get_board'), skillPromptText.slice(0, 80))
+check('an L1 action asks for permission on first use (shared prompt)', skillPromptText.includes('probe-kit') && skillPromptText.includes('nodboard.get_board'), skillPromptText.slice(0, 80))
 await page.locator('[data-permission-always]').click()
 await wait(800)
 const grants = JSON.parse(cli('--json', '--board', board, '--human', 'call', 'list_activity', JSON.stringify({ board, skill: 'probe-kit' })))
-check('“Always allow” runs it, remembers it and logs it', (await page.locator('[data-permission-prompt]').count()) === 0 && grants.grants.some((g) => g.subject === 'skill:probe-kit' && g.target === 'aifig.get_board') && grants.activity.some((e) => e.action === 'run' && e.outcome === 'ok'), JSON.stringify(grants.activity.map((e) => e.action + ':' + e.outcome)))
+check('“Always allow” runs it, remembers it and logs it', (await page.locator('[data-permission-prompt]').count()) === 0 && grants.grants.some((g) => g.subject === 'skill:probe-kit' && g.target === 'nodboard.get_board') && grants.activity.some((e) => e.action === 'run' && e.outcome === 'ok'), JSON.stringify(grants.activity.map((e) => e.action + ':' + e.outcome)))
 await page.locator('[data-skills-button]').click()
 await wait(300)
 await page.getByRole('tab', { name: 'Activity' }).click()
 await wait(700)
-check('the activity tab shows tool calls and allowed tools', (await page.locator('[data-activity-entry="run"]').count()) >= 1 && (await page.locator('[data-revoke="probe-kit:aifig.get_board"]').isVisible()))
+check('the activity tab shows tool calls and allowed tools', (await page.locator('[data-activity-entry="run"]').count()) >= 1 && (await page.locator('[data-revoke="probe-kit:nodboard.get_board"]').isVisible()))
 await page.keyboard.press('Escape')
 await wait(300)
 await ed((i) => window.editor.select([i]), skVendor)
@@ -1332,8 +1332,8 @@ check('“Save as block type” proposes fields from the card and turns it into 
 const savedSkill = vendorType?.split('.')[0]
 if (savedSkill) {
   cli('--board', board, '--human', 'call', 'disable_skill', JSON.stringify({ board, name: savedSkill }))
-  const aifigHomeDir = homeOf()
-  fs.rmSync(path.join(aifigHomeDir, 'skills', savedSkill), { recursive: true, force: true })
+  const nodboardHomeDir = homeOf()
+  fs.rmSync(path.join(nodboardHomeDir, 'skills', savedSkill), { recursive: true, force: true })
 }
 cli('--board', board, '--human', 'accept')
 
@@ -1350,7 +1350,7 @@ const aiMenu = async () => {
   return v
 }
 const cfg = (body) => fetch('http://127.0.0.1:47820/api/assistant/config', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) })
-if (process.env.AIFIG_FEATURE_ASSISTANT !== '1') {
+if (process.env.NODBOARD_FEATURE_ASSISTANT !== '1') {
   // not shipped: behind a build-time flag that is off by default
   const routes = await Promise.all(['/api/assistant/status', '/api/assistant/settings'].map((p) => fetch(`http://127.0.0.1:47820${p}`, { headers: authHeaders() }).then((r) => r.status)))
   check('built-in assistant is off by default: no assistant routes on the core', routes.every((st) => st === 404), routes.join(', '))
@@ -1362,12 +1362,12 @@ if (process.env.AIFIG_FEATURE_ASSISTANT !== '1') {
   check('…nor in the board menu', /Activity/.test(menuText) && !/assistant|助手/i.test(menuText), menuText.replace(/\n/g, ' · ').slice(0, 160))
 } else {
 await cfg({ provider: null })
-await ed(() => window.dispatchEvent(new Event('aifig:assistant-changed')))
+await ed(() => window.dispatchEvent(new Event('nodboard:assistant-changed')))
 await wait(300)
 check('assistant commands are hidden without a provider', !(await aiMenu()))
 await cfg({ provider: 'openai', key: 'sk-test-DO-NOT-PERSIST', model: 'x' })
 await cfg({ provider: 'mock' })
-await ed(() => window.dispatchEvent(new Event('aifig:assistant-changed')))
+await ed(() => window.dispatchEvent(new Event('nodboard:assistant-changed')))
 await wait(300)
 check('assistant commands appear with a provider', await aiMenu())
 const src = await ed(() => {
@@ -1455,7 +1455,7 @@ check('drop from a typed quote creates a quote', dropQuote?.kind === 'sticky' &&
 
 // level of detail + 2,000-block performance
 const many = { blocks: Array.from({ length: 2000 }, (_, i) => ({ text: `Note ${i + 1}`, color: ['yellow', 'blue', 'green', 'pink', 'purple'][i % 5], size: 's' })), layout: 'grid', columns: 50, at: { x: 0, y: 6000 } }
-execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), '--human', '--board', board, 'add', '--from-json', '-'], { input: JSON.stringify(many), encoding: 'utf8' })
+execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), '--human', '--board', board, 'add', '--from-json', '-'], { input: JSON.stringify(many), encoding: 'utf8' })
 await wait(1500)
 const total = await ed(() => window.editor.blocks().length)
 await ed(() => window.editor.zoomToFit(false))

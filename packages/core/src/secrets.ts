@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import type { CallerInfo } from '@aifig/shared'
+import type { CallerInfo } from '@nodboard/shared'
 import type { ActivityLog } from './activity'
 
 /**
@@ -8,7 +8,7 @@ import type { ActivityLog } from './activity'
  *     (`secret-tool` / libsecret), or — in the desktop app — Electron `safeStorage` (Keychain / DPAPI / libsecret).
  *  2. If none is available, keep the key in memory for this session only and say so. Never fall back to a
  *     plain-text or obfuscated file (that includes Electron's `basic_text` backend on Linux).
- *  3. Tests use the explicit `mock` backend (`AIFIG_SECRET_STORE=mock`), which is in-memory and labelled insecure.
+ *  3. Tests use the explicit `mock` backend (`NODBOARD_SECRET_STORE=mock`), which is in-memory and labelled insecure.
  */
 
 export type SecretBackend = 'macos-keychain' | 'libsecret' | 'memory' | 'mock'
@@ -65,7 +65,7 @@ export function macKeychainStore(run: Exec = exec, bin = 'security'): SecretStor
     async set(name, value) {
       checkName(name)
       if (/[\r\n]/.test(value)) throw new Error('Secrets cannot contain line breaks')
-      const r = await run(bin, ['-i'], `add-generic-password -U -s ${SERVICE} -a ${name} -l ${shellQuote(`ai-figma: ${name}`)} -w ${shellQuote(value)}\n`)
+      const r = await run(bin, ['-i'], `add-generic-password -U -s ${SERVICE} -a ${name} -l ${shellQuote(`nodboard: ${name}`)} -w ${shellQuote(value)}\n`)
       if (r.code !== 0 || /error|fail/i.test(r.stderr)) throw new Error(`The macOS Keychain refused to store the key: ${r.stderr.trim().slice(0, 200)}`)
     },
     async delete(name) {
@@ -87,7 +87,7 @@ export function libsecretStore(run: Exec = exec, bin = 'secret-tool'): SecretSto
     },
     async set(name, value) {
       checkName(name)
-      const r = await run(bin, ['store', `--label=ai-figma: ${name}`, 'service', SERVICE, 'account', name], value)
+      const r = await run(bin, ['store', `--label=nodboard: ${name}`, 'service', SERVICE, 'account', name], value)
       if (r.code !== 0) throw new Error(`The Secret Service refused to store the key: ${r.stderr.trim().slice(0, 200)}`)
     },
     async delete(name) {
@@ -126,8 +126,8 @@ const has = (bin: string, args: string[]) => {
   return !r.error
 }
 
-/** Pick the best store for this machine (override with AIFIG_SECRET_STORE=keychain|libsecret|memory|mock). */
-export function openSecretStore(choice = process.env.AIFIG_SECRET_STORE): SecretStore {
+/** Pick the best store for this machine (override with NODBOARD_SECRET_STORE=keychain|libsecret|memory|mock). */
+export function openSecretStore(choice = process.env.NODBOARD_SECRET_STORE): SecretStore {
   if (choice === 'mock') return mockStore()
   if (choice === 'memory') return memoryStore()
   if (choice === 'keychain' || (!choice && process.platform === 'darwin' && has('security', ['help']))) return macKeychainStore()
@@ -165,6 +165,6 @@ export function auditedStore(store: SecretStore, log: ActivityLog): SecretStore 
       log.record({ category: 'secret', action: 'delete', outcome: 'ok', actor, target: name, via: store.backend })
     },
   })
-  const system: CallerInfo = { id: 'core', name: 'ai-figma', client: 'core', kind: 'human' }
+  const system: CallerInfo = { id: 'core', name: 'nodboard', client: 'core', kind: 'human' }
   return { ...wrap(system), withActor: wrap }
 }

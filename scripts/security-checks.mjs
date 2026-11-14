@@ -20,7 +20,7 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? ` — ${detail}` : ''}`)
   if (!ok) failures++
 }
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-sec-'))
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-sec-'))
 
 // ---- unit: token file, guard, policy -------------------------------------------------------------
 const auth = await import('../packages/core/src/auth.ts')
@@ -89,9 +89,9 @@ check('memory / mock stores say they are not persistent', !sec.memoryStore().per
 const home = path.join(tmp, 'home')
 const port = 48200 + Math.floor(Math.random() * 40) * 2
 const base = `http://127.0.0.1:${port}`
-const env = { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: String(port), AIFIG_SECRET_STORE: 'mock', AIFIG_PERMISSION_TIMEOUT_MS: '4000', AIFIG_AGENT_CONFIG_HOME: path.join(tmp, 'agent-home') }
-delete env.AIFIG_TOKEN
-const core = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
+const env = { ...process.env, NODBOARD_HOME: home, NODBOARD_CORE_PORT: String(port), NODBOARD_SECRET_STORE: 'mock', NODBOARD_PERMISSION_TIMEOUT_MS: '4000', NODBOARD_AGENT_CONFIG_HOME: path.join(tmp, 'agent-home') }
+delete env.NODBOARD_TOKEN
+const core = spawn(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
 for (let i = 0; i < 100 && !(await fetch(`${base}/api/health`).then((r) => r.ok, () => false)); i++) await sleep(100)
 const token = fs.readFileSync(path.join(home, 'access-token'), 'utf8').trim()
 const H = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
@@ -109,14 +109,14 @@ const raw = (opts, body) =>
     req.end(body)
   })
 
-check('AIFIG_HOME is private to this user', process.platform === 'win32' || (fs.statSync(home).mode & 0o077) === 0, (fs.statSync(home).mode & 0o777).toString(8))
+check('NODBOARD_HOME is private to this user', process.platform === 'win32' || (fs.statSync(home).mode & 0o077) === 0, (fs.statSync(home).mode & 0o777).toString(8))
 const unauth = await fetch(`${base}/api/call`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tool: 'list_boards', args: {}, caller: HUMAN }) })
 check('an unauthenticated API request is rejected (401)', unauth.status === 401 && unauth.headers.get('www-authenticate')?.startsWith('Bearer'), `HTTP ${unauth.status}`)
 const wrong = await fetch(`${base}/api/boards`, { headers: { authorization: `Bearer ${'x'.repeat(43)}` } })
 check('a wrong token is rejected (401)', wrong.status === 401)
 const setupNoToken = await Promise.all([fetch(`${base}/api/agents`), fetch(`${base}/api/agents/cursor/install`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })])
 check('one-click agent setup (/api/agents…) needs the token', setupNoToken.every((r) => r.status === 401), setupNoToken.map((r) => r.status).join(', '))
-check('the X-Aifig-Token header works too', (await fetch(`${base}/api/boards`, { headers: { 'x-aifig-token': token } })).status === 200)
+check('the X-Nodboard-Token header works too', (await fetch(`${base}/api/boards`, { headers: { 'x-nodboard-token': token } })).status === 200)
 const pub = await (await fetch(`${base}/api/health`)).json()
 check('health without the token only says the core is up (no paths, token or MCP launch)', pub.ok && pub.authenticated === false && !pub.home && !pub.token && !pub.mcp, JSON.stringify(pub))
 const priv = await (await fetch(`${base}/api/health`, { headers: H })).json()
@@ -146,11 +146,11 @@ const wsOpen = (protocols, headers) =>
     ws.onopen = () => (clearTimeout(t), resolve({ ok: true, ws, protocol: ws.protocol }))
     ws.onerror = () => (clearTimeout(t), resolve({ ok: false }))
   })
-check('the sync WebSocket without the token is rejected', !(await wsOpen(['aifig'])).ok)
-const wsBadOrigin = await raw({ path: `/sync/${board}`, headers: { connection: 'Upgrade', upgrade: 'websocket', 'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', 'sec-websocket-protocol': `aifig, aifig-token.${token}`, origin: 'https://evil.example' } })
+check('the sync WebSocket without the token is rejected', !(await wsOpen(['nodboard'])).ok)
+const wsBadOrigin = await raw({ path: `/sync/${board}`, headers: { connection: 'Upgrade', upgrade: 'websocket', 'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', 'sec-websocket-protocol': `nodboard, nodboard-token.${token}`, origin: 'https://evil.example' } })
 check('the sync WebSocket from a foreign origin is rejected (403)', wsBadOrigin.status === 403, `HTTP ${wsBadOrigin.status}`)
-const canvas = await wsOpen(['aifig', `aifig-token.${token}`])
-check('the sync WebSocket with the token connects (subprotocol "aifig")', canvas.ok && canvas.protocol === 'aifig')
+const canvas = await wsOpen(['nodboard', `nodboard-token.${token}`])
+check('the sync WebSocket with the token connects (subprotocol "nodboard")', canvas.ok && canvas.protocol === 'nodboard')
 
 // asset files: token or asset key, read-only, never served as HTML on the app origin
 {
@@ -227,16 +227,16 @@ check('people skip the prompt, but not the SSRF guard (cloud metadata address)',
 canvas.ws.close()
 await sleep(200)
 r = await call(AGENT, 'add_image', img)
-check('with no canvas open, the agent is told how to get permission', !r.ok && r.error.includes('Open the ai-figma canvas') && r.error.includes('aifig permissions allow agent:claude-code network 127.0.0.1:9'), r.error)
+check('with no canvas open, the agent is told how to get permission', !r.ok && r.error.includes('Open the nodboard canvas') && r.error.includes('nodboard permissions allow agent:claude-code network 127.0.0.1:9'), r.error)
 
-const cliAllow = spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'permissions', 'allow', 'agent:claude-code', 'network', '127.0.0.1:9'], { env, encoding: 'utf8' })
+const cliAllow = spawnSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'permissions', 'allow', 'agent:claude-code', 'network', '127.0.0.1:9'], { env, encoding: 'utf8' })
 r = await call(AGENT, 'add_image', img)
 const grants = JSON.parse(fs.readFileSync(path.join(home, 'permissions.json'), 'utf8')).grants
-check('`aifig permissions allow` persists a grant (0600) that skips the prompt', cliAllow.status === 0 && grants.some((g) => g.subject === 'agent:claude-code' && g.target === '127.0.0.1:9') && (fs.statSync(path.join(home, 'permissions.json')).mode & 0o077) === 0 && r.error?.includes('local or private'), cliAllow.stderr || r.error)
+check('`nodboard permissions allow` persists a grant (0600) that skips the prompt', cliAllow.status === 0 && grants.some((g) => g.subject === 'agent:claude-code' && g.target === '127.0.0.1:9') && (fs.statSync(path.join(home, 'permissions.json')).mode & 0o077) === 0 && r.error?.includes('local or private'), cliAllow.stderr || r.error)
 const otherAgent = await call({ ...AGENT, id: 'cursor:1', name: 'Cursor', client: 'cursor' }, 'add_image', img)
 check('grants are per agent: another agent still needs permission', !otherAgent.ok && otherAgent.error.includes('agent:cursor'), otherAgent.error)
-spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'permissions', 'revoke', 'agent:claude-code'], { env })
-check('`aifig permissions revoke` removes it', !(await (await fetch(`${base}/api/permissions`, { headers: H })).json()).grants.length)
+spawnSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'permissions', 'revoke', 'agent:claude-code'], { env })
+check('`nodboard permissions revoke` removes it', !(await (await fetch(`${base}/api/permissions`, { headers: H })).json()).grants.length)
 const selfGrant = await call(AGENT, 'grant_permission', { subject: 'agent:claude-code' })
 check('agents cannot grant themselves permissions through the tool surface', !selfGrant.ok)
 
@@ -246,11 +246,11 @@ const actions = new Set(log.map((e) => `${e.category}:${e.action}:${e.outcome}`)
 check('the activity log records prompts, denials, grants, revokes and rejected clients', ['permission:decide:denied', 'permission:decide:allowed', 'network:fetch:denied', 'permission:grant:ok', 'permission:revoke:ok', 'auth:reject:denied'].every((a) => actions.has(a)), [...actions].join(' '))
 const logFile = fs.readFileSync(path.join(home, 'activity.jsonl'), 'utf8')
 check('the activity log is persisted as JSONL (0600) without the token', logFile.split('\n').filter(Boolean).length >= log.length && !logFile.includes(token) && (fs.statSync(path.join(home, 'activity.jsonl')).mode & 0o077) === 0)
-const cliLog = spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'activity', '-c', 'network'], { env, encoding: 'utf8' })
-check('`aifig activity` shows the log', cliLog.status === 0 && cliLog.stdout.includes('fetch'), cliLog.stdout.split('\n')[0])
+const cliLog = spawnSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'activity', '-c', 'network'], { env, encoding: 'utf8' })
+check('`nodboard activity` shows the log', cliLog.status === 0 && cliLog.stdout.includes('fetch'), cliLog.stdout.split('\n')[0])
 
 // secrets through the assistant settings (browser path) — the built-in assistant is behind a build-time flag, off by default
-if (process.env.AIFIG_FEATURE_ASSISTANT !== '1') {
+if (process.env.NODBOARD_FEATURE_ASSISTANT !== '1') {
   const st = await Promise.all(['/api/assistant/settings', '/api/assistant/status'].map((p) => fetch(`${base}${p}`, { headers: H }).then((r) => r.status)))
   check('the built-in assistant is off by default: no settings or key routes, no assistant.json', st.every((x) => x === 404) && !fs.existsSync(path.join(home, 'assistant.json')), st.join(', '))
 } else {
@@ -265,17 +265,17 @@ check('storing the key is in the activity log (by name)', secretLog.some((e) => 
 }
 
 // the bundled CLI / stdio MCP pick the token up by themselves
-const cliBoards = spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'boards'], { env, encoding: 'utf8' })
-check('the CLI authenticates automatically (reads AIFIG_HOME)', cliBoards.status === 0 && cliBoards.stdout.includes('Security check'), cliBoards.stderr)
-const cliBad = spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'boards'], { env: { ...env, AIFIG_TOKEN: 'y'.repeat(43), AIFIG_NO_AUTOSTART: '1' }, encoding: 'utf8' })
+const cliBoards = spawnSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'boards'], { env, encoding: 'utf8' })
+check('the CLI authenticates automatically (reads NODBOARD_HOME)', cliBoards.status === 0 && cliBoards.stdout.includes('Security check'), cliBoards.stderr)
+const cliBad = spawnSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'boards'], { env: { ...env, NODBOARD_TOKEN: 'y'.repeat(43), NODBOARD_NO_AUTOSTART: '1' }, encoding: 'utf8' })
 check('the CLI explains a rejected token', cliBad.status !== 0 && cliBad.stderr.includes('rejected the access token'), cliBad.stderr.trim())
 const stdio = new Client({ name: 'claude-code', version: 'sec' })
-await stdio.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/aifig.mjs'), 'mcp'], env, stderr: 'ignore' }))
+await stdio.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/nodboard.mjs'), 'mcp'], env, stderr: 'ignore' }))
 const lb = await stdio.callTool({ name: 'list_boards', arguments: {} })
 check('the stdio MCP server authenticates automatically', !lb.isError && lb.content[0].text.includes('Security check'))
 await stdio.close()
-const link = spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'open', '--print'], { env, encoding: 'utf8' }).stdout.trim()
-check('`aifig open --print` gives a signed-in link (token in the fragment)', link === `${base}/#token=${token}`, link.replace(token, '<token>'))
+const link = spawnSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'open', '--print'], { env, encoding: 'utf8' }).stdout.trim()
+check('`nodboard open --print` gives a signed-in link (token in the fragment)', link === `${base}/#token=${token}`, link.replace(token, '<token>'))
 
 await mcpHttp.close()
 core.kill()

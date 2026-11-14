@@ -1,8 +1,8 @@
 import { Check, MessageCircle, RotateCcw, SendHorizonal, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { toast } from 'sonner'
-import { center, randomId, useCamera, useEditorVersion } from '@aifig/canvas-engine'
-import { rotatePoint, type Author, type Thread } from '@aifig/shared'
+import { center, randomId, useCamera, useEditorVersion } from '@nodboard/canvas-engine'
+import { rotatePoint, type Author, type Thread } from '@nodboard/shared'
 import { cn } from '@/lib/utils'
 import { useBoard } from '../board-context'
 import { isUnread, lastActivity, markSeen, ME_ID, setCommentPrefs, useCommentPrefs, useSeen } from './comment-prefs'
@@ -125,10 +125,10 @@ export function CommentLayer() {
     }
     const onCompose = (e: Event) => commentOn((e as CustomEvent<string>).detail)
     window.addEventListener('keydown', onKey, true)
-    window.addEventListener('aifig:comment', onCompose)
+    window.addEventListener('nodboard:comment', onCompose)
     return () => {
       window.removeEventListener('keydown', onKey, true)
-      window.removeEventListener('aifig:comment', onCompose)
+      window.removeEventListener('nodboard:comment', onCompose)
     }
   }, [editor, mode, openId, compose, close, commentOn])
 
@@ -138,7 +138,7 @@ export function CommentLayer() {
       const t = e.target as HTMLElement
       if (t.closest('[data-comment-popover],[data-thread],[data-comment-preview],[data-comment-sidebar],[data-comment-ui]')) return
       if (openId || compose) close()
-      const canvas = layerRef.current?.closest('.aifig-canvas')
+      const canvas = layerRef.current?.closest('.nodboard-canvas')
       if (!mode || e.button !== 0 || !canvas?.contains(t) || t.closest('[data-ui]')) return
       e.preventDefault()
       e.stopPropagation()

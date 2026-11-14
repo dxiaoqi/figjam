@@ -1,6 +1,6 @@
 // Media for the scenario skills: each skill's sample board (the output of its scripted MCP run) in the canvas, in
 // English and Chinese (<skill>-<lang>.png), the Scenarios tab of the new-board dialog, and a short clip of the flow.
-// usage: node scripts/scenarios-media.mjs <out-dir>   (expects `npm run dev`; use a throwaway AIFIG_HOME)
+// usage: node scripts/scenarios-media.mjs <out-dir>   (expects `npm run dev`; use a throwaway NODBOARD_HOME)
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -27,8 +27,8 @@ async function openPage(locale, video) {
   await signIn(page)
   await context.addInitScript((l) => {
     try {
-      localStorage.setItem('aifig:locale', l)
-      localStorage.setItem('aifig:welcomed', '1')
+      localStorage.setItem('nodboard:locale', l)
+      localStorage.setItem('nodboard:welcomed', '1')
     } catch {
       /* snippet frames have no storage */
     }
@@ -75,7 +75,7 @@ for (const [locale, sfx] of Object.entries(LANGS)) {
     console.log(`wrote ${file}`)
   }
   // the Scenarios tab of the new-board dialog
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('aifig:new-board', { detail: 'scenario:architecture' })))
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('nodboard:new-board', { detail: 'scenario:architecture' })))
   await page.waitForSelector('[data-scenario-detail]')
   await sleep(500)
   await page.screenshot({ path: path.join(out, `scenarios-dialog-${sfx}.png`) })

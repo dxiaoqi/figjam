@@ -1,5 +1,5 @@
 // Media for Skill v1: Skills panel, product-kit and research-kit boards with layouts, permission prompt,
-// activity log, Save as block type, and the `aifig skill` CLI.
+// activity log, Save as block type, and the `nodboard skill` CLI.
 // usage: node scripts/skills-media.mjs <out-dir>   (expects `npm run dev`)
 import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -13,7 +13,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = path.resolve(process.argv[2] ?? 'skills-media')
 fs.mkdirSync(out, { recursive: true })
 const base = 'http://127.0.0.1:47820'
-const bin = path.join(root, 'bin/aifig.mjs')
+const bin = path.join(root, 'bin/nodboard.mjs')
 const cli = (...args) => execFileSync(process.execPath, [bin, ...args], { encoding: 'utf8' })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -37,7 +37,7 @@ call(['--as', 'Claude Code'], 'create_blocks', {
     comp('Excalidraw', 'Virtual whiteboard for sketching hand-drawn like diagrams.', 'Developers', 'budget', 0, 'https://excalidraw.com'),
     comp('tldraw', 'An infinite canvas SDK for developers.', 'Developers', 'mainstream', 0, 'https://tldraw.com'),
     comp('Heptabase', 'A visual note-taking tool for learning and research.', 'Researchers', 'premium', 12, 'https://heptabase.com'),
-    comp('ai-figma', 'A local canvas your agents can use well.', 'Design teams', 'budget', 0, 'https://example.com'),
+    comp('nodboard', 'A local canvas your agents can use well.', 'Design teams', 'budget', 0, 'https://example.com'),
   ],
 })
 call(['--as', 'Claude Code'], 'create_blocks', {
@@ -159,7 +159,7 @@ fs.renameSync(video, path.join(out, 'skills-v1.webm'))
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-media-'))
 const run = (...a) => {
   const r = spawnSync(process.execPath, [bin, ...a], { encoding: 'utf8', cwd: work })
-  return `$ aifig ${a.join(' ')}\n${r.stdout}${r.stderr}`
+  return `$ nodboard ${a.join(' ')}\n${r.stdout}${r.stderr}`
 }
 const log = [run('skill', 'new', 'persona-kit')]
 const bj = path.join(work, 'persona-kit/canvas/blocks.json')

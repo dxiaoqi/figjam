@@ -1,14 +1,13 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readToken } from '@aifig/core/auth'
-import { CORE_PORT, type AnyToolName, type CallResponse, type CallerInfo } from '@aifig/shared'
+import { homeDir, readToken } from '@nodboard/core/auth'
+import { CORE_PORT, type AnyToolName, type CallResponse, type CallerInfo } from '@nodboard/shared'
 
-export const base = () => process.env.AIFIG_CORE_URL ?? `http://127.0.0.1:${CORE_PORT}`
+export const base = () => process.env.NODBOARD_CORE_URL ?? `http://127.0.0.1:${CORE_PORT}`
 
-/** Headers for the core: the per-install access token from AIFIG_HOME (or AIFIG_TOKEN). */
+/** Headers for the core: the per-install access token from NODBOARD_HOME (or NODBOARD_TOKEN). */
 export function authHeaders(): Record<string, string> {
   const t = readToken()
   return t ? { authorization: `Bearer ${t}` } : {}
@@ -18,7 +17,7 @@ export function authHeaders(): Record<string, string> {
 export async function coreFetch(pathname: string, init: RequestInit = {}) {
   await ensureCore()
   const r = await fetch(`${base()}${pathname}`, { ...init, headers: { 'content-type': 'application/json', ...authHeaders(), ...(init.headers as Record<string, string>) } })
-  if (r.status === 401) throw new Error(`The ai-figma core rejected the access token. Make sure AIFIG_HOME (${process.env.AIFIG_HOME ?? '~/.aifig'}) matches the running core, or set AIFIG_TOKEN.`)
+  if (r.status === 401) throw new Error(`The nodboard core rejected the access token. Make sure NODBOARD_HOME (${process.env.NODBOARD_HOME ?? '~/.nodboard'}) matches the running core, or set NODBOARD_TOKEN.`)
   return r
 }
 
@@ -37,11 +36,11 @@ let ensured: Promise<void> | null = null
 export function ensureCore(): Promise<void> {
   ensured ??= (async () => {
     if (await healthy()) return
-    if (process.env.AIFIG_NO_AUTOSTART) throw new Error(`ai-figma core is not running at ${base()}. Start it with \`npm run core\`.`)
-    const home = process.env.AIFIG_HOME ?? path.join(os.homedir(), '.aifig')
+    if (process.env.NODBOARD_NO_AUTOSTART) throw new Error(`nodboard core is not running at ${base()}. Start it with \`npm run core\`.`)
+    const home = homeDir()
     fs.mkdirSync(home, { recursive: true })
     const log = fs.openSync(path.join(home, 'core.log'), 'a')
-    const bin = process.env.AIFIG_BIN ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../bin/aifig.mjs')
+    const bin = process.env.NODBOARD_BIN ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../bin/nodboard.mjs')
     // Linux AppImage: process.execPath is inside this process's temporary mount, which goes away when it exits;
     // start the core through the AppImage file so it gets a mount that lives as long as it does
     const appImage = process.env.ELECTRON_RUN_AS_NODE && process.env.APPIMAGE
@@ -53,7 +52,7 @@ export function ensureCore(): Promise<void> {
       await new Promise((r) => setTimeout(r, 200))
       if (await healthy()) return
     }
-    throw new Error(`Started the ai-figma core but it did not answer at ${base()}. See ${path.join(home, 'core.log')}.`)
+    throw new Error(`Started the nodboard core but it did not answer at ${base()}. See ${path.join(home, 'core.log')}.`)
   })().catch((e) => {
     ensured = null
     throw e

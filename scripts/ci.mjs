@@ -1,4 +1,4 @@
-// CI: typecheck, lint, every test suite and the bench budgets, one after another, with an isolated AIFIG_HOME.
+// CI: typecheck, lint, every test suite and the bench budgets, one after another, with an isolated NODBOARD_HOME.
 // usage: npm run ci [-- --only=typecheck,e2e] [--skip=desktop,bench] [--report=origin] [--out=ci-results]
 //   Writes <out>/<step>.log, <out>/results.json and <out>/summary.md; exits 1 if any step failed.
 //   --report=origin (or ORIGIN_CHECKS_TOKEN in the environment) posts one Origin check run per step; see README › CI.
@@ -20,11 +20,11 @@ const outDir = path.resolve(root, typeof args.out === 'string' ? args.out : 'ci-
 fs.rmSync(outDir, { recursive: true, force: true })
 fs.mkdirSync(outDir, { recursive: true })
 
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-ci-'))
-const env = { ...process.env, AIFIG_HOME: path.join(home, 'aifig'), FORCE_COLOR: '0' }
-delete env.AIFIG_TOKEN
-delete env.AIFIG_CORE_PORT
-delete env.AIFIG_UI_PORT
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-ci-'))
+const env = { ...process.env, NODBOARD_HOME: path.join(home, 'nodboard'), FORCE_COLOR: '0' }
+delete env.NODBOARD_TOKEN
+delete env.NODBOARD_CORE_PORT
+delete env.NODBOARD_UI_PORT
 
 const hasDisplay = process.platform === 'darwin' || process.platform === 'win32' || !!process.env.DISPLAY
 /** `dev`: needs `npm run dev` (fixed ports 47820/47821) running against the CI home. */

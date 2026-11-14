@@ -4,16 +4,16 @@ import { createPortal } from 'react-dom'
 import { EditorContent, useEditor, useEditorState, type Editor as TipTap } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Placeholder } from '@tiptap/extensions'
-import { useCamera, type Editor } from '@aifig/canvas-engine'
+import { useCamera, type Editor } from '@nodboard/canvas-engine'
 import { cn } from '@/lib/utils'
 import { t } from '../i18n'
 import { docToMarkdown, mdToHtml, renderMarkdown } from './markdown'
 
 /** Rendered (read-only) rich text, same typography as the editor. */
 export function RichText({ value, placeholder, className, style }: { value: string; placeholder?: string; className?: string; style?: CSSProperties }) {
-  if (!value) return <div className={cn('aifig-rich aifig-placeholder', className)} style={style}>{placeholder}</div>
+  if (!value) return <div className={cn('nodboard-rich nodboard-placeholder', className)} style={style}>{placeholder}</div>
   return (
-    <div className={cn('aifig-rich', className)} style={style}>
+    <div className={cn('nodboard-rich', className)} style={style}>
       {renderMarkdown(value)}
     </div>
   )
@@ -161,7 +161,7 @@ export function RichEditor(props: {
     content: mdToHtml(props.value),
     autofocus: props.autoFocus === false ? false : 'end',
     editorProps: {
-      attributes: { class: cn('aifig-rich', props.className), spellcheck: 'false' },
+      attributes: { class: cn('nodboard-rich', props.className), spellcheck: 'false' },
       // blocks grow to fit; past their max height only the block's own scroller follows the caret (never the page)
       handleScrollToSelection: (view) => {
         const box = view.dom.closest<HTMLElement>('[data-scroll]')
@@ -210,18 +210,18 @@ export function RichEditor(props: {
     if (!host || !tiptap) return
     const focusEnd = () => tiptap.commands.focus('end')
     const clear = () => tiptap.chain().clearContent(true).focus('end').run()
-    host.addEventListener('aifig-focus-end', focusEnd)
-    host.addEventListener('aifig-clear', clear)
+    host.addEventListener('nodboard-focus-end', focusEnd)
+    host.addEventListener('nodboard-clear', clear)
     return () => {
-      host.removeEventListener('aifig-focus-end', focusEnd)
-      host.removeEventListener('aifig-clear', clear)
+      host.removeEventListener('nodboard-focus-end', focusEnd)
+      host.removeEventListener('nodboard-clear', clear)
     }
   }, [tiptap])
   if (!tiptap) return null
   return (
     <>
       {props.toolbar !== false && blockEl && createPortal(<Toolbar tiptap={tiptap} engine={props.engine} linkOpen={linkOpen} setLinkOpen={setLinkOpen} />, blockEl)}
-      <EditorContent ref={hostRef} editor={tiptap} className="aifig-rich-host" style={props.style} />
+      <EditorContent ref={hostRef} editor={tiptap} className="nodboard-rich-host" style={props.style} />
     </>
   )
 }

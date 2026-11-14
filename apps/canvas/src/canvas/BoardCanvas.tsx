@@ -1,7 +1,7 @@
 import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { CanvasView, Editor } from '@aifig/canvas-engine'
-import { COLORS, FEATURES, SURFACES, type Author, type Block, type SnippetFileEvent } from '@aifig/shared'
+import { CanvasView, Editor } from '@nodboard/canvas-engine'
+import { COLORS, FEATURES, SURFACES, type Author, type Block, type SnippetFileEvent } from '@nodboard/shared'
 import { useBoard, useProviderState } from '../board-context'
 import { BoardMenu } from '../chrome/BoardMenu'
 import { ContextMenu } from '../chrome/ContextMenu'
@@ -115,8 +115,8 @@ export function BoardCanvas() {
       else if (m.status === 'review') toast.message(t('files.review', { file: m.file, by }))
       else toast.success(t('files.applied', { file: m.file, by }))
     }
-    window.addEventListener('aifig:snippet-file', on)
-    return () => window.removeEventListener('aifig:snippet-file', on)
+    window.addEventListener('nodboard:snippet-file', on)
+    return () => window.removeEventListener('nodboard:snippet-file', on)
   }, [])
 
   // first frame: fit content, then keep the core informed about what the person is looking at
@@ -173,11 +173,11 @@ export function BoardCanvas() {
         case 'toggle-comments':
           return toggleCommentMode()
         case 'toggle-minimap':
-          return window.dispatchEvent(new Event('aifig:toggle-minimap'))
+          return window.dispatchEvent(new Event('nodboard:toggle-minimap'))
         case 'assistant-settings':
-          return FEATURES.assistant ? window.dispatchEvent(new Event('aifig:assistant-settings')) : undefined
+          return FEATURES.assistant ? window.dispatchEvent(new Event('nodboard:assistant-settings')) : undefined
         case 'activity':
-          return window.dispatchEvent(new Event('aifig:activity'))
+          return window.dispatchEvent(new Event('nodboard:activity'))
         case 'version-history':
           return openVersionHistory()
         case 'storage':
@@ -189,7 +189,7 @@ export function BoardCanvas() {
         case 'open-pack':
           return openImportPack(typeof payload === 'string' ? payload : undefined)
         case 'export':
-          if (payload === 'png' || payload === 'svg') return downloadSnapshot(boardId, document.title.replace(/ — ai-figma$/, ''), payload, { ids: ids.length ? ids : undefined, theme: themeMode })
+          if (payload === 'png' || payload === 'svg') return downloadSnapshot(boardId, document.title.replace(/ — nodboard$/, ''), payload, { ids: ids.length ? ids : undefined, theme: themeMode })
           return downloadDocument(boardId, payload === 'json' ? 'json' : 'md')
       }
     })
@@ -199,7 +199,7 @@ export function BoardCanvas() {
     <div className="fixed inset-0 overflow-hidden bg-[var(--canvas)]">
       {editor ? (
         <EditorContext.Provider value={editor}>
-          <CanvasView editor={editor} className="aifig-canvas">
+          <CanvasView editor={editor} className="nodboard-canvas">
             <ReviewGhosts />
             <AgentLayer />
             <CommentLayer />

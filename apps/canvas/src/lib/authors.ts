@@ -1,4 +1,4 @@
-import type { Author, ChangeSet } from '@aifig/shared'
+import type { Author, ChangeSet } from '@nodboard/shared'
 
 export interface AuthorGroup {
   key: string

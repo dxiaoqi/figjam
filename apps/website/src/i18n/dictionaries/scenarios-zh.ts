@@ -73,7 +73,7 @@ export default function scenariosZh(s: Site): ScenariosDict {
           { name: '故障事件', body: '故障中的一个时刻，排在时间线上。' },
         ],
         dialogName: '架构与代码理解',
-        boardTitle: 'ai-figma 架构',
+        boardTitle: 'nodboard 架构',
         prompt: `在 ${s.name} 画板「架构地图」上使用 arch-kit Skill：画出这个仓库的包、依赖、接口契约和风险，然后告诉我先审哪部分。`,
         shotAlt: '架构画板：模块按层（UI、API、领域、基础设施）分列并由依赖相连，旁边是按类型分组的接口契约',
         overviewAlt: '整块架构画板：模块、外部依赖、状态与决策、接口契约，以及风险矩阵',

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import type { Vec } from '@aifig/canvas-engine'
-import { normalizeEmbedUrl, SNIPPET_LIMITS, type Asset } from '@aifig/shared'
+import type { Vec } from '@nodboard/canvas-engine'
+import { normalizeEmbedUrl, SNIPPET_LIMITS, type Asset } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -62,8 +62,8 @@ export function SnippetDialog() {
           .finally(() => setLoading(false))
       }
     }
-    window.addEventListener('aifig:snippet-dialog', on)
-    return () => window.removeEventListener('aifig:snippet-dialog', on)
+    window.addEventListener('nodboard:snippet-dialog', on)
+    return () => window.removeEventListener('nodboard:snippet-dialog', on)
   }, [editor, boardId])
 
   const check = tab === 'url' ? (url.trim() ? normalizeEmbedUrl(url) : null) : null

@@ -1,6 +1,6 @@
 import { t } from '../i18n'
 import { useEffect, useState } from 'react'
-import { FEATURES } from '@aifig/shared'
+import { FEATURES } from '@nodboard/shared'
 import { toast } from 'sonner'
 import { apiFetch } from './auth'
 
@@ -24,10 +24,10 @@ export function useAssistant() {
         .then(setStatus)
         .catch(() => setStatus(OFF))
     load()
-    window.addEventListener('aifig:assistant-changed', load)
+    window.addEventListener('nodboard:assistant-changed', load)
     const t = setInterval(load, 15000)
     return () => {
-      window.removeEventListener('aifig:assistant-changed', load)
+      window.removeEventListener('nodboard:assistant-changed', load)
       clearInterval(t)
     }
   }, [])

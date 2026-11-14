@@ -1,5 +1,5 @@
 // Canvas API regressions (MCP test report 2026-09-25): board resolution, snapping, colors, warnings, arg shapes, exports.
-// usage: node scripts/api-regressions.mjs   (starts its own isolated core on a spare port with a temporary AIFIG_HOME)
+// usage: node scripts/api-regressions.mjs   (starts its own isolated core on a spare port with a temporary NODBOARD_HOME)
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -13,11 +13,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const port = 47930 + Math.floor(Math.random() * 40) * 2
 const base = `http://127.0.0.1:${port}`
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-regress-'))
-const env = { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: String(port) }
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-regress-'))
+const env = { ...process.env, NODBOARD_HOME: home, NODBOARD_CORE_PORT: String(port) }
 let core
 const startCore = async () => {
-  core = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
+  core = spawn(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
   for (let i = 0; i < 100; i++) {
     if (await fetch(`${base}/api/health`).then((r) => r.ok, () => false)) return
     await sleep(100)
@@ -127,13 +127,13 @@ if (typed.created?.length) {
 }
 
 // ---- web snippets (bug 4, DX 4/5): checked without a browser; the engine e2e runs them
-const snipOk = await call(HUMAN, 'create_snippet', { board: B, html: '<h1>Calc</h1>', js: 'const s = await aifig.getState()' })
+const snipOk = await call(HUMAN, 'create_snippet', { board: B, html: '<h1>Calc</h1>', js: 'const s = await nodboard.getState()' })
 if (snipOk.ok || !String(snipOk.error).includes('Unknown tool')) {
   check('bug 4: top-level await is accepted with a warning', snipOk.ok && snipOk.result.warnings?.some((w) => w.includes('Top-level `await`')), JSON.stringify(snipOk.result?.warnings ?? snipOk.error))
   const bad = await call(HUMAN, 'create_snippet', { board: B, html: '<p/>', js: 'function (' })
   check('bug 4: syntax errors are refused on save', !bad.ok && /JS syntax error on line 1/.test(bad.error), bad.error)
   check('DX 5: the title defaults to the first heading', (await call(HUMAN, 'get_board', { board: B, format: 'json' })).result.blocks.find((b) => b.id === snipOk.result.id)?.web?.title === 'Calc')
-  const u = (await call(HUMAN, 'update_snippet', { board: B, id: snipOk.result.id, js: 'const s = await aifig.getState()\nconsole.log(s)' })).result
+  const u = (await call(HUMAN, 'update_snippet', { board: B, id: snipOk.result.id, js: 'const s = await nodboard.getState()\nconsole.log(s)' })).result
   check('DX 4: update_snippet summarizes the change', u.changed?.js === '+1 / −0 lines', JSON.stringify(u.changed))
 }
 
@@ -144,7 +144,7 @@ const mdLink = (await call(HUMAN, 'export_board', { board: B, format: 'markdown'
 const mdInline = (await call(HUMAN, 'export_board', { board: B, format: 'markdown', images: 'inline' })).result.content
 check('DX 6: Markdown export can inline images as data: URIs', mdInline.includes('](data:image/png;base64,') && !mdLink.includes('data:image'))
 const mcp = new Client({ name: 'regress', version: '1' })
-await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/aifig.mjs'), 'mcp'], env, stderr: 'ignore' }))
+await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/nodboard.mjs'), 'mcp'], env, stderr: 'ignore' }))
 const listed = (await mcp.listTools()).tools
 check('bug 1: tool descriptions recommend passing `board`', listed.filter((t) => t.inputSchema.properties?.board).every((t) => String(t.inputSchema.properties.board.description).includes('always pass it')), `${listed.length} tools`)
 const raw = await mcp.callTool({ name: 'render_snapshot', arguments: { board: B, format: 'svg', raw: true } })
@@ -153,7 +153,7 @@ check('DX 6: render_snapshot can return raw SVG text (default stays JSON)', raw.
 const mw = await mcp.callTool({ name: 'update_blocks', arguments: { board: B, updates: [{ id: ids[3], color: 'chartreuse-ish' }] } })
 check('warnings reach MCP clients in the tool result', mw.content[0].text.includes('"warnings"') && mw.content[0].text.includes('Unknown color'))
 await mcp.close()
-const cli = spawnSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), '--board', B, '--human', 'update', ids[3], '--color', 'nope'], { encoding: 'utf8', env })
+const cli = spawnSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), '--board', B, '--human', 'update', ids[3], '--color', 'nope'], { encoding: 'utf8', env })
 check('the CLI prints warnings', cli.stderr.includes('⚠ Unknown color "nope"'), cli.stderr.trim().slice(0, 120))
 
 await stopCore()

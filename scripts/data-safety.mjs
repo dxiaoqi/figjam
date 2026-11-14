@@ -1,6 +1,6 @@
 // Data safety end to end, against a real core process: versions over MCP and the CLI, kill -9 of the core
 // during agent writes, and startup recovery from a truncated / future-version board file.
-// usage: node scripts/data-safety.mjs   (isolated core on a spare port with a temporary AIFIG_HOME)
+// usage: node scripts/data-safety.mjs   (isolated core on a spare port with a temporary NODBOARD_HOME)
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -14,9 +14,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const port = 48010 + Math.floor(Math.random() * 40) * 2
 const base = `http://127.0.0.1:${port}`
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-safety-'))
-const env = { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: String(port) }
-const bin = path.join(root, 'bin/aifig.mjs')
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-safety-'))
+const env = { ...process.env, NODBOARD_HOME: home, NODBOARD_CORE_PORT: String(port) }
+const bin = path.join(root, 'bin/nodboard.mjs')
 let core
 const startCore = async () => {
   core = spawn(process.execPath, [bin, 'core', '--port', String(port)], { env, stdio: 'ignore' })
@@ -36,7 +36,7 @@ const HUMAN = { id: 'human:safety', name: 'You', client: 'test', kind: 'human' }
 const AGENT = { id: 'safety-agent:1', name: 'Safety Bot', client: 'safety', kind: 'agent' }
 const call = async (caller, tool, args = {}) => (await fetch(`${base}/api/call`, { method: 'POST', headers: authHeaders(home), body: JSON.stringify({ tool, args, caller }) })).json()
 const cli = (...args) => spawnSync(process.execPath, [bin, ...args], { encoding: 'utf8', env })
-const boardFile = (id) => path.join(home, 'boards', `${id}.aifig`)
+const boardFile = (id) => path.join(home, 'boards', `${id}.nodboard`)
 
 await startCore()
 const board = (await call(HUMAN, 'create_board', { title: 'Safety net' })).result.board.id
@@ -62,15 +62,15 @@ await mcp.close()
 
 // ---- CLI ------------------------------------------------------------------------------------
 const c1 = cli('--board', board, 'checkpoint', 'Before', 'the', 'CLI', 'test')
-check('aifig checkpoint', c1.status === 0 && c1.stdout.includes('“Before the CLI test”'), c1.stdout.trim() || c1.stderr.trim())
+check('nodboard checkpoint', c1.status === 0 && c1.stdout.includes('“Before the CLI test”'), c1.stdout.trim() || c1.stderr.trim())
 const cliId = c1.stdout.match(/checkpoint (v[0-9a-z]+)/)?.[1]
 const c2 = cli('--board', board, 'versions')
-check('aifig versions', c2.status === 0 && c2.stdout.includes(cliId) && c2.stdout.includes('checkpoint'), c2.stdout.split('\n')[0])
+check('nodboard versions', c2.status === 0 && c2.stdout.includes(cliId) && c2.stdout.includes('checkpoint'), c2.stdout.split('\n')[0])
 await call(HUMAN, 'create_blocks', { board, blocks: [{ text: 'delta' }] })
 const c3 = cli('--board', board, '--human', 'restore', cliId)
-check('aifig --human restore applies directly and prints how to undo', c3.status === 0 && c3.stdout.includes('1 removed') && c3.stdout.includes('aifig --human restore v'), c3.stdout.trim())
+check('nodboard --human restore applies directly and prints how to undo', c3.status === 0 && c3.stdout.includes('1 removed') && c3.stdout.includes('nodboard --human restore v'), c3.stdout.trim())
 const c4 = cli('--board', board, 'backups')
-check('aifig backups prints the backup folder', c4.status === 0 && c4.stdout.trim().startsWith(path.join(home, 'backups')), c4.stdout.trim())
+check('nodboard backups prints the backup folder', c4.status === 0 && c4.stdout.trim().startsWith(path.join(home, 'backups')), c4.stdout.trim())
 
 // ---- kill -9 during agent writes ---------------------------------------------------------------
 let bursting = true
@@ -118,7 +118,7 @@ const notices = (await call(HUMAN, 'get_notices', {})).result.notices
 const rn = notices.find((n) => n.boardId === damaged)
 check('…and the person is told, with the damaged file kept', rn?.kind === 'recovered' && fs.existsSync(rn.file), rn?.detail)
 const fn = notices.find((n) => n.boardId === future)
-check('a future-version board is refused with a clear notice', fn?.kind === 'future-version' && fn.detail.includes('9.0.0') && fn.detail.includes('Update ai-figma'), fn?.detail)
+check('a future-version board is refused with a clear notice', fn?.kind === 'future-version' && fn.detail.includes('9.0.0') && fn.detail.includes('Update nodboard'), fn?.detail)
 check('…and its file is left exactly as it was', fs.readFileSync(boardFile(future)).equals(futureBytes))
 const dis = await call(HUMAN, 'dismiss_notice', { id: rn.id })
 check('notices can be dismissed', dis.result.dismissed && !(await call(HUMAN, 'get_notices', {})).result.notices.some((n) => n.id === rn.id))

@@ -3,7 +3,7 @@ import { useRef } from 'react'
 import { toast } from 'sonner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { COLOR_TOKENS, COLORS } from '@aifig/shared'
+import { COLOR_TOKENS, COLORS } from '@nodboard/shared'
 import { useBoard } from '../board-context'
 import { useEditorState } from '../canvas/editor-context'
 import { toggleCommentMode, useCommentPrefs } from '../canvas/comment-prefs'
@@ -125,7 +125,7 @@ export function Toolbar() {
             <button
               aria-label={t('tool.web')}
               data-web-tool
-              onClick={() => window.dispatchEvent(new CustomEvent('aifig:snippet-dialog', { detail: {} }))}
+              onClick={() => window.dispatchEvent(new CustomEvent('nodboard:snippet-dialog', { detail: {} }))}
               className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <Globe className="size-[18px]" strokeWidth={1.75} />

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://aifig.dev/schemas/skill-blocks-1.json",
+  "$schema": "https://nodboard.dev/schemas/skill-blocks-1.json",
   "version": 1,
   "types": {
     "interview": {

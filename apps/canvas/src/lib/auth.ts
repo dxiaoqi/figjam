@@ -1,13 +1,13 @@
-import { WS_PROTOCOL, WS_TOKEN_PREFIX } from '@aifig/shared'
+import { WS_PROTOCOL, WS_TOKEN_PREFIX } from '@nodboard/shared'
 import { desktop } from './desktop'
 
 /**
  * The core's per-install access token. The desktop shell hands it over through the preload; in a browser it
- * arrives once in the link from `aifig open` (`#token=…`, a fragment, so it never reaches a server log) and is
+ * arrives once in the link from `nodboard open` (`#token=…`, a fragment, so it never reaches a server log) and is
  * kept in this origin's localStorage.
  */
 
-const KEY = 'aifig:token'
+const KEY = 'nodboard:token'
 const TOKEN_RE = /^[A-Za-z0-9_-]{32,128}$/
 
 function captureFromUrl() {
@@ -35,7 +35,7 @@ export function authHeaders(): Record<string, string> {
   return t ? { authorization: `Bearer ${t}` } : {}
 }
 
-export const UNAUTHORIZED = 'aifig:unauthorized'
+export const UNAUTHORIZED = 'nodboard:unauthorized'
 
 /** fetch() for the core's `/api`: adds the token and announces a rejected one so the app can ask for it. */
 export async function apiFetch(input: string, init: RequestInit = {}) {

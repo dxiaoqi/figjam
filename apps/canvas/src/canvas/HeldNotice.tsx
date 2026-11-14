@@ -1,4 +1,4 @@
-import { useEditorVersion } from '@aifig/canvas-engine'
+import { useEditorVersion } from '@nodboard/canvas-engine'
 import { useEditor } from './editor-context'
 import { t, tn, useT } from '../i18n'
 

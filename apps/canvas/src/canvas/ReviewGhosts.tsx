@@ -1,5 +1,5 @@
-import { edgePoint, intersects, useCamera, useEditorVersion } from '@aifig/canvas-engine'
-import type { Block, ChangeSet, Connector } from '@aifig/shared'
+import { edgePoint, intersects, useCamera, useEditorVersion } from '@nodboard/canvas-engine'
+import type { Block, ChangeSet, Connector } from '@nodboard/shared'
 import { useChangeSets } from '../board-context'
 import { useEditor } from './editor-context'
 import { t } from '../i18n'

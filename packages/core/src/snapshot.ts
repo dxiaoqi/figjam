@@ -1,11 +1,11 @@
-import { bytesToBase64, estimateLabelSize, placeLabel, rotatedBounds, routeConnector, SpatialGrid, type Block, type Connector, type Rect } from '@aifig/shared'
-import { CARD_ACCENT, CARD_BODY_SIZE, CARD_TITLE_SIZE, stickyFontSize, wrapText } from '@aifig/shared'
-import { COLORS, FONT_SIZES, LINE_HEIGHT, RADII, SPACING, SURFACES } from '@aifig/shared'
+import { bytesToBase64, estimateLabelSize, placeLabel, rotatedBounds, routeConnector, SpatialGrid, type Block, type Connector, type Rect } from '@nodboard/shared'
+import { CARD_ACCENT, CARD_BODY_SIZE, CARD_TITLE_SIZE, stickyFontSize, wrapText } from '@nodboard/shared'
+import { COLORS, FONT_SIZES, LINE_HEIGHT, RADII, SPACING, SURFACES } from '@nodboard/shared'
 import { createRequire } from 'node:module'
 import { Worker } from 'node:worker_threads'
 import type { Board } from './board'
 import { bboxOf, contentHeight } from './layout'
-import { fieldSummary, templateRows, typeDef, typeFields, typeText, type TypeRegistry } from '@aifig/shared'
+import { fieldSummary, templateRows, typeDef, typeFields, typeText, type TypeRegistry } from '@nodboard/shared'
 
 const FONT = `Inter, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', 'DejaVu Sans', sans-serif`
 

@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import type { BoardSummary, TemplateId } from '@aifig/shared'
+import type { BoardSummary, TemplateId } from '@nodboard/shared'
 import { BoardContext, type ThemeMode } from './board-context'
 import { BoardCanvas } from './canvas/BoardCanvas'
 import { Logo } from './chrome/BoardMenu'
@@ -23,7 +23,7 @@ import { shouldShowWelcome, Welcome } from './chrome/Welcome'
 type ThemePref = 'system' | ThemeMode
 
 function initialPref(): ThemePref {
-  const saved = localStorage.getItem('aifig:theme')
+  const saved = localStorage.getItem('nodboard:theme')
   return saved === 'light' || saved === 'dark' ? saved : 'system'
 }
 
@@ -31,7 +31,7 @@ const systemTheme = (): ThemeMode => (window.matchMedia('(prefers-color-scheme: 
 
 function pickBoard(boards: BoardSummary[], active: string | null) {
   const fromUrl = new URLSearchParams(location.search).get('board')
-  const saved = localStorage.getItem('aifig:board')
+  const saved = localStorage.getItem('nodboard:board')
   for (const id of [fromUrl, saved, active]) if (id && boards.some((b) => b.id === id)) return id
   return boards[0]?.id ?? null
 }
@@ -81,8 +81,8 @@ export default function App() {
 
   const setTheme = useCallback((t: ThemePref) => {
     setPref(t)
-    if (t === 'system') localStorage.removeItem('aifig:theme')
-    else localStorage.setItem('aifig:theme', t)
+    if (t === 'system') localStorage.removeItem('nodboard:theme')
+    else localStorage.setItem('nodboard:theme', t)
   }, [])
 
   // follow the OS appearance when set to "system"
@@ -135,7 +135,7 @@ export default function App() {
     if (!boardId || locked) return
     const p = new CoreProvider(boardId)
     setProvider(p)
-    localStorage.setItem('aifig:board', boardId)
+    localStorage.setItem('nodboard:board', boardId)
     const url = new URL(location.href)
     url.searchParams.set('board', boardId)
     history.replaceState(null, '', url)
@@ -176,12 +176,12 @@ export default function App() {
       else if (action === 'open-board') {
         refreshBoards().then(() => setBoardId(String(payload)))
       } else if (action === 'new-board') openNewBoard()
-      else if (action === 'connect-agent') window.dispatchEvent(new Event('aifig:connect'))
+      else if (action === 'connect-agent') window.dispatchEvent(new Event('nodboard:connect'))
     })
   }, [setTheme, refreshBoards, setLocalePref])
   useEffect(() => {
     const title = boards?.find((b) => b.id === boardId)?.title ?? ''
-    document.title = title ? `${title} — ai-figma` : 'ai-figma'
+    document.title = title ? `${title} — nodboard` : 'nodboard'
     desktop?.reportState({ boardId, title })
   }, [boardId, boards])
 

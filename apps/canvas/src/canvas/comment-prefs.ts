@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { Thread } from '@aifig/shared'
+import type { Thread } from '@nodboard/shared'
 
 /**
  * Per-user comment UI state. Lives in localStorage — never in the board document,
@@ -10,8 +10,8 @@ export interface CommentPrefs {
   showResolved: boolean
 }
 
-const PREFS_KEY = 'aifig:comments'
-const seenKey = (boardId: string) => `aifig:comments-seen:${boardId}`
+const PREFS_KEY = 'nodboard:comments'
+const seenKey = (boardId: string) => `nodboard:comments-seen:${boardId}`
 
 function load(): CommentPrefs {
   try {

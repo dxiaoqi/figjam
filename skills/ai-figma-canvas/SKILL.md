@@ -1,16 +1,16 @@
 ---
 name: ai-figma-canvas
-description: Put research, options, plans and diagrams on the user's local ai-figma canvas so they come out tidy and reviewable. Use when the user asks to "put this on the board/canvas", sketch a flow, cluster notes, or compare options visually.
+description: Put research, options, plans and diagrams on the user's local nodboard canvas so they come out tidy and reviewable. Use when the user asks to "put this on the board/canvas", sketch a flow, cluster notes, or compare options visually.
 metadata:
-  aifig:
+  nodboard:
     version: 0.1.0
     capability: L1
 ---
 
-# Using the ai-figma canvas
+# Using the nodboard canvas
 
-ai-figma is a local infinite canvas the user has open next to you. You drive it through the `ai-figma` MCP tools
-(or the `aifig` CLI). Your edits show up live with your cursor and are grouped into a change set the user accepts
+nodboard is a local infinite canvas the user has open next to you. You drive it through the `nodboard` MCP tools
+(or the `nodboard` CLI). Your edits show up live with your cursor and are grouped into a change set the user accepts
 or rejects. The layout engine does positioning — you describe content and structure.
 
 ## Workflow

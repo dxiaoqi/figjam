@@ -24,8 +24,8 @@ export const commands = {
     `${cli} changes                                # change sets and their review status`,
     `${cli} accept | ${cli} reject [id] --reason "…"`,
   ].join('\n'),
-  skillTree: `competitor-kit/\n  SKILL.md              # name, description, metadata.aifig\n  canvas/blocks.json    # block types, relations, layouts, actions, prompts\n  canvas/prompts/*.md   # prompt templates`,
-  skillMd: `---\nname: competitor-kit\ndescription: Map competitors on the board as cards with pricing\n  and positioning, then compare them as a positioning matrix.\nmetadata:\n  aifig:\n    version: 1.0.0\n    canvas: canvas/blocks.json\n    capability: L1\n    permissions:\n      tools: [fetch.fetch]\n---\n\n# Competitor Kit\n\n- \`competitor-kit.competitor\` (card) — one per product.\n  Fields: segment, positioning, price, url.`,
+  skillTree: `competitor-kit/\n  SKILL.md              # name, description, metadata.nodboard\n  canvas/blocks.json    # block types, relations, layouts, actions, prompts\n  canvas/prompts/*.md   # prompt templates`,
+  skillMd: `---\nname: competitor-kit\ndescription: Map competitors on the board as cards with pricing\n  and positioning, then compare them as a positioning matrix.\nmetadata:\n  nodboard:\n    version: 1.0.0\n    canvas: canvas/blocks.json\n    capability: L1\n    permissions:\n      tools: [fetch.fetch]\n---\n\n# Competitor Kit\n\n- \`competitor-kit.competitor\` (card) — one per product.\n  Fields: segment, positioning, price, url.`,
   blocksJson: `{
   "version": 1,
   "types": {
@@ -52,6 +52,6 @@ export const commands = {
     `${cli} skill new persona-kit            # scaffold SKILL.md + canvas/blocks.json`,
     `${cli} skill dev ./persona-kit --enable # validate on save, hot-reload into boards`,
     `${cli} skill validate ./persona-kit     # errors point at file › path`,
-    `${cli} skill install ./persona-kit      # copy into ~/.aifig/skills`,
+    `${cli} skill install ./persona-kit      # copy into ~/.nodboard/skills`,
   ].join('\n'),
 } as const

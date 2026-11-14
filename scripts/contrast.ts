@@ -4,7 +4,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { COLOR_TOKENS, COLORS, SURFACES } from '@aifig/shared'
+import { COLOR_TOKENS, COLORS, SURFACES } from '@nodboard/shared'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 type RGB = [number, number, number]
@@ -91,9 +91,9 @@ function cssOpacity(selector: string) {
 
 const checks: Check[] = []
 const vars = themeVars()
-const headerOpacity = cssOpacity('.aifig-type-header')
-const fieldsOpacity = cssOpacity('.aifig-type-footer')
-const doneOpacity = cssOpacity('.aifig-card.is-done .title')
+const headerOpacity = cssOpacity('.nodboard-type-header')
+const fieldsOpacity = cssOpacity('.nodboard-type-footer')
+const doneOpacity = cssOpacity('.nodboard-card.is-done .title')
 const pctOf = (o: number) => `${Math.round(o * 100)}%`
 for (const t of ['light', 'dark'] as Theme[]) {
   const s = SURFACES[t]

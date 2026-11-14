@@ -5,23 +5,32 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 
-const corePort = Number(process.env.AIFIG_CORE_PORT ?? 47821)
-const uiPort = Number(process.env.AIFIG_UI_PORT ?? 47820)
+for (const [key, value] of Object.entries(process.env)) {
+  if (key.startsWith('AIFIG_') && value != null && process.env[`NODBOARD_${key.slice(6)}`] == null) process.env[`NODBOARD_${key.slice(6)}`] = value
+}
+const dataHome = () => {
+  if (process.env.NODBOARD_HOME) return process.env.NODBOARD_HOME
+  const next = path.join(os.homedir(), '.nodboard')
+  const prev = path.join(os.homedir(), '.aifig')
+  return fs.existsSync(next) || !fs.existsSync(prev) ? next : prev
+}
+const corePort = Number(process.env.NODBOARD_CORE_PORT ?? 47821)
+const uiPort = Number(process.env.NODBOARD_UI_PORT ?? 47820)
 
 /** Print a signed-in link once the core has created its access token (terminal only; never written to a log). */
 function printTokenLink(): Plugin {
   return {
-    name: 'aifig-token-link',
+    name: 'nodboard-token-link',
     apply: 'serve',
     configureServer(server) {
       server.httpServer?.once('listening', () => {
-        const file = path.join(process.env.AIFIG_HOME ?? path.join(os.homedir(), '.aifig'), 'access-token')
+        const file = path.join(dataHome(), 'access-token')
         let tries = 0
         const t = setInterval(() => {
-          const token = process.env.AIFIG_TOKEN ?? (fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim() : '')
+          const token = process.env.NODBOARD_TOKEN ?? (fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim() : '')
           if (token || ++tries > 40) {
             clearInterval(t)
-            if (token) console.log(`\n  ai-figma: open http://127.0.0.1:${uiPort}/#token=${token}\n  (or run \`npx aifig open --dev\`)\n`)
+            if (token) console.log(`\n  nodboard: open http://127.0.0.1:${uiPort}/#token=${token}\n  (or run \`npx nodboard open --dev\`)\n`)
           }
         }, 250)
         t.unref()
@@ -33,7 +42,7 @@ function printTokenLink(): Plugin {
 export default defineConfig({
   plugins: [react(), tailwindcss(), printTokenLink()],
   // build-time feature flags (see packages/shared/src/features.ts)
-  define: { __AIFIG_FEATURES__: JSON.stringify({ assistant: process.env.AIFIG_FEATURE_ASSISTANT === '1' }) },
+  define: { __NODBOARD_FEATURES__: JSON.stringify({ assistant: process.env.NODBOARD_FEATURE_ASSISTANT === '1' }) },
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, './src') },
   },

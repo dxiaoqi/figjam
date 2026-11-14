@@ -1,7 +1,7 @@
 import { ArrowRight, Loader2, Plug } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import type { TemplateId } from '@aifig/shared'
+import type { TemplateId } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { useBlockCount, useBoard, useBoardTitle, useProviderState } from '../board-context'
 import { useEditorState } from '../canvas/editor-context'
@@ -91,7 +91,7 @@ export function EmptyState() {
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t pt-5">
           <span className="text-xs text-muted-foreground">{t('empty.dblclick')}</span>
-          <Button size="sm" className="gap-1.5" onClick={() => window.dispatchEvent(new Event('aifig:connect'))}>
+          <Button size="sm" className="gap-1.5" onClick={() => window.dispatchEvent(new Event('nodboard:connect'))}>
             <Plug className="size-3.5" /> {t('empty.connect')}
           </Button>
         </div>

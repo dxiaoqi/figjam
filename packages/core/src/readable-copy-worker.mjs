@@ -1,5 +1,5 @@
 // Worker thread for readable-copy.ts: decodes a board's Yjs state and writes the readable <id>.json.
-// Plain JS so it runs from source without a loader; the desktop build bundles it (yjs inlined) next to aifig.mjs.
+// Plain JS so it runs from source without a loader; the desktop build bundles it (yjs inlined) next to nodboard.mjs.
 // Keep the shape in sync with Board.toJSON() (tests/data-safety/readable-copy.test.ts compares them).
 import fs from 'node:fs'
 import path from 'node:path'

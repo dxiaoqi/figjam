@@ -1,8 +1,8 @@
 ---
 name: arch-kit
-description: Map a codebase or a system design on an ai-figma board — modules, services, interface contracts, data stores, external dependencies, architecture decisions (ADRs) and risks — so a person can review the architecture before code is written, and run incident reviews as a timeline. Use when asked to explain, map, review or plan the architecture of a repository.
+description: Map a codebase or a system design on a nodboard board — modules, services, interface contracts, data stores, external dependencies, architecture decisions (ADRs) and risks — so a person can review the architecture before code is written, and run incident reviews as a timeline. Use when asked to explain, map, review or plan the architecture of a repository.
 metadata:
-  aifig:
+  nodboard:
     version: 1.0.0
     canvas: canvas/blocks.json
     capability: L0

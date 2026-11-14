@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { assetFileName, blockAssetRefs, SINGLE_FILE_WARN_BYTES, typeDef, WEB_EXPORT_FORMAT, type Asset, type Block, type Connector, type TypeRegistry, type WebExportData } from '@aifig/shared'
+import { assetFileName, blockAssetRefs, SINGLE_FILE_WARN_BYTES, typeDef, WEB_EXPORT_FORMAT, type Asset, type Block, type Connector, type TypeRegistry, type WebExportData } from '@nodboard/shared'
 import { APP_VERSION } from './fileformat'
 import type { Board } from './board'
 import { containsSecret } from './pack'
@@ -23,11 +23,11 @@ let buildTried = false
 
 export function viewerDir(): string | null {
   const here = path.dirname(fileURLToPath(import.meta.url))
-  const bin = process.env.AIFIG_BIN
+  const bin = process.env.NODBOARD_BIN
   const source = path.resolve(here, '../../../apps/canvas')
   const candidates = [
-    process.env.AIFIG_VIEWER_DIR,
-    process.env.AIFIG_UI_DIST && path.join(process.env.AIFIG_UI_DIST, 'viewer'),
+    process.env.NODBOARD_VIEWER_DIR,
+    process.env.NODBOARD_UI_DIST && path.join(process.env.NODBOARD_UI_DIST, 'viewer'),
     bin && path.join(path.dirname(bin), 'ui', 'viewer'),
     path.join(source, 'dist/viewer'),
   ]
@@ -78,8 +78,8 @@ function pageHtml(d: { title: string; lang?: string; css: string; board: string;
     `<meta http-equiv="Content-Security-Policy" content="${PAGE_CSP}">`,
     '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">',
     '<meta name="referrer" content="no-referrer">',
-    `<meta name="generator" content="ai-figma ${APP_VERSION}">`,
-    `<title>${esc(d.title)} — ai-figma</title>`,
+    `<meta name="generator" content="nodboard ${APP_VERSION}">`,
+    `<title>${esc(d.title)} — nodboard</title>`,
     `<link rel="icon" type="image/svg+xml" href="${FAVICON}">`,
     d.inline ? `<style>${d.css.replace(/<\/style/gi, '<\\/style')}</style>` : '<link rel="stylesheet" href="viewer.css">',
   ]
@@ -193,7 +193,7 @@ export function exportWeb(board: Board, opts: { out: string; mode: WebExportMode
       if (f) data.assets[id] = { ...a, src: `data:${a.mime};base64,${fs.readFileSync(f.file).toString('base64')}` }
     }
   }
-  const boardJs = `window.__AIFIG_BOARD__ = ${scriptJson(data)};\n`
+  const boardJs = `window.__NODBOARD_BOARD__ = ${scriptJson(data)};\n`
   if (containsSecret(boardJs)) throw new Error('This board contains what looks like an access token or secret key. Remove it before exporting — nothing was written.')
   const viewerJs = fs.readFileSync(path.join(dir, 'viewer.js'), 'utf8')
   const viewerCss = fs.readFileSync(path.join(dir, 'viewer.css'), 'utf8')

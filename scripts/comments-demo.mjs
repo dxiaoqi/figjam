@@ -16,7 +16,7 @@ fs.mkdirSync(out, { recursive: true })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const mcp = new Client({ name: 'claude-code', version: 'comments-demo' })
-await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/aifig.mjs'), 'mcp'], env: process.env, stderr: 'inherit' }))
+await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/nodboard.mjs'), 'mcp'], env: process.env, stderr: 'inherit' }))
 const call = async (name, args = {}) => {
   const r = await mcp.callTool({ name, arguments: args })
   const text = r.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n')
@@ -73,7 +73,7 @@ const centerOf = (id, fx = 0.5, fy = 0.5) =>
 
 await page.goto(`${base()}/?board=${board}`)
 await sleep(2200)
-execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), '--board', board, '--human', 'accept'])
+execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), '--board', board, '--human', 'accept'])
 await ed(() => window.editor.zoomToFit())
 await sleep(800)
 
@@ -124,7 +124,7 @@ await pin.click()
 await sleep(900)
 await call('update_blocks', { board, updates: [{ id: vague, title: 'Slow start: 35–40 min to a first idea', text: '**2 of 6** needed 35–40 minutes before a first useful board (*P1, P6*); P3 froze on the blank canvas.' }] })
 await call('reply_thread', { board, thread: tVague.id, text: 'Done — the card now cites P1, P3 and P6.' })
-execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), '--board', board, '--human', 'accept'])
+execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), '--board', board, '--human', 'accept'])
 await sleep(1400)
 await shot('03-card-open-live-reply.png')
 await page.mouse.click(700, 840)

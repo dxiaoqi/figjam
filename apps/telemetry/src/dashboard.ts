@@ -6,7 +6,7 @@ export const dashboardHtml = /* html */ `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>ai-figma · installs</title>
+<title>nodboard · installs</title>
 <style>
   :root { --bg:#FAFAF9; --card:#fff; --ink:#1C1917; --muted:#78716C; --line:#E7E5E4; --accent:#6E56CF; --accent2:#E8DEFF; --yellow:#F5D90A; --soft:#F5F5F4; }
   @media (prefers-color-scheme: dark) { :root { --bg:#141416; --card:#1C1C1F; --ink:#F5F5F4; --muted:#A8A29E; --line:#2E2E32; --accent:#9E8CFC; --accent2:#3A3060; --soft:#232327; } }
@@ -54,7 +54,7 @@ export const dashboardHtml = /* html */ `<!doctype html>
 <header>
   <div class="brand">
     <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><rect x="7" y="7" width="11" height="11" rx="2" fill="#FFF1B8"/><rect x="14" y="14" width="11" height="11" rx="3" fill="#E8DEFF"/></svg>
-    ai-figma <small>installs &amp; downloads</small>
+    nodboard <small>installs &amp; downloads</small>
   </div>
   <div style="display:flex;gap:8px;align-items:center" id="controls" hidden>
     <div class="seg" role="group" aria-label="Range">
@@ -98,8 +98,8 @@ export const dashboardHtml = /* html */ `<!doctype html>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id)
-  const KEY = 'aifig-telemetry-token'
-  let days = Number(localStorage.getItem('aifig-telemetry-days')) || 30
+  const KEY = 'nodboard-telemetry-token'
+  let days = Number(localStorage.getItem('nodboard-telemetry-days')) || 30
   const fmt = (n) => Number(n).toLocaleString('en-US')
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c])
   const OS = { macos: 'macOS', windows: 'Windows', linux: 'Linux', other: 'Other' }
@@ -180,7 +180,7 @@ export const dashboardHtml = /* html */ `<!doctype html>
   })
   $('signout').addEventListener('click', () => { sessionStorage.removeItem(KEY); showGate() })
   document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => {
-    days = Number(b.dataset.days); localStorage.setItem('aifig-telemetry-days', String(days)); load()
+    days = Number(b.dataset.days); localStorage.setItem('nodboard-telemetry-days', String(days)); load()
   }))
   const tip = $('tip')
   document.addEventListener('mousemove', (e) => {

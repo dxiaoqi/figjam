@@ -17,7 +17,7 @@ export default function privacyEn(s: Site) {
     boards: {
       title: 'Your boards and files',
       body: [
-        `Boards are .aifig files in ~/.aifig (or wherever you set AIFIG_HOME). The local core listens on 127.0.0.1 only and needs a per-install access token, so other machines and web pages can’t reach it.`,
+        `Boards are .nodboard files in ~/.nodboard (or wherever you set NODBOARD_HOME). The local core listens on 127.0.0.1 only and needs a per-install access token, so other machines and web pages can’t reach it.`,
         'There is no account and no sync service. Board content, file names and paths are never sent to us.',
       ],
     },
@@ -41,7 +41,7 @@ export default function privacyEn(s: Site) {
         { name: 'locale', what: 'Language and region only, e.g. en-US' },
       ],
       never: 'Never sent: your name, email, host or user names, file paths, board content, or anything derived from them.',
-      off: 'AIFIG_TELEMETRY=off or DO_NOT_TRACK=1 turn it off regardless of the switch. Builds without a counter endpoint send nothing and hide the switch.',
+      off: 'NODBOARD_TELEMETRY=off or DO_NOT_TRACK=1 turn it off regardless of the switch. Builds without a counter endpoint send nothing and hide the switch.',
     },
     downloads: {
       title: 'Download count (this website)',

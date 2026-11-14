@@ -1,10 +1,10 @@
 import { toast } from 'sonner'
-import type { Editor } from '@aifig/canvas-engine'
-import type { Block, Connector, DiffSummary, RestorePlan, VersionInfo } from '@aifig/shared'
+import type { Editor } from '@nodboard/canvas-engine'
+import type { Block, Connector, DiffSummary, RestorePlan, VersionInfo } from '@nodboard/shared'
 import { callCore } from './core'
 import { t, type MessageKey } from '../i18n'
 
-export const openVersionHistory = (opts: { checkpoint?: boolean } = {}) => window.dispatchEvent(new CustomEvent('aifig:versions', { detail: opts }))
+export const openVersionHistory = (opts: { checkpoint?: boolean } = {}) => window.dispatchEvent(new CustomEvent('nodboard:versions', { detail: opts }))
 
 export const versionPreviewUrl = (boardId: string, id: string, theme: 'light' | 'dark') =>
   `/api/boards/${encodeURIComponent(boardId)}/versions/${encodeURIComponent(id)}/preview.svg?theme=${theme}`

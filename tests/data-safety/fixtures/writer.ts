@@ -1,4 +1,4 @@
-// Child process for the crash tests. AIFIG_HOME comes from the parent.
+// Child process for the crash tests. NODBOARD_HOME comes from the parent.
 //   loop     create a board, then add a fat block and save, forever, printing "saved <n>" after each write
 //   edit     load the board, make one edit without saving, print "edited", then wait (the debounce is long)
 import { BoardRegistry } from '../../../packages/core/src/board'

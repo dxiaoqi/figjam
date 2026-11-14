@@ -1,8 +1,8 @@
 ---
 name: product-kit
-description: Explore a product space and shape a solution on an ai-figma board — competitor matrix, opportunity-solution tree, priority matrix, experiments, metrics and requirements — then export a PRD outline. Use for competitive analysis, product discovery, prioritization and writing PRDs on the canvas. Includes everything competitor-kit had.
+description: Explore a product space and shape a solution on a nodboard board — competitor matrix, opportunity-solution tree, priority matrix, experiments, metrics and requirements — then export a PRD outline. Use for competitive analysis, product discovery, prioritization and writing PRDs on the canvas. Includes everything competitor-kit had.
 metadata:
-  aifig:
+  nodboard:
     version: 2.0.0
     canvas: canvas/blocks.json
     capability: L1

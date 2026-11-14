@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { ASSET_FILE_RE } from '@aifig/shared'
+import { ASSET_FILE_RE } from '@nodboard/shared'
 import { AssetStore } from './assets'
 import { writeFileAtomic } from './atomic'
 import { dataSafetyConfig } from './config'
@@ -60,7 +60,7 @@ export function listBackups(boardId: string): BackupEntry[] {
   const out: BackupEntry[] = []
   for (const dir of boardDirs(boardId)) {
     for (const n of fs.readdirSync(dir)) {
-      if (!n.endsWith('.aifig')) continue
+      if (!n.endsWith('.nodboard') && !n.endsWith('.aifig')) continue
       const file = path.join(dir, n)
       try {
         const { header } = readHeaderFromFile(file)
@@ -94,7 +94,7 @@ export function backupFile(boardId: string, title: string, data: Uint8Array, lab
       console.error(`[core] backup of ${boardId}: could not keep ${name}:`, e)
     }
   }
-  const file = path.join(dir, `${stamp(Date.now())}${label ? `-${label}` : ''}.aifig`)
+  const file = path.join(dir, `${stamp(Date.now())}${label ? `-${label}` : ''}.nodboard`)
   writeFileAtomic(file, data)
   pruneBackups(boardId)
   return file
@@ -103,7 +103,7 @@ export function backupFile(boardId: string, title: string, data: Uint8Array, lab
 /** Keep the newest `keep` rolling backups per board; labelled ones (pre-migration) are kept too. */
 export function pruneBackups(boardId: string) {
   const keep = dataSafetyConfig().backups.keep
-  const rolling = listBackups(boardId).filter((b) => /_\d{6}\.aifig$/.test(b.file))
+  const rolling = listBackups(boardId).filter((b) => /_\d{6}\.(nodboard|aifig)$/.test(b.file))
   for (const b of rolling.slice(keep)) fs.rmSync(b.file, { force: true })
   collectBackupPools(boardId)
 }
@@ -118,7 +118,7 @@ export function collectBackupPools(boardId: string, graceMs = 10 * 60_000) {
     const needed = new Set<string>()
     let unreadable = false
     for (const n of fs.readdirSync(dir)) {
-      if (!n.endsWith('.aifig')) continue
+      if (!n.endsWith('.nodboard') && !n.endsWith('.aifig')) continue
       try {
         for (const f of readHeaderFromFile(path.join(dir, n)).header.assets ?? []) needed.add(f)
       } catch {
@@ -139,7 +139,7 @@ export function collectBackupPools(boardId: string, graceMs = 10 * 60_000) {
 export function quarantine(file: string, boardId: string) {
   const dir = path.join(backupRoot(), 'damaged')
   fs.mkdirSync(dir, { recursive: true })
-  const dest = path.join(dir, `${boardId}-${stamp(Date.now())}${path.extname(file) || '.aifig'}`)
+  const dest = path.join(dir, `${boardId}-${stamp(Date.now())}${path.extname(file) || '.nodboard'}`)
   try {
     fs.renameSync(file, dest)
   } catch {

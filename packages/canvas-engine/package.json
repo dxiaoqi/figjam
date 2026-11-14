@@ -1,5 +1,5 @@
 {
-  "name": "@aifig/canvas-engine",
+  "name": "@nodboard/canvas-engine",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
     "./styles.css": "./src/styles.css"
   },
   "dependencies": {
-    "@aifig/shared": "*",
+    "@nodboard/shared": "*",
     "yjs": "^13.6.32"
   },
   "peerDependencies": {

@@ -1,7 +1,7 @@
 // Onboarding and i18n checks: languages (OS locale, Settings switch, CJK typography, long strings), the welcome
 // flow, empty-board guidance, templates (UI, CLI, MCP) and one-click agent setup.
 // usage: node scripts/onboarding-e2e.mjs [media-dir]
-//   Builds the canvas and runs its own core on a spare port with a temporary AIFIG_HOME and a fake home folder
+//   Builds the canvas and runs its own core on a spare port with a temporary NODBOARD_HOME and a fake home folder
 //   for agent configs, so real ~/.cursor / ~/.claude.json files are never touched. With a media dir it also saves
 //   screenshots in both languages and a short clip.
 import { execFileSync, spawn } from 'node:child_process'
@@ -21,14 +21,14 @@ execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'ignore' })
 
 const port = 48010 + Math.floor(Math.random() * 40) * 2
 const base = `http://127.0.0.1:${port}`
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-onboarding-'))
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-onboarding-'))
 const agentHome = path.join(tmp, 'user')
 fs.mkdirSync(path.join(agentHome, '.cursor'), { recursive: true })
 const cursorFile = path.join(agentHome, '.cursor', 'mcp.json')
 fs.writeFileSync(cursorFile, JSON.stringify({ mcpServers: { other: { command: 'other-server' } }, keep: true }, null, 4))
-const env = { ...process.env, AIFIG_HOME: path.join(tmp, 'aifig'), AIFIG_CORE_PORT: String(port), AIFIG_AGENT_CONFIG_HOME: agentHome, AIFIG_AGENT_PATH: '' }
+const env = { ...process.env, NODBOARD_HOME: path.join(tmp, 'nodboard'), NODBOARD_CORE_PORT: String(port), NODBOARD_AGENT_CONFIG_HOME: agentHome, NODBOARD_AGENT_PATH: '' }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const core = spawn(process.execPath, [path.join(root, 'bin/aifig.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
+const core = spawn(process.execPath, [path.join(root, 'bin/nodboard.mjs'), 'core', '--port', String(port)], { env, stdio: 'ignore' })
 for (let i = 0; i < 100 && !(await fetch(`${base}/api/health`).then((r) => r.ok, () => false)); i++) await sleep(100)
 
 let failures = 0
@@ -37,8 +37,8 @@ const check = (name, ok, detail = '') => {
   if (!ok) failures++
 }
 const HUMAN = { id: 'human:onboarding', name: 'You', client: 'test', kind: 'human' }
-const call = async (tool, args = {}) => (await fetch(`${base}/api/call`, { method: 'POST', headers: authHeaders(env.AIFIG_HOME), body: JSON.stringify({ tool, args, caller: HUMAN }) })).json()
-const cli = (...args) => JSON.parse(execFileSync(process.execPath, [path.join(root, 'bin/aifig.mjs'), '--json', ...args], { env, encoding: 'utf8' }))
+const call = async (tool, args = {}) => (await fetch(`${base}/api/call`, { method: 'POST', headers: authHeaders(env.NODBOARD_HOME), body: JSON.stringify({ tool, args, caller: HUMAN }) })).json()
+const cli = (...args) => JSON.parse(execFileSync(process.execPath, [path.join(root, 'bin/nodboard.mjs'), '--json', ...args], { env, encoding: 'utf8' }))
 
 // ---- templates: API, CLI, MCP ----------------------------------------------------------
 const list = (await call('list_templates')).result.templates
@@ -59,9 +59,9 @@ const bad = lintResults.filter((x) => !x.ok)
 check('every template builds in both languages with typed blocks and a clean lint', !bad.length, bad.length ? JSON.stringify(bad) : `${lintResults.length} boards`)
 check('template boards take the localized template name', lintResults.find((x) => x.id === 'user-journey' && x.language === 'zh-CN')?.title === '用户旅程图' && lintResults.find((x) => x.id === 'brainstorm' && x.language === 'en')?.title === 'Brainstorm')
 const viaCli = cli('new-board', 'Retro notes', '--template', 'meeting-notes', '--lang', 'zh-CN')
-check('CLI: aifig new-board --template … --lang zh-CN', viaCli.board.title === 'Retro notes' && viaCli.board.blockCount > 10 && viaCli.template === 'meeting-notes', `${viaCli.board.blockCount} blocks`)
+check('CLI: nodboard new-board --template … --lang zh-CN', viaCli.board.title === 'Retro notes' && viaCli.board.blockCount > 10 && viaCli.template === 'meeting-notes', `${viaCli.board.blockCount} blocks`)
 const mcp = new Client({ name: 'onboarding-check', version: '1' })
-await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/aifig.mjs'), 'mcp'], env }))
+await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/nodboard.mjs'), 'mcp'], env }))
 const mcpTools = (await mcp.listTools()).tools
 const createTool = mcpTools.find((t) => t.name === 'create_board')
 const viaMcp = JSON.parse((await mcp.callTool({ name: 'create_board', arguments: { template: 'research-synthesis' } })).content[0].text)
@@ -79,18 +79,18 @@ check(
 )
 
 // ---- agent setup API ----------------------------------------------------------------------
-const agentsApi = (p, init = {}) => fetch(`${base}/api/agents${p}`, { ...init, headers: { ...authHeaders(env.AIFIG_HOME), ...init.headers } }).then((r) => r.json().then((j) => ({ status: r.status, ...j })))
+const agentsApi = (p, init = {}) => fetch(`${base}/api/agents${p}`, { ...init, headers: { ...authHeaders(env.NODBOARD_HOME), ...init.headers } }).then((r) => r.json().then((j) => ({ status: r.status, ...j })))
 const post = (p, headers = {}) => agentsApi(p, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: '{}' })
 const detected = await agentsApi('')
 const cur = detected.agents.find((a) => a.id === 'cursor')
 const cla = detected.agents.find((a) => a.id === 'claude')
 check('detects installed agents (Cursor here, no Claude Code)', cur.installed && cur.state === 'missing' && !cla.installed, JSON.stringify(detected.agents.map((a) => [a.id, a.installed, a.state])))
 const evil = await post('/cursor/install', { origin: 'https://evil.example' })
-check('agent setup refuses other sites', evil.status === 403 && !JSON.parse(fs.readFileSync(cursorFile, 'utf8')).mcpServers['ai-figma'])
+check('agent setup refuses other sites', evil.status === 403 && !JSON.parse(fs.readFileSync(cursorFile, 'utf8')).mcpServers['nodboard'])
 const anon = (p, init = {}) => fetch(`${base}/api/agents${p}`, init).then((r) => r.status)
 const noToken = [await anon(''), await anon('/cursor/install', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }), await anon('/cursor/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })]
 const wrongToken = await anon('/cursor/install', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer nope' }, body: '{}' })
-check('agent setup needs the access token (detect, install, test)', noToken.every((s) => s === 401) && wrongToken === 401 && !JSON.parse(fs.readFileSync(cursorFile, 'utf8')).mcpServers['ai-figma'], `${noToken.join(', ')} · wrong token ${wrongToken}`)
+check('agent setup needs the access token (detect, install, test)', noToken.every((s) => s === 401) && wrongToken === 401 && !JSON.parse(fs.readFileSync(cursorFile, 'utf8')).mcpServers['nodboard'], `${noToken.join(', ')} · wrong token ${wrongToken}`)
 
 // ---- browser --------------------------------------------------------------------------------
 const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--no-sandbox'] })
@@ -99,11 +99,11 @@ const open = async (locale, { w = 1440, h = 900, video = false, url = '/' } = {}
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, locale })
   await ctx.addInitScript((t) => {
     try {
-      localStorage.setItem('aifig:token', t)
+      localStorage.setItem('nodboard:token', t)
     } catch {
       // opaque-origin frames have no storage
     }
-  }, tokenFor(env.AIFIG_HOME))
+  }, tokenFor(env.NODBOARD_HOME))
   const page = await ctx.newPage()
   if (video && mediaDir) page.clip = await startClip(page)
   page.on('pageerror', (e) => errors.push(e.message))
@@ -193,7 +193,7 @@ const overflowX = (page, sel) => page.evaluate((sel) => [...document.querySelect
   await page.click('[data-welcome-skip]')
   await page.waitForTimeout(600)
   if (page.clip) await page.clip(path.join(mediaDir, 'welcome-flow-zh.mp4'))
-  check('the welcome is skippable and remembered', (await page.locator('[data-welcome]').count()) === 0 && !!(await page.evaluate(() => localStorage.getItem('aifig:welcomed'))))
+  check('the welcome is skippable and remembered', (await page.locator('[data-welcome]').count()) === 0 && !!(await page.evaluate(() => localStorage.getItem('nodboard:welcomed'))))
 
   // settings: switch to English live, persisted
   await page.click('[data-open-settings]')
@@ -207,13 +207,13 @@ const overflowX = (page, sel) => page.evaluate((sel) => [...document.querySelect
   await page.goto(base)
   await page.waitForSelector('.ae-canvas')
   await page.waitForTimeout(500)
-  const persisted = (await page.evaluate(() => [document.documentElement.lang, localStorage.getItem('aifig:locale')])).join()
+  const persisted = (await page.evaluate(() => [document.documentElement.lang, localStorage.getItem('nodboard:locale')])).join()
   check('Settings switches the language live and remembers it', liveEn && persisted === 'en,en', `${liveEn} ${persisted}`)
   await page.click('[data-open-settings]')
   await page.locator('[data-setting="language"] [data-option="system"]').click()
   await page.keyboard.press('Escape')
   await page.waitForTimeout(200)
-  check('“Match system” goes back to the OS language', (await page.evaluate(() => document.documentElement.lang)) === 'zh-CN' && (await page.evaluate(() => localStorage.getItem('aifig:locale'))) === null)
+  check('“Match system” goes back to the OS language', (await page.evaluate(() => document.documentElement.lang)) === 'zh-CN' && (await page.evaluate(() => localStorage.getItem('nodboard:locale'))) === null)
   await ctx.close()
 }
 
@@ -322,17 +322,17 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   check('Connect agent shows one-click setup and keeps the manual configs', (await page.locator('[data-connect-dialog] pre').count()) >= 1 && (await page.locator('[data-agent-setup="claude"] [data-agent-install]').count()) === 0)
   await page.click('[data-agent-setup="cursor"] [data-agent-install]')
   await page.waitForSelector('[data-agent-confirm]')
-  check('setup asks for confirmation before writing', !JSON.parse(fs.readFileSync(cursorFile, 'utf8')).mcpServers['ai-figma'] && ((await page.locator('[data-agent-confirm]').textContent()) ?? '').includes('.cursor/mcp.json'))
+  check('setup asks for confirmation before writing', !JSON.parse(fs.readFileSync(cursorFile, 'utf8')).mcpServers['nodboard'] && ((await page.locator('[data-agent-confirm]').textContent()) ?? '').includes('.cursor/mcp.json'))
   await page.waitForTimeout(700)
   await page.click('[data-agent-confirm-write]')
   await page.waitForSelector('[data-agent-setup="cursor"][data-agent-state="configured"]')
   const written = JSON.parse(fs.readFileSync(cursorFile, 'utf8'))
-  const backups = fs.readdirSync(path.dirname(cursorFile)).filter((f) => f.startsWith('mcp.json.aifig-backup-'))
+  const backups = fs.readdirSync(path.dirname(cursorFile)).filter((f) => f.startsWith('mcp.json.nodboard-backup-'))
   const backupData = backups[0] ? JSON.parse(fs.readFileSync(path.join(path.dirname(cursorFile), backups[0]), 'utf8')) : null
-  check('writes the ai-figma entry and keeps everything else', written.mcpServers['ai-figma']?.args?.includes('mcp') && written.mcpServers.other?.command === 'other-server' && written.keep === true && /\n {4}"mcpServers"/.test(fs.readFileSync(cursorFile, 'utf8')))
-  check('backs up the previous file first', backups.length === 1 && !backupData?.mcpServers['ai-figma'] && backupData?.keep === true, backups.join(', '))
+  check('writes the nodboard entry and keeps everything else', written.mcpServers['nodboard']?.args?.includes('mcp') && written.mcpServers.other?.command === 'other-server' && written.keep === true && /\n {4}"mcpServers"/.test(fs.readFileSync(cursorFile, 'utf8')))
+  check('backs up the previous file first', backups.length === 1 && !backupData?.mcpServers['nodboard'] && backupData?.keep === true, backups.join(', '))
   const again = await post('/cursor/install')
-  check('writes are idempotent (no change, no new backup)', again.changed === false && fs.readdirSync(path.dirname(cursorFile)).filter((f) => f.startsWith('mcp.json.aifig-backup-')).length === 1)
+  check('writes are idempotent (no change, no new backup)', again.changed === false && fs.readdirSync(path.dirname(cursorFile)).filter((f) => f.startsWith('mcp.json.nodboard-backup-')).length === 1)
   await page.waitForTimeout(600)
   await page.click('[data-agent-setup="cursor"] [data-agent-test]')
   await page.waitForFunction(() => /tools|工具/.test(document.querySelector('[data-agent-setup="cursor"] [data-agent-result]')?.textContent ?? '') || document.querySelector('[data-agent-result="error"]'), null, { timeout: 25000 })
@@ -364,20 +364,20 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   const gate = await gateCtx.newPage()
   await gate.goto(base)
   await gate.waitForSelector('[data-token-gate]', { timeout: 15000 }).catch(() => {})
-  check('[zh] the sign-in screen is translated', ((await gate.locator('[data-token-gate]').textContent()) ?? '').includes('将此浏览器连接到 ai-figma'))
+  check('[zh] the sign-in screen is translated', ((await gate.locator('[data-token-gate]').textContent()) ?? '').includes('将此浏览器连接到 nodboard'))
   await gateCtx.close()
   const zhBoard = (await call('create_board', { title: '版本' })).result.board.id
   await call('create_version', { board: zhBoard, name: '第一版' })
   const { ctx, page } = await open('zh-CN', { url: `/?board=${zhBoard}` })
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('aifig:versions', { detail: {} })))
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('nodboard:versions', { detail: {} })))
   await page.waitForSelector('[data-version-history] [data-version]')
   const versionsText = (await page.locator('[data-version-history]').textContent()) ?? ''
   await page.keyboard.press('Escape')
-  await page.evaluate(() => window.dispatchEvent(new Event('aifig:skills')))
+  await page.evaluate(() => window.dispatchEvent(new Event('nodboard:skills')))
   await page.waitForSelector('[data-skills-panel]')
   const skillsText = (await page.locator('[data-skills-panel]').textContent()) ?? ''
   await page.keyboard.press('Escape')
-  await page.evaluate(() => window.dispatchEvent(new Event('aifig:activity')))
+  await page.evaluate(() => window.dispatchEvent(new Event('nodboard:activity')))
   await page.waitForSelector('[data-activity-dialog]')
   const activityText = (await page.locator('[data-activity-dialog]').textContent()) ?? ''
   check('[zh] version history, skills and activity are translated', versionsText.includes('版本历史') && versionsText.includes('恢复此版本') && skillsText.includes('此画板') && activityText.includes('已记住的权限'), [versionsText, skillsText, activityText].map((s) => s.slice(0, 40)).join(' | '))
@@ -394,9 +394,9 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   await page.click('[data-agent-setup="cursor"] [data-agent-transport="http"]')
   await page.click('[data-agent-confirm-write]')
   await page.waitForFunction(() => /HTTP/.test(document.querySelector('[data-agent-setup="cursor"][data-agent-state="configured"]')?.textContent ?? ''), null, { timeout: 10000 })
-  const entry = JSON.parse(fs.readFileSync(cursorFile, 'utf8')).mcpServers['ai-figma']
+  const entry = JSON.parse(fs.readFileSync(cursorFile, 'utf8')).mcpServers['nodboard']
   const mode = fs.statSync(cursorFile).mode & 0o777
-  check('one-click setup can write an HTTP entry with the Authorization header', entry.url === `${base}/mcp` && entry.headers?.Authorization === `Bearer ${tokenFor(env.AIFIG_HOME)}` && !entry.command, JSON.stringify({ ...entry, headers: Object.keys(entry.headers ?? {}) }))
+  check('one-click setup can write an HTTP entry with the Authorization header', entry.url === `${base}/mcp` && entry.headers?.Authorization === `Bearer ${tokenFor(env.NODBOARD_HOME)}` && !entry.command, JSON.stringify({ ...entry, headers: Object.keys(entry.headers ?? {}) }))
   check('a config holding the token is readable by this user only', process.platform === 'win32' || (mode & 0o077) === 0, mode.toString(8))
   await page.click('[data-agent-setup="cursor"] [data-agent-test]')
   await page.waitForFunction(() => /tools/.test(document.querySelector('[data-agent-setup="cursor"] [data-agent-result]')?.textContent ?? '') || document.querySelector('[data-agent-setup="cursor"] [data-agent-result="error"]'), null, { timeout: 25000 })
@@ -408,7 +408,7 @@ for (const [locale, sfx] of [['en-US', 'en'], ['zh-CN', 'zh']]) {
   fs.mkdirSync(path.join(agentHome, '.claude'), { recursive: true })
   fs.writeFileSync(path.join(agentHome, '.claude.json'), JSON.stringify({ projects: {}, mcpServers: {} }))
   const cl = await agentsApi('/claude/install', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ transport: 'http' }) })
-  const clEntry = JSON.parse(fs.readFileSync(path.join(agentHome, '.claude.json'), 'utf8')).mcpServers['ai-figma']
+  const clEntry = JSON.parse(fs.readFileSync(path.join(agentHome, '.claude.json'), 'utf8')).mcpServers['nodboard']
   check('Claude Code gets a type "http" entry', cl.ok && cl.status.transport === 'http' && cl.status.state === 'configured' && clEntry.type === 'http' && clEntry.url === `${base}/mcp` && /^Bearer /.test(clEntry.headers?.Authorization ?? ''))
   const clTest = await agentsApi('/claude/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
   check('the Claude Code HTTP entry passes the connection test', clTest.ok === true && clTest.tools > 20, JSON.stringify(clTest))

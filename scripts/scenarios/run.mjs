@@ -3,7 +3,7 @@
 // interviews, product-kit goes from competitors to a PRD, prototype-kit builds three interactive variants,
 // lit-kit builds an argument map from five papers).
 // usage: node scripts/scenarios/run.mjs [--only=arch-kit,research-kit] [--lang=en|zh-CN|all] [--samples] [--out=dir]
-//   --samples  write each finished board to skills/builtin/<skill>/examples/sample.<lang>.aifig
+//   --samples  write each finished board to skills/builtin/<skill>/examples/sample.<lang>.nodboard
 //   --out      also write a PNG snapshot of each board there
 import fs from 'node:fs'
 import path from 'node:path'
@@ -44,9 +44,9 @@ try {
           if (img) fs.writeFileSync(path.join(out, `${sc.skill}-${lang}.png`), Buffer.from(img.data, 'base64'))
         }
         if (samples) {
-          const tmp = path.join(core.home, `${sc.skill}-${lang}.aifig`)
+          const tmp = path.join(core.home, `${sc.skill}-${lang}.nodboard`)
           await core.human('save_file', { board, path: tmp })
-          const dest = path.join(root, 'skills/builtin', sc.skill, 'examples', `sample.${lang}.aifig`)
+          const dest = path.join(root, 'skills/builtin', sc.skill, 'examples', `sample.${lang}.nodboard`)
           fs.mkdirSync(path.dirname(dest), { recursive: true })
           fs.copyFileSync(tmp, dest)
           console.log(`  wrote ${path.relative(root, dest)} (${Math.round(fs.statSync(dest).size / 1024)} KB)`)

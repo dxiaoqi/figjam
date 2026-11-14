@@ -1,7 +1,7 @@
 import { Check, Code2, ExternalLink, Film, Globe, MousePointerClick, Play, X } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { intersects, type BlockRenderProps, type ShapeDef } from '@aifig/canvas-engine'
-import { EMBED_ALLOW, EMBED_SANDBOX, fieldSummary, FONT_SIZES, INLINE_SANDBOX, RADII, snippetLabel, stickyFontSize, templateRows, typeDef, typeFields, typeText, type Block, type BlockTypeDef, type TypeRegistry, type WebExportData } from '@aifig/shared'
+import { intersects, type BlockRenderProps, type ShapeDef } from '@nodboard/canvas-engine'
+import { EMBED_ALLOW, EMBED_SANDBOX, fieldSummary, FONT_SIZES, INLINE_SANDBOX, RADII, snippetLabel, stickyFontSize, templateRows, typeDef, typeFields, typeText, type Block, type BlockTypeDef, type TypeRegistry, type WebExportData } from '@nodboard/shared'
 import { cn } from '@/lib/utils'
 import { renderMarkdown } from '../canvas/markdown'
 import { typeIcon } from '../canvas/type-registry'
@@ -39,7 +39,7 @@ const typeLabel = (d: BlockTypeDef) => (builtin(d) ? t(`type.${d.id}.label` as M
 
 function RichText({ value, className }: { value: string; className?: string }) {
   if (!value) return null
-  return <div className={cn('aifig-rich', className)}>{renderMarkdown(value)}</div>
+  return <div className={cn('nodboard-rich', className)}>{renderMarkdown(value)}</div>
 }
 
 function TypeHeader({ block, reg }: { block: Block; reg: TypeRegistry }) {
@@ -47,7 +47,7 @@ function TypeHeader({ block, reg }: { block: Block; reg: TypeRegistry }) {
   const def = typeDef(block.type, reg)
   const Icon = typeIcon(block.type, reg)
   return (
-    <div className="aifig-type-header" title={def.skill ? `${typeLabel(def)} · ${def.skill}` : typeLabel(def)}>
+    <div className="nodboard-type-header" title={def.skill ? `${typeLabel(def)} · ${def.skill}` : typeLabel(def)}>
       <Icon className="size-3.5" strokeWidth={2.25} />
       {typeLabel(def)}
     </div>
@@ -91,17 +91,17 @@ function TypeFields({ block, reg }: { block: Block; reg: TypeRegistry }) {
     return (
       <div data-viewer-fields>
         {rows.length > 0 && (
-          <div className="aifig-type-rows">
+          <div className="nodboard-type-rows">
             {rows.map((r) => (
-              <div key={r.key} className="aifig-type-row">
-                <span className="aifig-type-row-label">{r.label}</span>
-                <span className="aifig-type-row-value">{r.value}</span>
+              <div key={r.key} className="nodboard-type-row">
+                <span className="nodboard-type-row-label">{r.label}</span>
+                <span className="nodboard-type-row-value">{r.value}</span>
               </div>
             ))}
           </div>
         )}
         {sum && (
-          <div className="aifig-type-footer">
+          <div className="nodboard-type-footer">
             <span className="truncate">{sum}</span>
           </div>
         )}
@@ -109,7 +109,7 @@ function TypeFields({ block, reg }: { block: Block; reg: TypeRegistry }) {
     )
   }
   return (
-    <div className="aifig-type-footer" data-viewer-fields>
+    <div className="nodboard-type-footer" data-viewer-fields>
       {body}
     </div>
   )
@@ -120,8 +120,8 @@ const typeCls = (b: Block) => cn(b.type && `is-typed type-${b.type}`, b.type ===
 function Sticky({ block }: BlockRenderProps) {
   const { data } = useViewer()
   return (
-    <div className={cn('aifig-sticky', typeCls(block))} style={{ fontSize: stickyFontSize(block.text, block.w) }}>
-      <div className="aifig-sticky-inner">
+    <div className={cn('nodboard-sticky', typeCls(block))} style={{ fontSize: stickyFontSize(block.text, block.w) }}>
+      <div className="nodboard-sticky-inner">
         <TypeHeader block={block} reg={data.types} />
         <RichText value={block.text} />
         <TypeFields block={block} reg={data.types} />
@@ -133,8 +133,8 @@ function Sticky({ block }: BlockRenderProps) {
 function Card({ block }: BlockRenderProps) {
   const { data } = useViewer()
   return (
-    <div className={cn('aifig-card', typeCls(block))}>
-      <div className="aifig-card-inner">
+    <div className={cn('nodboard-card', typeCls(block))}>
+      <div className="nodboard-card-inner">
         <TypeHeader block={block} reg={data.types} />
         <div className="title">{block.title}</div>
         {block.text && <RichText className="body" value={block.text} />}
@@ -147,20 +147,20 @@ function Card({ block }: BlockRenderProps) {
 function Text({ block }: BlockRenderProps) {
   const bold = block.size === 'l' || block.size === 'xl'
   return (
-    <div className="aifig-text" style={{ fontSize: FONT_SIZES[block.size], fontWeight: bold ? 650 : 400, letterSpacing: bold ? '-0.01em' : undefined }}>
+    <div className="nodboard-text" style={{ fontSize: FONT_SIZES[block.size], fontWeight: bold ? 650 : 400, letterSpacing: bold ? '-0.01em' : undefined }}>
       <RichText value={block.text} />
     </div>
   )
 }
 
 function Frame() {
-  return <div className="aifig-frame" />
+  return <div className="nodboard-frame" />
 }
 
 function ImageBlock({ block }: BlockRenderProps) {
   const { data } = useViewer()
   const a = block.asset ? data.assets[block.asset] : undefined
-  return <div className="aifig-image">{a ? <img src={a.src} alt={block.text || a.name || ''} draggable={false} loading="lazy" /> : null}</div>
+  return <div className="nodboard-image">{a ? <img src={a.src} alt={block.text || a.name || ''} draggable={false} loading="lazy" /> : null}</div>
 }
 
 function VideoBlock({ block, editor }: BlockRenderProps) {
@@ -179,25 +179,25 @@ function VideoBlock({ block, editor }: BlockRenderProps) {
   }, [playing, editor, block.id])
   const label = block.text || a?.name || t('block.video')
   return (
-    <div className={cn('aifig-video', playing && 'is-playing')} data-video-block={block.id}>
+    <div className={cn('nodboard-video', playing && 'is-playing')} data-video-block={block.id}>
       {playing && a ? (
         <video ref={el} data-ui src={a.src} poster={poster} controls autoPlay playsInline />
       ) : (
         <>
-          {poster ? <img className="aifig-video-poster" src={poster} alt="" draggable={false} /> : <div className="aifig-video-poster aifig-video-blank" />}
+          {poster ? <img className="nodboard-video-poster" src={poster} alt="" draggable={false} /> : <div className="nodboard-video-poster nodboard-video-blank" />}
           {a && (
-            <button type="button" data-ui data-video-play className="aifig-video-play" aria-label={t('video.play', { name: label })} onClick={() => setPlaying(true)}>
+            <button type="button" data-ui data-video-play className="nodboard-video-play" aria-label={t('video.play', { name: label })} onClick={() => setPlaying(true)}>
               <Play className="size-5" fill="currentColor" strokeWidth={0} />
             </button>
           )}
         </>
       )}
-      <div className="aifig-video-badge">
+      <div className="nodboard-video-badge">
         <Film className="size-3" />
         <span className="truncate">{label}</span>
       </div>
       {playing && (
-        <button type="button" data-ui className="aifig-video-close" aria-label={t('video.stop')} onClick={() => setPlaying(false)}>
+        <button type="button" data-ui className="nodboard-video-close" aria-label={t('video.stop')} onClick={() => setPlaying(false)}>
           <X className="size-3.5" />
         </button>
       )}
@@ -214,16 +214,16 @@ function WebBlock({ block }: BlockRenderProps) {
   const { data, active } = useViewer()
   const web = block.web
   const [loaded, setLoaded] = useState(false)
-  if (!web) return <div className="aifig-web" />
+  if (!web) return <div className="nodboard-web" />
   const isActive = active === block.id
   const thumb = web.thumb ? data.assets[web.thumb]?.src : undefined
   if (web.mode === 'inline') {
     const doc = data.snippets[block.id]
     return (
-      <div className={cn('aifig-web', isActive && 'is-running')} data-web-mode="inline" data-viewer-snippet={block.id}>
+      <div className={cn('nodboard-web', isActive && 'is-running')} data-web-mode="inline" data-viewer-snippet={block.id}>
         {doc ? (
           <iframe
-            className="aifig-web-frame"
+            className="nodboard-web-frame"
             title={snippetLabel(web)}
             sandbox={INLINE_SANDBOX}
             referrerPolicy="no-referrer"
@@ -234,13 +234,13 @@ function WebBlock({ block }: BlockRenderProps) {
           />
         ) : null}
         {!isActive && (
-          <button type="button" data-ui data-wheel-canvas data-snippet-activate className="aifig-viewer-activate" aria-label={t('viewer.interact', { label: snippetLabel(web) })} onClick={() => viewer.set({ active: block.id })}>
-            <span className="aifig-viewer-activate-hint">
+          <button type="button" data-ui data-wheel-canvas data-snippet-activate className="nodboard-viewer-activate" aria-label={t('viewer.interact', { label: snippetLabel(web) })} onClick={() => viewer.set({ active: block.id })}>
+            <span className="nodboard-viewer-activate-hint">
               <MousePointerClick className="size-3" /> {t('viewer.clickToInteract')}
             </span>
           </button>
         )}
-        <div className="aifig-web-badge">
+        <div className="nodboard-web-badge">
           <Code2 className="size-3" />
           <span className="truncate">{isActive ? t('viewer.escToLeave', { label: snippetLabel(web) }) : snippetLabel(web)}</span>
         </div>
@@ -248,31 +248,31 @@ function WebBlock({ block }: BlockRenderProps) {
     )
   }
   return (
-    <div className={cn('aifig-web', loaded && 'is-running')} data-web-mode="url">
+    <div className={cn('nodboard-web', loaded && 'is-running')} data-web-mode="url">
       {loaded ? (
-        <iframe className="aifig-web-frame" title={snippetLabel(web)} src={web.embedUrl} sandbox={EMBED_SANDBOX} allow={EMBED_ALLOW} referrerPolicy="no-referrer" data-ui />
+        <iframe className="nodboard-web-frame" title={snippetLabel(web)} src={web.embedUrl} sandbox={EMBED_SANDBOX} allow={EMBED_ALLOW} referrerPolicy="no-referrer" data-ui />
       ) : (
         <>
           {thumb ? (
-            <img className="aifig-web-thumb" src={thumb} alt="" draggable={false} />
+            <img className="nodboard-web-thumb" src={thumb} alt="" draggable={false} />
           ) : (
-            <div className="aifig-web-poster">
+            <div className="nodboard-web-poster">
               <Globe className="size-6 opacity-60" strokeWidth={1.5} />
-              <div className="aifig-web-title">{snippetLabel(web)}</div>
-              <div className="aifig-web-sub">{web.url}</div>
+              <div className="nodboard-web-title">{snippetLabel(web)}</div>
+              <div className="nodboard-web-sub">{web.url}</div>
             </div>
           )}
-          <button type="button" data-ui data-embed-load className="aifig-video-play" aria-label={t('viewer.loadEmbed', { site: web.provider ?? '' })} onClick={() => setLoaded(true)}>
+          <button type="button" data-ui data-embed-load className="nodboard-video-play" aria-label={t('viewer.loadEmbed', { site: web.provider ?? '' })} onClick={() => setLoaded(true)}>
             <Play className="size-5" fill="currentColor" strokeWidth={0} />
           </button>
         </>
       )}
-      <div className="aifig-web-badge">
+      <div className="nodboard-web-badge">
         <Play className="size-3" fill="currentColor" />
         <span className="truncate">{snippetLabel(web)}</span>
       </div>
       {web.url && (
-        <a data-ui className="aifig-web-watch" href={web.url} target="_blank" rel="noopener noreferrer">
+        <a data-ui className="nodboard-web-watch" href={web.url} target="_blank" rel="noopener noreferrer">
           {t('snippet.watchOn', { site: web.provider ?? t('snippet.theSite') })}
           <ExternalLink className="size-3" />
         </a>

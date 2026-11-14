@@ -1,6 +1,6 @@
 import { Map as MapIcon, Maximize, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Minimap, useCamera } from '@aifig/canvas-engine'
+import { Minimap, useCamera } from '@nodboard/canvas-engine'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useEditorState } from '../canvas/editor-context'
@@ -31,23 +31,23 @@ export function ZoomControls() {
   const editor = useEditorState()
   const cam = useCamera(editor)
   const t = useT()
-  const [showMap, setShowMap] = useState(() => localStorage.getItem('aifig:minimap') !== 'off')
+  const [showMap, setShowMap] = useState(() => localStorage.getItem('nodboard:minimap') !== 'off')
   const toggleMap = () => {
-    localStorage.setItem('aifig:minimap', showMap ? 'off' : 'on')
+    localStorage.setItem('nodboard:minimap', showMap ? 'off' : 'on')
     setShowMap(!showMap)
   }
   useEffect(() => {
     const on = () => setShowMap((v) => {
-      localStorage.setItem('aifig:minimap', v ? 'off' : 'on')
+      localStorage.setItem('nodboard:minimap', v ? 'off' : 'on')
       return !v
     })
-    window.addEventListener('aifig:toggle-minimap', on)
-    return () => window.removeEventListener('aifig:toggle-minimap', on)
+    window.addEventListener('nodboard:toggle-minimap', on)
+    return () => window.removeEventListener('nodboard:toggle-minimap', on)
   }, [])
   return (
     <div className="pointer-events-auto absolute bottom-3 left-3 z-[300] hidden flex-col items-start gap-2 sm:flex">
       {showMap && (
-        <div className="chrome aifig-canvas rounded-xl p-1" style={{ backgroundImage: 'none' }}>
+        <div className="chrome nodboard-canvas rounded-xl p-1" style={{ backgroundImage: 'none' }}>
           <Minimap editor={editor} width={208} height={136} />
         </div>
       )}

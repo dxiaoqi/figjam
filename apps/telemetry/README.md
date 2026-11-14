@@ -1,6 +1,6 @@
-# @aifig/telemetry
+# @nodboard/telemetry
 
-A small, self-hostable counter for ai-figma installs and downloads. Hono, running on Node (SQLite through the built-in
+A small, self-hostable counter for nodboard installs and downloads. Hono, running on Node (SQLite through the built-in
 `node:sqlite`) or Cloudflare Workers (D1).
 
 | Endpoint | Auth | What |
@@ -15,11 +15,11 @@ per minute, default 30), with CORS for the website (`text/plain` bodies from `na
 the ping fields and a UTC day; IP addresses are only used in memory for rate limiting.
 
 ```bash
-npm run mock -w @aifig/telemetry     # in-memory, 90 days of fake data; token: mock-admin-token
-npm start -w @aifig/telemetry        # PORT=47910 HOST=127.0.0.1 DB_FILE=data/telemetry.sqlite ADMIN_TOKEN=… TRUST_PROXY=1
-npm test -w @aifig/telemetry
+npm run mock -w @nodboard/telemetry     # in-memory, 90 days of fake data; token: mock-admin-token
+npm start -w @nodboard/telemetry        # PORT=47910 HOST=127.0.0.1 DB_FILE=data/telemetry.sqlite ADMIN_TOKEN=… TRUST_PROXY=1
+npm test -w @nodboard/telemetry
 ```
 
-Cloudflare: `npx wrangler d1 create aifig-telemetry`, put the id in `wrangler.toml`, `npx wrangler secret put ADMIN_TOKEN`,
+Cloudflare: `npx wrangler d1 create nodboard-telemetry`, put the id in `wrangler.toml`, `npx wrangler secret put ADMIN_TOKEN`,
 `npx wrangler deploy`. See [docs/distribution.md](../../docs/distribution.md#anonymous-install-counting) for what the
 app sends and why it's opt-in.

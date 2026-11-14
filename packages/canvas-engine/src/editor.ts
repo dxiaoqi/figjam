@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react'
 import * as Y from 'yjs'
-import { blockAssetRefs, distanceToRoute, estimateLabelSize, placeLabel, rotatePoint, rotatedBounds, routeConnector, type Asset, type Author, type Block, type Connector, type Route, type RouteStyle } from '@aifig/shared'
+import { blockAssetRefs, distanceToRoute, estimateLabelSize, placeLabel, rotatePoint, rotatedBounds, routeConnector, type Asset, type Author, type Block, type Connector, type Route, type RouteStyle } from '@nodboard/shared'
 import {
   box,
   boxFromPoints,
@@ -15,7 +15,7 @@ import {
   type Box,
   type Vec,
 } from './geometry'
-import { SpatialGrid } from '@aifig/shared'
+import { SpatialGrid } from '@nodboard/shared'
 
 export interface Camera {
   /** screen = page * z + (x, y) */
@@ -1242,7 +1242,7 @@ export class Editor {
     const connectors = this.connectors().filter((c) => c.from && c.to && set.has(c.from) && set.has(c.to))
     const assetsMap = this.doc.getMap<Asset>('assets')
     const assets = [...new Set(blocks.flatMap((b) => blockAssetRefs(b)))].map((id) => assetsMap.get(id)).filter((a): a is Asset => !!a?.hash)
-    return `aifig:${JSON.stringify({ blocks, connectors, assets })}`
+    return `nodboard:${JSON.stringify({ blocks, connectors, assets })}`
   }
 
   copy() {
@@ -1252,13 +1252,18 @@ export class Editor {
 
   /** Paste serialized blocks, either offset from their origin or centered at a page point. */
   pasteSerialized(text: string, place: Vec | { at: Vec }) {
-    if (!text.startsWith('aifig:')) return false
+    // `aifig:` is the pre-rename clipboard prefix (6 chars). `nodboard:` is 9 — slicing a fixed 6
+    // turned a copied frame into a card whose text was the raw payload.
+    const trimmed = text.trim()
+    const prefix = trimmed.startsWith('nodboard:') ? 'nodboard:' : trimmed.startsWith('aifig:') ? 'aifig:' : null
+    if (!prefix) return false
     let data: { blocks: Block[]; connectors: Connector[]; assets?: Asset[] }
     try {
-      data = JSON.parse(text.slice(6))
+      data = JSON.parse(trimmed.slice(prefix.length))
     } catch {
       return false
     }
+    if (!Array.isArray(data.blocks)) return false
     const tops = data.blocks.filter((b) => !b.parent)
     const bounds = union(tops.map((b) => box(b.x, b.y, b.w, b.h)))
     if (!bounds) return false

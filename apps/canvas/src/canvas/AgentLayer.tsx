@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { useCamera, type Editor } from '@aifig/canvas-engine'
-import type { AgentPresence, Point } from '@aifig/shared'
+import { useCamera, type Editor } from '@nodboard/canvas-engine'
+import type { AgentPresence, Point } from '@nodboard/shared'
 import { useAgentsOnBoard } from '../board-context'
 import { useEditor } from './editor-context'
 import { t } from '../i18n'
@@ -82,7 +82,7 @@ function AgentPresenceView({ editor, agent, now, zoom, pos, screenW, screenH }: 
     <>
       {focus && f && (
         <div
-          className="aifig-focus"
+          className="nodboard-focus"
           style={{ ...style, left: f.x - 12, top: f.y - 12, width: focus.w * zoom + 24, height: focus.h * zoom + 24, opacity: focusOpacity }}
         />
       )}

@@ -1,8 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { DataNotice } from '@aifig/shared'
+import type { DataNotice } from '@nodboard/shared'
 import { writeFileAtomic } from './atomic'
-import { aifigHome } from './config'
+import { nodboardHome } from './config'
 
 /** Data notices (recoveries, unreadable files, failing saves), persisted until the person dismisses them. */
 export class NoticeStore {
@@ -10,7 +10,7 @@ export class NoticeStore {
   onChange: (() => void) | null = null
 
   private get file() {
-    return path.join(aifigHome(), 'notices.json')
+    return path.join(nodboardHome(), 'notices.json')
   }
 
   load() {

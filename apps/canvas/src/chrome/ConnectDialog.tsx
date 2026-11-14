@@ -41,7 +41,7 @@ export function ConnectDialog({ open, onOpenChange }: { open: boolean; onOpenCha
       <DialogContent className="max-h-[calc(100dvh-32px)] overflow-x-hidden overflow-y-auto sm:max-w-xl [&>*]:min-w-0" data-connect-dialog>
         <DialogHeader>
           <DialogTitle>{t('connect.title')}</DialogTitle>
-          <DialogDescription>{tn('connect.description', { cli: <code className="font-mono">aifig</code> })}</DialogDescription>
+          <DialogDescription>{tn('connect.description', { cli: <code className="font-mono">nodboard</code> })}</DialogDescription>
         </DialogHeader>
         <section className="space-y-2">
           <h3 className="text-xs font-medium text-muted-foreground">{t('connect.oneClick')}</h3>
@@ -71,7 +71,7 @@ export function ConnectDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           <TabsContent value="http" className="space-y-2 pt-2">
             <p className="text-sm text-muted-foreground">
               {tn('connect.http', { url: <code className="font-mono">{s.url}</code> })}
-              {tn('connect.httpToken', { cmd: <code className="font-mono">aifig token --rotate</code> })}
+              {tn('connect.httpToken', { cmd: <code className="font-mono">nodboard token --rotate</code> })}
             </p>
             <CopyBlock label={t('connect.claudeHttpLabel')} text={s.claudeHttp} />
             <CopyBlock label={t('connect.cursorHttpLabel')} text={s.cursorHttp} />

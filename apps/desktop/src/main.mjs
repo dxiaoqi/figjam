@@ -9,17 +9,21 @@ import { LOCALES, systemLocale, translator } from './i18n.mjs'
 import { createTelemetry } from './telemetry.mjs'
 import { startUpdater } from './updater.mjs'
 
+for (const [key, value] of Object.entries(process.env)) {
+  if (key.startsWith('AIFIG_') && value != null && process.env[`NODBOARD_${key.slice(6)}`] == null) process.env[`NODBOARD_${key.slice(6)}`] = value
+}
+
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '../../..')
 const packaged = app.isPackaged
-let cliPath = packaged ? path.join(process.resourcesPath, 'aifig.mjs') : path.join(repoRoot, 'bin', 'aifig.mjs')
+let cliPath = packaged ? path.join(process.resourcesPath, 'nodboard.mjs') : path.join(repoRoot, 'bin', 'nodboard.mjs')
 let uiDist = packaged ? path.join(process.resourcesPath, 'ui') : path.join(repoRoot, 'apps', 'canvas', 'dist')
 let builtinSkills = packaged ? path.join(process.resourcesPath, 'skills') : path.join(repoRoot, 'skills', 'builtin')
 // the command agents run for the bundled CLI/MCP server: this executable in Node mode
 let agentCommand = process.execPath
-const port = Number(process.env.AIFIG_CORE_PORT ?? 47821)
+const port = Number(process.env.NODBOARD_CORE_PORT ?? 47821)
 const coreUrl = `http://127.0.0.1:${port}`
-const devUrl = process.env.AIFIG_DESKTOP_URL // e.g. the Vite dev server for hot reload
+const devUrl = process.env.NODBOARD_DESKTOP_URL // e.g. the Vite dev server for hot reload
 const prefsFile = () => path.join(app.getPath('userData'), 'prefs.json')
 const assistantFile = () => path.join(app.getPath('userData'), 'assistant.bin')
 // build-time feature flags: baked into features.json by the desktop build; from source, the environment
@@ -29,19 +33,24 @@ const features = (() => {
   } catch {
     /* older build */
   }
-  return { assistant: process.env.AIFIG_FEATURE_ASSISTANT === '1' }
+  return { assistant: process.env.NODBOARD_FEATURE_ASSISTANT === '1' }
 })()
 const assistantOn = features.assistant === true
-const snippetPort = Number(process.env.AIFIG_SNIPPET_PORT ?? port + 1)
+const snippetPort = Number(process.env.NODBOARD_SNIPPET_PORT ?? port + 1)
 const snippetOrigin = `http://localhost:${snippetPort}`
 
-// ---- access token (created by the core in AIFIG_HOME, mode 0600) -------------------
+// ---- access token (created by the core in NODBOARD_HOME, mode 0600) -------------------
 
-const aifigHome = () => process.env.AIFIG_HOME ?? path.join(os.homedir(), '.aifig')
+const nodboardHome = () => {
+  if (process.env.NODBOARD_HOME) return process.env.NODBOARD_HOME
+  const next = path.join(os.homedir(), '.nodboard')
+  const prev = path.join(os.homedir(), '.aifig')
+  return fs.existsSync(next) || !fs.existsSync(prev) ? next : prev
+}
 function readToken() {
-  if (process.env.AIFIG_TOKEN) return process.env.AIFIG_TOKEN.trim()
+  if (process.env.NODBOARD_TOKEN) return process.env.NODBOARD_TOKEN.trim()
   try {
-    const t = fs.readFileSync(path.join(aifigHome(), 'access-token'), 'utf8').trim()
+    const t = fs.readFileSync(path.join(nodboardHome(), 'access-token'), 'utf8').trim()
     return /^[A-Za-z0-9_-]{32,128}$/.test(t) ? t : null
   } catch {
     return null
@@ -52,11 +61,11 @@ const coreHeaders = () => {
   return { 'content-type': 'application/json', ...(t ? { authorization: `Bearer ${t}` } : {}) }
 }
 
-app.setName('ai-figma')
+app.setName('nodboard')
 if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox')
 
 // ---- distribution settings (telemetry endpoint, update feed) ---------------------------------------
-// baked into the package by scripts/build.mjs; ~/.aifig/config.json and env vars override. Empty = off.
+// baked into the package by scripts/build.mjs; ~/.nodboard/config.json and env vars override. Empty = off.
 
 const readJson = (file) => {
   try {
@@ -67,28 +76,28 @@ const readJson = (file) => {
 }
 function distribution() {
   const baked = readJson(packaged ? path.join(here, 'distribution.json') : path.join(repoRoot, 'distribution.json')) ?? {}
-  const user = readJson(path.join(aifigHome(), 'config.json')) ?? {}
+  const user = readJson(path.join(nodboardHome(), 'config.json')) ?? {}
   const pick = (envKey, userVal, bakedVal) => String(process.env[envKey] ?? userVal ?? bakedVal ?? '').trim()
   return {
-    telemetryUrl: pick('AIFIG_TELEMETRY_URL', user.telemetry?.endpoint, baked.telemetryUrl),
-    updateFeedUrl: pick('AIFIG_UPDATE_URL', user.updates?.feedUrl, baked.updateFeedUrl),
+    telemetryUrl: pick('NODBOARD_TELEMETRY_URL', user.telemetry?.endpoint, baked.telemetryUrl),
+    updateFeedUrl: pick('NODBOARD_UPDATE_URL', user.updates?.feedUrl, baked.updateFeedUrl),
   }
 }
 
 /**
  * An AppImage runs from a fresh /tmp/.mount_* folder on every launch, so agent MCP configs can't point inside it.
- * Copy the CLI bundle, UI and skills to ~/.aifig/runtime/<version> once, and have agents run the AppImage file
+ * Copy the CLI bundle, UI and skills to ~/.nodboard/runtime/<version> once, and have agents run the AppImage file
  * itself (stable path, updated in place by the updater) in Node mode with that copy.
  */
 function adoptStableRuntime() {
   if (!packaged || !process.env.APPIMAGE) return
-  const base = path.join(aifigHome(), 'runtime')
+  const base = path.join(nodboardHome(), 'runtime')
   const dir = path.join(base, app.getVersion())
   if (!fs.existsSync(path.join(dir, '.complete'))) {
     const tmp = `${dir}.tmp-${process.pid}`
     fs.rmSync(tmp, { recursive: true, force: true })
     fs.mkdirSync(tmp, { recursive: true })
-    for (const f of ['aifig.mjs', 'readable-copy-worker.mjs', 'ui', 'skills', 'node_modules']) {
+    for (const f of ['nodboard.mjs', 'readable-copy-worker.mjs', 'ui', 'skills', 'node_modules']) {
       const from = path.join(process.resourcesPath, f)
       if (fs.existsSync(from)) fs.cpSync(from, path.join(tmp, f), { recursive: true })
     }
@@ -97,7 +106,7 @@ function adoptStableRuntime() {
     fs.renameSync(tmp, dir)
   }
   for (const old of fs.readdirSync(base)) if (old !== app.getVersion()) fs.rmSync(path.join(base, old), { recursive: true, force: true })
-  cliPath = path.join(dir, 'aifig.mjs')
+  cliPath = path.join(dir, 'nodboard.mjs')
   uiDist = path.join(dir, 'ui')
   builtinSkills = path.join(dir, 'skills')
   agentCommand = process.env.APPIMAGE
@@ -105,7 +114,7 @@ function adoptStableRuntime() {
 try {
   adoptStableRuntime()
 } catch (e) {
-  console.error('ai-figma: could not copy the CLI out of the AppImage; agent configs will point inside it', e)
+  console.error('nodboard: could not copy the CLI out of the AppImage; agent configs will point inside it', e)
 }
 
 let coreProcess = null
@@ -151,16 +160,16 @@ async function healthy() {
 
 function mcpEnv() {
   // agents launch the bundled CLI with Electron's own Node runtime
-  // (AIFIG_UI_DIST so a core started by an agent can still serve the canvas when the app opens later)
-  const env = { ELECTRON_RUN_AS_NODE: '1', AIFIG_BIN: cliPath, AIFIG_BUILTIN_SKILLS: builtinSkills, AIFIG_UI_DIST: uiDist }
+  // (NODBOARD_UI_DIST so a core started by an agent can still serve the canvas when the app opens later)
+  const env = { ELECTRON_RUN_AS_NODE: '1', NODBOARD_BIN: cliPath, NODBOARD_BUILTIN_SKILLS: builtinSkills, NODBOARD_UI_DIST: uiDist }
   return {
-    AIFIG_BIN: cliPath,
-    AIFIG_BUILTIN_SKILLS: builtinSkills,
-    AIFIG_MCP_COMMAND: agentCommand,
+    NODBOARD_BIN: cliPath,
+    NODBOARD_BUILTIN_SKILLS: builtinSkills,
+    NODBOARD_MCP_COMMAND: agentCommand,
     // AppImage: AppRun inserts --no-sandbox before the script unless it's already there, which Node mode rejects
-    AIFIG_MCP_ARGS: JSON.stringify(agentCommand === process.env.APPIMAGE ? [cliPath, 'mcp', '--no-sandbox'] : [cliPath, 'mcp']),
-    AIFIG_MCP_ENV: JSON.stringify(env),
-    AIFIG_UI_DIST: uiDist,
+    NODBOARD_MCP_ARGS: JSON.stringify(agentCommand === process.env.APPIMAGE ? [cliPath, 'mcp', '--no-sandbox'] : [cliPath, 'mcp']),
+    NODBOARD_MCP_ENV: JSON.stringify(env),
+    NODBOARD_UI_DIST: uiDist,
   }
 }
 
@@ -168,14 +177,14 @@ async function ensureCore() {
   if (await healthy()) return 'reused'
   const log = fs.openSync(path.join(app.getPath('userData'), 'core.log'), 'a')
   coreProcess = spawn(process.execPath, [cliPath, 'core'], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', AIFIG_CORE_PORT: String(port), ...mcpEnv() },
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', NODBOARD_CORE_PORT: String(port), ...mcpEnv() },
     stdio: ['ignore', log, log],
   })
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 200))
     if (await healthy()) return 'spawned'
   }
-  throw new Error(`The ai-figma core did not start. See ${path.join(app.getPath('userData'), 'core.log')}`)
+  throw new Error(`The nodboard core did not start. See ${path.join(app.getPath('userData'), 'core.log')}`)
 }
 
 async function call(tool, args) {
@@ -194,10 +203,10 @@ async function call(tool, args) {
 // Policy: a key is persisted only when safeStorage is backed by the OS (macOS Keychain, Windows DPAPI, or a
 // Linux keyring — not Electron's `basic_text` fallback, which uses a hard-coded password). Otherwise the key
 // is kept in memory for this session and handed to the core; settings without a key are stored in plain JSON.
-// AIFIG_DESKTOP_KEYCHAIN=mock|none swaps in a test double / simulates a machine without a keychain.
+// NODBOARD_DESKTOP_KEYCHAIN=mock|none swaps in a test double / simulates a machine without a keychain.
 
-const KEYCHAIN_MODE = process.env.AIFIG_DESKTOP_KEYCHAIN
-const MOCK_PREFIX = Buffer.from('AIFIGMOCK1:')
+const KEYCHAIN_MODE = process.env.NODBOARD_DESKTOP_KEYCHAIN
+const MOCK_PREFIX = Buffer.from('NODBOARD1:')
 const vault =
   KEYCHAIN_MODE === 'mock'
     ? {
@@ -259,7 +268,7 @@ async function pushAssistant(settings) {
   }
 }
 
-ipcMain.on('aifig:features', (e) => {
+ipcMain.on('nodboard:features', (e) => {
   e.returnValue = { assistant: assistantOn }
 })
 
@@ -303,16 +312,16 @@ const getTelemetry = () =>
 ipcMain.handle('telemetry:status', () => getTelemetry().status())
 ipcMain.handle('telemetry:set', (_e, granted) => getTelemetry().setConsent(granted === true))
 
-ipcMain.on('aifig:token', (e) => {
+ipcMain.on('nodboard:token', (e) => {
   e.returnValue = readToken()
 })
 
 // ---- files -------------------------------------------------------------------
 
 async function openFile(file) {
-  if (file && file.toLowerCase().endsWith('.aifigpack')) return openPack(file)
+  if (file && /\.(nodboard|aifig)pack$/i.test(file)) return openPack(file)
   if (!file) {
-    const r = await dialog.showOpenDialog(win, { title: tr('openBoard'), filters: [{ name: tr('boardFile'), extensions: ['aifig'] }], properties: ['openFile'] })
+    const r = await dialog.showOpenDialog(win, { title: tr('openBoard'), filters: [{ name: tr('boardFile'), extensions: ['nodboard', 'aifig'] }], properties: ['openFile'] })
     if (r.canceled || !r.filePaths[0]) return
     file = r.filePaths[0]
   }
@@ -328,7 +337,7 @@ async function openFile(file) {
 /** A share pack: the canvas shows what's inside and asks where to put it. */
 async function openPack(file) {
   if (!file) {
-    const r = await dialog.showOpenDialog(win, { title: tr('openPack'), filters: [{ name: tr('packFile'), extensions: ['aifigpack'] }], properties: ['openFile'] })
+    const r = await dialog.showOpenDialog(win, { title: tr('openPack'), filters: [{ name: tr('packFile'), extensions: ['nodboardpack', 'aifigpack'] }], properties: ['openFile'] })
     if (r.canceled || !r.filePaths[0]) return
     file = r.filePaths[0]
   }
@@ -336,7 +345,7 @@ async function openPack(file) {
 }
 
 const SAVE_KINDS = {
-  pack: { ext: 'aifigpack', name: () => tr('packFile') },
+  pack: { ext: 'nodboardpack', name: () => tr('packFile') },
   zip: { ext: 'zip', name: () => 'ZIP' },
   html: { ext: 'html', name: () => 'HTML' },
 }
@@ -357,7 +366,7 @@ ipcMain.handle('dialog:save', async (_e, opts) => {
 })
 // only files the canvas just wrote through a save dialog: packs and web exports
 ipcMain.on('shell:reveal', (_e, file) => {
-  if (typeof file !== 'string' || !path.isAbsolute(file) || !/\.(aifigpack|zip|html)$|[\\/][^\\/]+-web$/i.test(file) || !fs.existsSync(file)) return
+  if (typeof file !== 'string' || !path.isAbsolute(file) || !/\.(nodboardpack|aifigpack|zip|html)$|[\\/][^\\/]+-web$/i.test(file) || !fs.existsSync(file)) return
   shell.showItemInFolder(file)
 })
 
@@ -365,8 +374,8 @@ async function saveAs() {
   if (!state.boardId) return
   const r = await dialog.showSaveDialog(win, {
     title: tr('saveBoardAs'),
-    defaultPath: path.join(app.getPath('documents'), `${(state.title || tr('board')).replace(/[\\/:*?"<>|]+/g, '-')}.aifig`),
-    filters: [{ name: tr('boardFile'), extensions: ['aifig'] }],
+    defaultPath: path.join(app.getPath('documents'), `${(state.title || tr('board')).replace(/[\\/:*?"<>|]+/g, '-')}.nodboard`),
+    filters: [{ name: tr('boardFile'), extensions: ['nodboard', 'aifig'] }],
   })
   if (r.canceled || !r.filePath) return
   try {
@@ -419,7 +428,7 @@ function buildMenu() {
           id: 'open-recent',
           label: tr('openRecent'),
           submenu: recent.length
-            ? [...recent.map((f) => ({ label: path.basename(f, '.aifig'), sublabel: f, click: () => openFile(f) })), { type: 'separator' }, { label: tr('clearRecent'), click: () => (writePrefs({ ...readPrefs(), recent: [] }), app.clearRecentDocuments(), buildMenu()) }]
+            ? [...recent.map((f) => ({ label: path.basename(f).replace(/\.(nodboard|aifig)$/i, ''), sublabel: f, click: () => openFile(f) })), { type: 'separator' }, { label: tr('clearRecent'), click: () => (writePrefs({ ...readPrefs(), recent: [] }), app.clearRecentDocuments(), buildMenu()) }]
             : [{ label: tr('noRecent'), enabled: false }],
         },
         { type: 'separator' },
@@ -631,7 +640,7 @@ async function createWindow() {
     height: 900,
     minWidth: 720,
     minHeight: 480,
-    title: 'ai-figma',
+    title: 'nodboard',
     ...(process.platform !== 'darwin' && windowIcon ? { icon: windowIcon } : {}),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#141416' : '#FAFAF9',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
@@ -653,7 +662,7 @@ async function createWindow() {
   } catch (e) {
     dialog.showErrorBox(tr('startFailed'), String(e.message ?? e))
   }
-  const fileArg = pendingFile ?? process.argv.find((a) => /\.aifig(pack)?$/i.test(a))
+  const fileArg = pendingFile ?? process.argv.find((a) => /\.(nodboard|aifig)(pack)?$/i.test(a))
   pendingFile = null
   if (fileArg) openFile(path.resolve(fileArg))
 }
@@ -672,7 +681,7 @@ app.on('open-file', (e, file) => {
 const firstInstance = app.requestSingleInstanceLock()
 if (!firstInstance) app.quit()
 app.on('second-instance', (_e, argv) => {
-  const file = argv.find((a) => /\.aifig(pack)?$/i.test(a))
+  const file = argv.find((a) => /\.(nodboard|aifig)(pack)?$/i.test(a))
   if (win) {
     if (win.isMinimized()) win.restore()
     win.focus()

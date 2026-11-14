@@ -13,17 +13,17 @@ import { authHeaders } from './lib/core-auth.mjs'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const shotDir = process.argv[2]
 execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'ignore' })
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-desktop-'))
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-desktop-'))
 const port = String(47871 + Math.floor(Math.random() * 50))
-const env = { ...process.env, AIFIG_HOME: path.join(tmp, 'home'), AIFIG_CORE_PORT: port, AIFIG_DESKTOP_KEYCHAIN: 'mock', DISPLAY: process.env.DISPLAY ?? ':1' }
-delete env.AIFIG_TOKEN
+const env = { ...process.env, NODBOARD_HOME: path.join(tmp, 'home'), NODBOARD_CORE_PORT: port, NODBOARD_DESKTOP_KEYCHAIN: 'mock', DISPLAY: process.env.DISPLAY ?? ':1' }
+delete env.NODBOARD_TOKEN
 let failures = 0
 const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? ` — ${detail}` : ''}`)
   if (!ok) failures++
 }
 const call = async (tool, args) => {
-  const r = await fetch(`http://127.0.0.1:${port}/api/call`, { method: 'POST', headers: authHeaders(env.AIFIG_HOME), body: JSON.stringify({ tool, args, caller: { id: 't', name: 'Test', client: 'test', kind: 'human' } }) })
+  const r = await fetch(`http://127.0.0.1:${port}/api/call`, { method: 'POST', headers: authHeaders(env.NODBOARD_HOME), body: JSON.stringify({ tool, args, caller: { id: 't', name: 'Test', client: 'test', kind: 'human' } }) })
   return (await r.json()).result
 }
 
@@ -37,11 +37,11 @@ let app = await launch()
 const win = await app.firstWindow()
 await win.waitForSelector('.ae-canvas', { timeout: 30000 })
 check('first launch shows the welcome', (await win.locator('[data-welcome]').count()) === 1 || (await win.evaluate(() => navigator.webdriver)))
-await win.evaluate(() => localStorage.setItem('aifig:welcomed', '1'))
+await win.evaluate(() => localStorage.setItem('nodboard:welcomed', '1'))
 await win.reload()
 await win.waitForSelector('.ae-canvas', { timeout: 30000 })
 await win.waitForTimeout(800)
-check('desktop window opens the canvas', (await win.title()).includes('ai-figma'), await win.title())
+check('desktop window opens the canvas', (await win.title()).includes('nodboard'), await win.title())
 const menus = await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.map((i) => i.label))
 check('native menus', ['File', 'Edit', 'View'].every((m) => menus.includes(m)), menus.join(', '))
 
@@ -55,9 +55,9 @@ await app.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('lang
 await win.waitForTimeout(500)
 const backMenus = await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.map((i) => i.label))
 check('View ▸ Language switches the canvas and the native menus', zhMenus.includes('文件') && zhMenus.includes('帮助') && zhUi.join() === 'zh-CN,设置' && backMenus.includes('File'), `${zhMenus.join(', ')} · ${zhUi.join()}`)
-check('preload bridge is available', await win.evaluate(() => !!window.aifigDesktop))
-const fileToken = fs.readFileSync(path.join(env.AIFIG_HOME, 'access-token'), 'utf8').trim()
-check('the desktop app gets the access token from the shell (no link needed)', (await win.evaluate(() => window.aifigDesktop.token)) === fileToken && !win.url().includes('token='))
+check('preload bridge is available', await win.evaluate(() => !!window.nodboardDesktop))
+const fileToken = fs.readFileSync(path.join(env.NODBOARD_HOME, 'access-token'), 'utf8').trim()
+check('the desktop app gets the access token from the shell (no link needed)', (await win.evaluate(() => window.nodboardDesktop.token)) === fileToken && !win.url().includes('token='))
 const mainPrefs = await app.evaluate(({ BrowserWindow }) => {
   const p = BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences()
   return { sandbox: p.sandbox, contextIsolation: p.contextIsolation, nodeIntegration: p.nodeIntegration, webviewTag: p.webviewTag }
@@ -101,31 +101,31 @@ await win.keyboard.press('Escape')
 await win.waitForTimeout(300)
 check('File ▸ Version History… opens the version history of the open board', versionsOpened && (await win.locator('[data-version-history]').count()) === 0)
 
-// open a .aifig file (as if double-clicked in the OS) and Save As
+// open a .nodboard file (as if double-clicked in the OS) and Save As
 const src = (await call('list_boards', {})).boards[0]
-const file = path.join(tmp, 'Research notes.aifig')
-fs.copyFileSync(path.join(env.AIFIG_HOME, 'boards', `${src.id}.aifig`), file)
+const file = path.join(tmp, 'Research notes.nodboard')
+fs.copyFileSync(path.join(env.NODBOARD_HOME, 'boards', `${src.id}.nodboard`), file)
 await app.evaluate(({ app }, f) => app.emit('open-file', { preventDefault() {} }, f), file)
 await win.waitForTimeout(1200)
 const opened = (await call('list_boards', {})).boards.find((b) => b.path === file)
 const recent = await app.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('open-recent').submenu.items.map((i) => i.sublabel ?? i.label))
-check('opening a .aifig file adds it to Open Recent and shows it', !!opened && recent.includes(file) && (await win.evaluate(() => new URL(location.href).searchParams.get('board'))) === opened.id)
-const saved = path.join(tmp, 'Copy.aifig')
+check('opening a .nodboard file adds it to Open Recent and shows it', !!opened && recent.includes(file) && (await win.evaluate(() => new URL(location.href).searchParams.get('board'))) === opened.id)
+const saved = path.join(tmp, 'Copy.nodboard')
 await call('save_file', { board: opened.id, path: saved })
 await call('create_blocks', { board: saved ? opened.id : '', blocks: [{ text: 'Mirrored to the file' }] })
 await new Promise((r) => setTimeout(r, 600))
 check('Save As writes the board and keeps the file in sync', fs.existsSync(saved) && fs.statSync(saved).size > 100)
 
 // the Connect dialog's MCP config launches the bundled CLI with Electron's Node
-const health = await (await fetch(`http://127.0.0.1:${port}/api/health`, { headers: authHeaders(env.AIFIG_HOME) })).json()
+const health = await (await fetch(`http://127.0.0.1:${port}/api/health`, { headers: authHeaders(env.NODBOARD_HOME) })).json()
 check('Connect dialog points at the bundled CLI / MCP', health.mcp.command.includes('electron') && health.mcp.env?.ELECTRON_RUN_AS_NODE === '1', `${health.mcp.command} ${health.mcp.args.join(' ')}`)
 const mcp = new Client({ name: 'desktop-check', version: '1' })
-await mcp.connect(new StdioClientTransport({ command: health.mcp.command, args: health.mcp.args, env: { ...process.env, ...health.mcp.env, AIFIG_CORE_PORT: port, AIFIG_HOME: env.AIFIG_HOME } }))
+await mcp.connect(new StdioClientTransport({ command: health.mcp.command, args: health.mcp.args, env: { ...process.env, ...health.mcp.env, NODBOARD_CORE_PORT: port, NODBOARD_HOME: env.NODBOARD_HOME } }))
 const tools = (await mcp.listTools()).tools.length
 await mcp.close()
 check('an agent can connect with that exact config', tools > 15, `${tools} tools`)
 // web snippets run in <webview>s with a partition per snippet, from this core's own snippet host
-const coreHealth = await (await fetch(`http://127.0.0.1:${port}/api/health`, { headers: authHeaders(env.AIFIG_HOME) })).json()
+const coreHealth = await (await fetch(`http://127.0.0.1:${port}/api/health`, { headers: authHeaders(env.NODBOARD_HOME) })).json()
 const webviews = () =>
   app.evaluate(({ webContents, session }) =>
     webContents
@@ -152,7 +152,7 @@ const runSnippet = async (id) => {
 const inWebview = (wcId, js) => app.evaluate(({ webContents }, [i, code]) => webContents.fromId(i)?.executeJavaScript(code, true), [wcId, js])
 const stateOf = async (id) => (await call('get_board', { format: 'json' }))?.blocks?.find((b) => b.id === id)?.web?.state
 
-const snipId = (await call('create_snippet', { title: 'Desktop snippet', html: '<button id="b" style="font-size:20px;padding:20px">go</button>', js: "document.getElementById('b').onclick = () => aifig.setState({ clicked: true })" }))?.id
+const snipId = (await call('create_snippet', { title: 'Desktop snippet', html: '<button id="b" style="font-size:20px;padding:20px">go</button>', js: "document.getElementById('b').onclick = () => nodboard.setState({ clicked: true })" }))?.id
 const wv = await runSnippet(snipId)
 const tag = await win.evaluate(() => document.querySelector('[data-web-frame]')?.tagName)
 check('snippets run in a <webview>, not an iframe', tag === 'WEBVIEW', tag)
@@ -203,27 +203,27 @@ const forged = await win.evaluate(async (corePort) => {
 }, port)
 check('forged webviews (app URL, persistent or shared partition) are refused by the main process', Object.values(forged).every((v) => v === 'blocked'), JSON.stringify(forged))
 
-const assistantOn = process.env.AIFIG_FEATURE_ASSISTANT === '1'
+const assistantOn = process.env.NODBOARD_FEATURE_ASSISTANT === '1'
 if (!assistantOn) {
   // the built-in assistant is behind a build-time flag, off by default
-  const bridge = await win.evaluate(() => 'assistant' in window.aifigDesktop)
+  const bridge = await win.evaluate(() => 'assistant' in window.nodboardDesktop)
   const menuItem = await app.evaluate(({ Menu }) => !!Menu.getApplicationMenu()?.getMenuItemById('assistant-settings'))
-  const route = (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders(env.AIFIG_HOME) })).status
+  const route = (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders(env.NODBOARD_HOME) })).status
   check('the built-in assistant is off by default: no menu item, no keychain bridge, no core route', !bridge && !menuItem && route === 404, JSON.stringify({ bridge, menuItem, route }))
 } else {
-// assistant settings go through the keychain bridge (AIFIG_DESKTOP_KEYCHAIN=mock stands in for the OS keychain)
-const before2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders(env.AIFIG_HOME) })).json()
+// assistant settings go through the keychain bridge (NODBOARD_DESKTOP_KEYCHAIN=mock stands in for the OS keychain)
+const before2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders(env.NODBOARD_HOME) })).json()
 const info = await win.evaluate(async () => {
-  await window.aifigDesktop.assistant.save({ provider: 'mock' })
-  return window.aifigDesktop.assistant.get()
+  await window.nodboardDesktop.assistant.save({ provider: 'mock' })
+  return window.nodboardDesktop.assistant.get()
 })
-const after2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders(env.AIFIG_HOME) })).json()
+const after2 = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders(env.NODBOARD_HOME) })).json()
 check('assistant settings save via the keychain bridge and enable the assistant', !before2.available && after2.available && info.provider === 'mock', `keychain: ${info.encryption}`)
-const keySaved = await win.evaluate(() => window.aifigDesktop.assistant.save({ provider: 'anthropic', key: 'sk-ant-test-SECRET' }))
+const keySaved = await win.evaluate(() => window.nodboardDesktop.assistant.save({ provider: 'anthropic', key: 'sk-ant-test-SECRET' }))
 const stored = fs.readFileSync(path.join(tmp, 'profile', 'assistant.bin'))
-check('with a keychain, API keys are persisted encrypted (never plain text)', keySaved.persisted && keySaved.storage === 'mock' && stored.subarray(0, 11).toString() === 'AIFIGMOCK1:' && !stored.toString('latin1').includes('SECRET'), JSON.stringify(keySaved))
+check('with a keychain, API keys are persisted encrypted (never plain text)', keySaved.persisted && keySaved.storage === 'mock' && stored.subarray(0, 10).toString() === 'NODBOARD1:' && !stored.toString('latin1').includes('SECRET'), JSON.stringify(keySaved))
 }
-await win.evaluate(() => window.dispatchEvent(new Event('aifig:connect')))
+await win.evaluate(() => window.dispatchEvent(new Event('nodboard:connect')))
 await win.waitForTimeout(500)
 if (shotDir) await win.screenshot({ path: path.join(shotDir, 'desktop-connect.png') })
 
@@ -231,15 +231,15 @@ await app.close()
 
 // a machine without an OS keychain (or Linux basic_text): keys are kept for the session only, never written
 if (assistantOn) {
-app = await launch({ AIFIG_DESKTOP_KEYCHAIN: 'none' })
+app = await launch({ NODBOARD_DESKTOP_KEYCHAIN: 'none' })
 const win2 = await app.firstWindow()
 await win2.waitForSelector('.ae-canvas', { timeout: 30000 })
 const noKc = await win2.evaluate(async () => {
-  const r = await window.aifigDesktop.assistant.save({ provider: 'openai', key: 'sk-proj-SESSION-ONLY-123' })
-  return { r, get: await window.aifigDesktop.assistant.get() }
+  const r = await window.nodboardDesktop.assistant.save({ provider: 'openai', key: 'sk-proj-SESSION-ONLY-123' })
+  return { r, get: await window.nodboardDesktop.assistant.get() }
 })
 const onDisk = fs.readFileSync(path.join(tmp, 'profile', 'assistant.bin'), 'latin1')
-const coreStatus = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders(env.AIFIG_HOME) })).json()
+const coreStatus = await (await fetch(`http://127.0.0.1:${port}/api/assistant/status`, { headers: authHeaders(env.NODBOARD_HOME) })).json()
 check('without a keychain, the key is used for this session only and never written to disk', !noKc.r.persisted && noKc.r.storage === 'session' && noKc.get.encryption === 'session' && noKc.get.hasKey && coreStatus.available && !onDisk.includes('SESSION-ONLY'), JSON.stringify(noKc))
 await app.close()
 }

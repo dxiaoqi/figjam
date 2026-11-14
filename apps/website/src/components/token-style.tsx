@@ -1,4 +1,4 @@
-import { AGENT_COLORS, COLORS, COLOR_TOKENS, SURFACES } from '@aifig/shared'
+import { AGENT_COLORS, COLORS, COLOR_TOKENS, SURFACES } from '@nodboard/shared'
 
 /** Emits the product's design tokens as CSS variables, so the site and the canvas share one source of truth. */
 export function TokenStyle() {

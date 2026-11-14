@@ -1,13 +1,13 @@
 // Bridge between the canvas (renderer) and the desktop shell.
 const { contextBridge, ipcRenderer } = require('electron')
 
-const features = ipcRenderer.sendSync('aifig:features') || {}
+const features = ipcRenderer.sendSync('nodboard:features') || {}
 
-contextBridge.exposeInMainWorld('aifigDesktop', {
+contextBridge.exposeInMainWorld('nodboardDesktop', {
   platform: process.platform,
-  // the core's access token (read by the shell from AIFIG_HOME); snippets never see it — they run in webviews
+  // the core's access token (read by the shell from NODBOARD_HOME); snippets never see it — they run in webviews
   // with their own preload
-  token: ipcRenderer.sendSync('aifig:token') || undefined,
+  token: ipcRenderer.sendSync('nodboard:token') || undefined,
   snippetWebviews: true,
   onMenu(cb) {
     const listener = (_e, action, payload) => cb(action, payload)

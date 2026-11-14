@@ -1,7 +1,7 @@
 import { ChevronDown, FolderInput, Puzzle, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { COLORS, type ActivityEntry, type PermissionGrant } from '@aifig/shared'
+import { COLORS, type ActivityEntry, type PermissionGrant } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -131,7 +131,7 @@ function SkillCard({ s, onChange }: { s: SkillRow; onChange: () => void }) {
       </button>
       {open && detail && (
         <div className="mt-2 space-y-3 text-[12px]">
-          <div className="aifig-rich max-h-48 overflow-y-auto rounded-lg bg-muted/50 p-2.5 leading-relaxed" data-skill-instructions>
+          <div className="nodboard-rich max-h-48 overflow-y-auto rounded-lg bg-muted/50 p-2.5 leading-relaxed" data-skill-instructions>
             {renderMarkdown(detail.instructions.replace(/^#+\s*/gm, '**').replace(/^(\*\*[^\n]*)$/gm, '$1**'))}
           </div>
           <div>
@@ -243,7 +243,7 @@ export function SkillsButton() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-lg px-2 text-[13px]" onClick={() => window.dispatchEvent(new Event('aifig:skills'))} aria-label={t('skills.panelTitle')} data-skills-button>
+        <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-lg px-2 text-[13px]" onClick={() => window.dispatchEvent(new Event('nodboard:skills'))} aria-label={t('skills.panelTitle')} data-skills-button>
           <Puzzle className="size-4" strokeWidth={1.75} />
           {enabled.length > 0 && <span className="text-[11px] tabular-nums text-muted-foreground">{enabled.length}</span>}
         </Button>
@@ -267,8 +267,8 @@ export function SkillsPanel() {
       setTab((e as CustomEvent<string | undefined>).detail ?? 'board')
       setOpen(true)
     }
-    window.addEventListener('aifig:skills', on)
-    return () => window.removeEventListener('aifig:skills', on)
+    window.addEventListener('nodboard:skills', on)
+    return () => window.removeEventListener('nodboard:skills', on)
   }, [])
   useEffect(() => {
     if (open) load()

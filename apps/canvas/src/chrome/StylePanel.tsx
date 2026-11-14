@@ -1,7 +1,7 @@
 import { LayoutGrid, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { COLORS, COLOR_TOKENS, STICKY_SIZES, measureText, type Block, type ColorToken, type SizeToken } from '@aifig/shared'
+import { COLORS, COLOR_TOKENS, STICKY_SIZES, measureText, type Block, type ColorToken, type SizeToken } from '@nodboard/shared'
 import { useBoard } from '../board-context'
 import { useEditorState } from '../canvas/editor-context'
 import { callCore } from '../lib/core'

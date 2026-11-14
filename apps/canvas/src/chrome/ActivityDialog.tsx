@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { ActivityCategory, ActivityEntry, PermissionGrant, SecurityServerMessage } from '@aifig/shared'
+import type { ActivityCategory, ActivityEntry, PermissionGrant, SecurityServerMessage } from '@nodboard/shared'
 import { cn } from '@/lib/utils'
 import { apiFetch } from '../lib/auth'
 import { SECURITY_EVENT } from '../sync/provider'
@@ -15,7 +15,7 @@ const FILTERS: (ActivityCategory | 'all')[] = ['all', 'network', 'secret', 'perm
 
 const time = (at: number) => new Date(at).toLocaleString(getLocale(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-/** Activity log (network, secrets, permissions, rejected clients) and remembered permissions. Opened with `aifig:activity`. */
+/** Activity log (network, secrets, permissions, rejected clients) and remembered permissions. Opened with `nodboard:activity`. */
 export function ActivityDialog() {
   const [open, setOpen] = useState(false)
   const [entries, setEntries] = useState<ActivityEntry[] | null>(null)
@@ -40,8 +40,8 @@ export function ActivityDialog() {
       setOpen(true)
       load()
     }
-    window.addEventListener('aifig:activity', show)
-    return () => window.removeEventListener('aifig:activity', show)
+    window.addEventListener('nodboard:activity', show)
+    return () => window.removeEventListener('nodboard:activity', show)
   }, [load])
 
   useEffect(() => {

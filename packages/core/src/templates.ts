@@ -1,4 +1,4 @@
-import type { ContentLanguage, TemplateId } from '@aifig/shared'
+import type { ContentLanguage, TemplateId } from '@nodboard/shared'
 import { SCENARIO_BUILDERS } from './scenario-templates'
 
 export interface TemplateStep {

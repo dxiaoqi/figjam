@@ -1,8 +1,8 @@
 import { Eye, ListTree, Maximize, MessageCircle, Minus, Moon, Plus, Sun, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as Y from 'yjs'
-import { CanvasView, Editor, useCamera } from '@aifig/canvas-engine'
-import { COLORS, rotatePoint, SURFACES, type Block, type Thread, type WebExportData } from '@aifig/shared'
+import { CanvasView, Editor, useCamera } from '@nodboard/canvas-engine'
+import { COLORS, rotatePoint, SURFACES, type Block, type Thread, type WebExportData } from '@nodboard/shared'
 import { cn } from '@/lib/utils'
 import { HeaderMark } from '../chrome/BoardMenu'
 import { ago, relationLabel, t, useT } from '../i18n'
@@ -79,7 +79,7 @@ function Pins({ editor, threads }: { editor: Editor; threads: Thread[] }) {
               data-ui
               data-viewer-pin={th.id}
               onClick={() => setOpen(isOpen ? null : th.id)}
-              className={cn('aifig-viewer-pin pointer-events-auto', th.resolved && 'is-resolved', isOpen && 'is-open')}
+              className={cn('nodboard-viewer-pin pointer-events-auto', th.resolved && 'is-resolved', isOpen && 'is-open')}
               aria-label={t('viewer.openComment', { name: th.author.name })}
             >
               <span>{th.author.name.slice(0, 1).toUpperCase()}</span>
@@ -143,7 +143,7 @@ export function Viewer() {
     document.documentElement.classList.toggle('dark', dark)
   }, [dark])
   useEffect(() => {
-    document.title = `${data.title} — ai-figma`
+    document.title = `${data.title} — nodboard`
     const raf = requestAnimationFrame(() => editor.zoomToFit(false))
     ;(window as { editor?: Editor }).editor = editor
     return () => cancelAnimationFrame(raf)
@@ -157,8 +157,8 @@ export function Viewer() {
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && viewer.set({ active: null })
     // Esc pressed inside a snippet (its frame has the keyboard)
     const exit = (e: MessageEvent) => {
-      const m = e.data as { aifig?: number; type?: string } | null
-      if (m?.aifig === 1 && m.type === 'exit' && [...document.querySelectorAll('iframe')].some((f) => f.contentWindow === e.source)) viewer.set({ active: null })
+      const m = e.data as { nodboard?: number; type?: string } | null
+      if (m?.nodboard === 1 && m.type === 'exit' && [...document.querySelectorAll('iframe')].some((f) => f.contentWindow === e.source)) viewer.set({ active: null })
     }
     window.addEventListener('pointerdown', leave, true)
     window.addEventListener('keydown', esc)
@@ -176,7 +176,7 @@ export function Viewer() {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-[var(--canvas)]" data-viewer>
-      <CanvasView editor={editor} className="aifig-canvas">
+      <CanvasView editor={editor} className="nodboard-canvas">
         {comments && <Pins editor={editor} threads={threads} />}
       </CanvasView>
       {!data.blocks.length && <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">{t('viewer.empty')}</div>}

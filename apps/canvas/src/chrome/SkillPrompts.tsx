@@ -1,7 +1,7 @@
 import { Plus, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { COLOR_TOKENS, COLORS, SKILL_ICONS, type FieldDef } from '@aifig/shared'
+import { COLOR_TOKENS, COLORS, SKILL_ICONS, type FieldDef } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -50,8 +50,8 @@ export function SaveTypeDialog() {
       setIcon('Tag')
       setFields(guessFields(b.text))
     }
-    window.addEventListener('aifig:save-type', on)
-    return () => window.removeEventListener('aifig:save-type', on)
+    window.addEventListener('nodboard:save-type', on)
+    return () => window.removeEventListener('nodboard:save-type', on)
   }, [editor])
   const save = async () => {
     if (!blockId) return
@@ -59,7 +59,7 @@ export function SaveTypeDialog() {
     try {
       const r = await callCore<{ type: string; skill: string; export: string }>('save_block_type', { board: boardId, block: blockId, label: label.trim(), color, icon, fields })
       toast.success(t('skills.saved', { label: label.trim() }), {
-        description: `${r.type} · ~/.aifig/skills/${r.skill}`,
+        description: `${r.type} · ~/.nodboard/skills/${r.skill}`,
         action: { label: t('skills.download'), onClick: () => window.open(r.export, '_blank') },
       })
       setBlockId(null)

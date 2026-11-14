@@ -35,8 +35,8 @@ const check = (name, ok, detail = '') => {
   if (!ok) failures++
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aifig-pkg-'))
-const home = path.join(tmp, 'aifig-home')
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nodboard-pkg-'))
+const home = path.join(tmp, 'nodboard-home')
 const agentHome = path.join(tmp, 'agent-home')
 const port = 48200 + Math.floor(Math.random() * 300)
 const coreUrl = `http://127.0.0.1:${port}`
@@ -84,11 +84,11 @@ const telemetry = http.createServer((req, res) => {
 await new Promise((r) => telemetry.listen(0, '127.0.0.1', r))
 const telemetryUrl = `http://127.0.0.1:${telemetry.address().port}`
 
-const baseEnv = { ...process.env, AIFIG_HOME: home, AIFIG_CORE_PORT: String(port), AIFIG_AGENT_CONFIG_HOME: agentHome, AIFIG_DESKTOP_KEYCHAIN: 'mock' }
-delete baseEnv.AIFIG_TOKEN
-delete baseEnv.AIFIG_TELEMETRY
+const baseEnv = { ...process.env, NODBOARD_HOME: home, NODBOARD_CORE_PORT: String(port), NODBOARD_AGENT_CONFIG_HOME: agentHome, NODBOARD_DESKTOP_KEYCHAIN: 'mock' }
+delete baseEnv.NODBOARD_TOKEN
+delete baseEnv.NODBOARD_TELEMETRY
 delete baseEnv.DO_NOT_TRACK
-const appEnv = { ...baseEnv, AIFIG_TELEMETRY_URL: telemetryUrl, APPIMAGE: command === appImage ? undefined : command }
+const appEnv = { ...baseEnv, NODBOARD_TELEMETRY_URL: telemetryUrl, APPIMAGE: command === appImage ? undefined : command }
 if (!appEnv.APPIMAGE) delete appEnv.APPIMAGE
 const token = () => fs.readFileSync(path.join(home, 'access-token'), 'utf8').trim()
 const api = (p, init = {}) => fetch(coreUrl + p, { ...init, headers: { 'content-type': 'application/json', authorization: `Bearer ${token()}`, ...(init.headers ?? {}) } }).then((r) => r.json())
@@ -115,7 +115,7 @@ check('the packaged app starts its bundled core', !!h?.ok, h ? `${((Date.now() -
 if (!h?.ok) process.exit(1)
 
 const runtimeDir = path.join(home, 'runtime')
-check('the CLI, UI and skills are copied to a stable runtime folder', fs.existsSync(path.join(runtimeDir, fs.readdirSync(runtimeDir)[0] ?? '-', 'aifig.mjs')), fs.readdirSync(runtimeDir).join(', '))
+check('the CLI, UI and skills are copied to a stable runtime folder', fs.existsSync(path.join(runtimeDir, fs.readdirSync(runtimeDir)[0] ?? '-', 'nodboard.mjs')), fs.readdirSync(runtimeDir).join(', '))
 check('agents are pointed at the AppImage file and the stable CLI, not the temporary mount', h.mcp.command === (appEnv.APPIMAGE ?? appImage) && h.mcp.args[0].startsWith(runtimeDir) && h.mcp.args.includes('--no-sandbox'), `${h.mcp.command} ${h.mcp.args.join(' ')}`)
 check('the MCP env needs no Node install', h.mcp.env?.ELECTRON_RUN_AS_NODE === '1' && !/\bnode$/.test(h.mcp.command))
 
@@ -143,10 +143,10 @@ check('the app window loads the canvas from the core', !!page?.url().startsWith(
 if (page) {
   await page.waitForSelector('.ae-canvas', { timeout: 30000 }).catch(() => {})
   check('the canvas renders', (await page.locator('.ae-canvas').count()) > 0)
-  const status0 = await page.evaluate(() => window.aifigDesktop?.telemetry?.status())
+  const status0 = await page.evaluate(() => window.nodboardDesktop?.telemetry?.status())
   await sleep(1500)
   check('telemetry is off until the user opts in, and nothing is sent', status0?.configured === true && status0.consent === null && status0.enabled === false && pings.length === 0, JSON.stringify({ consent: status0?.consent, pings: pings.length }))
-  const status1 = await page.evaluate(() => window.aifigDesktop.telemetry.set(true))
+  const status1 = await page.evaluate(() => window.nodboardDesktop.telemetry.set(true))
   for (let i = 0; i < 50 && !pings.length; i++) await sleep(100)
   const ping = pings[0]?.body ?? {}
   check('opting in sends one install ping', pings.length === 1 && pings[0].url === '/v1/events' && ping.event === 'install' && status1.enabled, JSON.stringify(ping))
@@ -154,7 +154,7 @@ if (page) {
   const text = JSON.stringify(ping)
   check('no PII in the ping (user name, host name, home path)', ![os.userInfo().username, os.hostname(), os.homedir(), tmp].some((s) => s && s.length > 2 && text.includes(s)), text)
   const stateFile = path.join(tmp, 'profile', 'telemetry.json')
-  await page.evaluate(() => window.aifigDesktop.telemetry.set(false))
+  await page.evaluate(() => window.nodboardDesktop.telemetry.set(false))
   const after = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
   check('opting out deletes the install ID', after.consent === 'denied' && !('installId' in after), JSON.stringify(after))
 }
@@ -163,7 +163,7 @@ if (page) {
 const setupHeaders = { origin: coreUrl }
 const installed = await api('/api/agents/claude/install', { method: 'POST', body: '{}', headers: setupHeaders })
 const claudeCfg = JSON.parse(fs.readFileSync(path.join(agentHome, '.claude.json'), 'utf8'))
-const entry = claudeCfg.mcpServers?.['ai-figma']
+const entry = claudeCfg.mcpServers?.['nodboard']
 check('one-click setup writes the bundled CLI into ~/.claude.json', installed.ok && entry?.command === h.mcp.command, JSON.stringify(entry))
 const tested = await api('/api/agents/claude/test', { method: 'POST', body: '{}', headers: setupHeaders })
 check('Test connection does a real MCP handshake', tested.ok === true, JSON.stringify(tested).slice(0, 300))
@@ -200,10 +200,10 @@ try {
   const webDir = path.join(tmp, 'web-export')
   const web = await client.callTool({ name: 'export_web', arguments: { path: webDir } })
   check('web page export works (the viewer ships with the UI)', !web.isError && fs.existsSync(path.join(webDir, 'viewer.js')) && fs.existsSync(path.join(webDir, 'index.html')), web.content?.[0]?.text?.slice(0, 200))
-  const packFile = path.join(tmp, 'packaged.aifigpack')
+  const packFile = path.join(tmp, 'packaged.nodboardpack')
   const pk = await client.callTool({ name: 'export_pack', arguments: { path: packFile } })
   const up = pk.isError ? pk : await client.callTool({ name: 'import_pack', arguments: { path: packFile, dest: path.join(tmp, 'packs') } })
-  check('share packs export and import', !pk.isError && !up.isError && fs.readdirSync(path.join(tmp, 'packs')).some((f) => f.endsWith('.aifig')), (up.content ?? pk.content)?.[0]?.text?.slice(0, 200))
+  check('share packs export and import', !pk.isError && !up.isError && fs.readdirSync(path.join(tmp, 'packs')).some((f) => f.endsWith('.nodboard')), (up.content ?? pk.content)?.[0]?.text?.slice(0, 200))
   const ui = await fetch(`${coreUrl}/`, { headers: { authorization: `Bearer ${token()}` } }).then((r) => r.text())
   check('a core started by an agent still serves the canvas', ui.includes('<div id="root"'))
 } catch (e) {

@@ -1,5 +1,5 @@
 {
-  "name": "@aifig/cli",
+  "name": "@nodboard/cli",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,13 +7,13 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@aifig/shared": "*",
-    "@aifig/core": "*",
+    "@nodboard/shared": "*",
+    "@nodboard/core": "*",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "commander": "^15.0.0",
     "tsx": "^4.23.15"
   },
   "bin": {
-    "aifig": "../../bin/aifig.mjs"
+    "nodboard": "../../bin/nodboard.mjs"
   }
 }

@@ -34,7 +34,7 @@ function variantA(l: L) {
 <main id="panes">
 <section data-step="0"><label>${l('Workspace name', '工作区名称')}<input id="ws" placeholder="${l('Acme research', 'Acme 研究组')}"></label><p class="muted">${l('You can rename it later.', '之后可以改名。')}</p></section>
 <section data-step="1" hidden><label>${l('Invite teammates', '邀请同事')}<input id="mail" placeholder="name@company.com"></label><p class="muted">${l('Optional — skip if you work alone.', '可选 —— 一个人用可以跳过。')}</p></section>
-<section data-step="2" hidden><div class="card"><b>${l('Connect Claude Code', '连接 Claude Code')}</b><p class="muted">${l('One click adds ai-figma to its MCP settings.', '一键写入它的 MCP 配置。')}</p></div><p class="done" id="ok" hidden>✓ ${l('Workspace ready', '工作区已就绪')}</p></section>
+<section data-step="2" hidden><div class="card"><b>${l('Connect Claude Code', '连接 Claude Code')}</b><p class="muted">${l('One click adds nodboard to its MCP settings.', '一键把 nodboard 写入它的 MCP 配置。')}</p></div><p class="done" id="ok" hidden>✓ ${l('Workspace ready', '工作区已就绪')}</p></section>
 </main>
 <footer class="row" style="padding:0 20px 18px"><button class="ghost" id="back">${l('Back', '上一步')}</button><button class="primary" id="next">${l('Continue', '继续')}</button></footer>`,
     css: `${variantCss}.bar{height:4px;background:#ececef;border-radius:4px;margin-top:12px;overflow:hidden}.bar i{display:block;height:100%;background:#6e56cf;transition:width .25s}`,

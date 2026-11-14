@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
-import { rotatePoint, type Block, type Connector } from '@aifig/shared'
+import { rotatePoint, type Block, type Connector } from '@nodboard/shared'
 import type { Editor, HandleId, ShapeDef } from './editor'
 import { center, containsBox, expand, intersects, type Box, type Vec } from './geometry'
 import { InputController } from './input'
@@ -49,7 +49,7 @@ const BlockView = memo(function BlockView({ block, def, x, y, w, h, rotation, ed
   const cls = [
     'ae-block',
     `ae-kind-${block.kind}`,
-    `aifig-c-${block.color}`,
+    `nodboard-c-${block.color}`,
     block.pending ? 'is-pending' : '',
     enterDelay !== undefined ? 'is-entering' : '',
     accepted ? 'is-accepted' : '',

@@ -2,20 +2,20 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { Command } from 'commander'
 import { callCore } from './client'
-import { TEMPLATE_IDS, type AnyToolName, type CallerInfo } from '@aifig/shared'
+import { TEMPLATE_IDS, type AnyToolName, type CallerInfo } from '@nodboard/shared'
 
 const program = new Command()
 program
-  .name('aifig')
-  .description('ai-figma — a local canvas for you and your agents')
+  .name('nodboard')
+  .description('nodboard — a local canvas for you and your agents')
   .option('--json', 'print raw JSON results')
-  .option('--as <name>', 'agent name shown on the canvas (default: env AIFIG_AGENT or "Terminal")')
+  .option('--as <name>', 'agent name shown on the canvas (default: env NODBOARD_AGENT or "Terminal")')
   .option('--human', 'apply edits directly as the human (no review step)')
   .option('-b, --board <board>', 'board id or title (default: the board open in the canvas app)')
 
 function caller(): CallerInfo {
   const o = program.opts()
-  const name = o.as ?? process.env.AIFIG_AGENT ?? 'Terminal'
+  const name = o.as ?? process.env.NODBOARD_AGENT ?? 'Terminal'
   if (o.human) return { id: 'human:cli', name: 'You', client: 'cli', kind: 'human' }
   return { id: `cli:${name.toLowerCase().replace(/\s+/g, '-')}`, name, client: /claude|cursor|codex/i.test(name) ? name : 'cli', kind: 'agent' }
 }
@@ -44,10 +44,10 @@ program
   .description('run the core server in the foreground')
   .option('-p, --port <port>', 'port', (v) => Number(v))
   .action(async (opts) => {
-    const { startCore } = await import('@aifig/core')
-    const { tokenPath: tokenPathFor } = await import('@aifig/core/auth')
+    const { startCore } = await import('@nodboard/core')
+    const { tokenPath: tokenPathFor } = await import('@nodboard/core/auth')
     const { port } = await startCore(opts.port)
-    console.log(`ai-figma core listening on http://127.0.0.1:${port} — open the canvas with \`aifig open\` (API, MCP and sync require the access token in ${tokenPathFor()})`)
+    console.log(`nodboard core listening on http://127.0.0.1:${port} — open the canvas with \`nodboard open\` (API, MCP and sync require the access token in ${tokenPathFor()})`)
   })
 
 program
@@ -69,7 +69,7 @@ program
 
 program
   .command('new-board [title]')
-  .description('create a board, e.g. aifig new-board --template research-synthesis --lang zh-CN')
+  .description('create a board, e.g. nodboard new-board --template research-synthesis --lang zh-CN')
   .option('-t, --template <id>', `start from a template: ${TEMPLATE_IDS.join(' | ')}`)
   .option('-l, --lang <language>', 'template language: en | zh-CN')
   .action((title, opts) =>
@@ -93,7 +93,7 @@ program
 
 program
   .command('add [texts...]')
-  .description('add blocks, e.g. aifig add "Idea one" "Idea two" --layout row --frame Ideas')
+  .description('add blocks, e.g. nodboard add "Idea one" "Idea two" --layout row --frame Ideas')
   .option('-k, --kind <kind>', 'sticky | card | text', 'sticky')
   .option('-c, --color <color>', 'color token')
   .option('-s, --size <size>', 's | m | l | xl')
@@ -149,7 +149,7 @@ program
 
 program
   .command('image <source>')
-  .description('add an image from a file path or URL, e.g. aifig image ./sketch.png --frame Inspiration')
+  .description('add an image from a file path or URL, e.g. nodboard image ./sketch.png --frame Inspiration')
   .option('--width <px>', 'display width', (v) => Number(v))
   .option('--caption <text>')
   .option('--inside <frame>')
@@ -168,7 +168,7 @@ program
 
 program
   .command('video <file>')
-  .description('add a local MP4 / WebM video, e.g. aifig video ./demo.mp4 --poster ./demo.png')
+  .description('add a local MP4 / WebM video, e.g. nodboard video ./demo.mp4 --poster ./demo.png')
   .option('--poster <image>', 'poster image (otherwise the canvas captures a frame)')
   .option('--width <px>', 'display width', (v) => Number(v))
   .option('--caption <text>')
@@ -249,8 +249,8 @@ program
 
 program
   .command('pack')
-  .description('share the board as a .aifigpack (board, files, skills; --history, --no-comments)')
-  .option('-o, --out <file>', 'where to write it (default: ./<title>.aifigpack)')
+  .description('share the board as a .nodboardpack (board, files, skills; --history, --no-comments)')
+  .option('-o, --out <file>', 'where to write it (default: ./<title>.nodboardpack)')
   .option('--history', 'include version history')
   .option('--no-comments', 'leave comment threads out')
   .option('--force', 'overwrite an existing file')
@@ -259,7 +259,7 @@ program
     if (!out) {
       const b = await callCore('get_board', { board: program.opts().board }, caller())
       const title = b.ok ? String((b.result as { markdown: string }).markdown.match(/^# (.+) \(board id/)?.[1] ?? 'board') : 'board'
-      out = `${title.replace(/[\\/:*?"<>|]+/g, '-')}.aifigpack`
+      out = `${title.replace(/[\\/:*?"<>|]+/g, '-')}.nodboardpack`
     }
     return run('export_pack', { path: path.resolve(out), include_history: !!o.history, include_comments: o.comments !== false, overwrite: !!o.force }, (r) => {
       console.log(`✓ ${r.path} (${mb(r.size)}, ${r.files} files${r.includes.history ? ', with history' : ''}${r.includes.comments ? '' : ', no comments'}${r.includes.skills.length ? `, skills: ${r.includes.skills.join(', ')}` : ''})`)
@@ -269,7 +269,7 @@ program
 
 program
   .command('unpack <file>')
-  .description('open a .aifigpack: check it, save the board in a folder (default ~/Documents/ai-figma) and open it')
+  .description('open a .nodboardpack: check it, save the board in a folder (default ~/Documents/nodboard) and open it')
   .option('--to <dir>', 'folder for the board')
   .option('--install-skills', 'also install the skills in the pack')
   .action((file: string, o) =>
@@ -340,7 +340,7 @@ program
 
 program
   .command('route <ids...>')
-  .description('change connector routing, e.g. aifig route <id> --style elbow')
+  .description('change connector routing, e.g. nodboard route <id> --style elbow')
   .option('-s, --style <style>', 'curved | elbow | straight')
   .option('--label <label>')
   .option('-w, --waypoints <points>', 'elbow waypoints as "x,y;x,y"')
@@ -437,7 +437,7 @@ program
 
 program
   .command('set-type')
-  .description('promote blocks to a type (fields as flags), update fields, or demote with "none", e.g. aifig set-type <id> hypothesis --status supported')
+  .description('promote blocks to a type (fields as flags), update fields, or demote with "none", e.g. nodboard set-type <id> hypothesis --status supported')
   .argument('<ids>', 'comma-separated block ids')
   .argument('[type]', 'insight | question | quote | hypothesis | idea | todo | none (omit to only update fields)')
   .option('-i, --intent <text>', 'why (shown to the reviewer)')
@@ -456,7 +456,7 @@ program
 
 program
   .command('query')
-  .description('find blocks by type and fields, e.g. aifig query --type hypothesis --status unverified')
+  .description('find blocks by type and fields, e.g. nodboard query --type hypothesis --status unverified')
   .option('-t, --type <type>', 'block type, or "none" for untyped')
   .option('-f, --frame <frame>')
   .allowUnknownOption()
@@ -564,7 +564,7 @@ program
   .option('-n, --limit <n>', 'how many', (v) => Number(v))
   .action((o) =>
     run('list_versions', { limit: o.limit }, (r) => {
-      if (!r.versions.length) return console.log('No versions yet — they are taken automatically as the board changes, or with `aifig checkpoint "name"`.')
+      if (!r.versions.length) return console.log('No versions yet — they are taken automatically as the board changes, or with `nodboard checkpoint "name"`.')
       for (const v of r.versions) {
         const at = new Date(v.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
         console.log(`${v.id}  ${at.padEnd(20)}  ${(KIND_LABEL[v.kind] ?? v.kind).padEnd(11)}  ${String(v.blockCount).padStart(4)} blocks  ${v.name}`)
@@ -585,7 +585,7 @@ program
       if (r.unchanged) return console.log('The board already matches that version.')
       const s = r.summary
       console.log(`✓ restored ${r.restored}: ${s.added} back, ${s.removed} removed, ${s.changed} changed`)
-      console.log(r.changeSet ? csLine(r) : `  undo with: aifig --human restore ${r.checkpoint}`)
+      console.log(r.changeSet ? csLine(r) : `  undo with: nodboard --human restore ${r.checkpoint}`)
     }),
   )
 
@@ -605,11 +605,11 @@ program
 program
   .command('token')
   .description('print the local access token (for MCP-over-HTTP configs); --rotate replaces it')
-  .option('--rotate', 'generate a new token; clients reading AIFIG_HOME pick it up, pasted configs must be updated')
+  .option('--rotate', 'generate a new token; clients reading NODBOARD_HOME pick it up, pasted configs must be updated')
   .action(async (o) => {
-    const { loadOrCreateToken, rotateToken, tokenPath } = await import('@aifig/core/auth')
+    const { loadOrCreateToken, rotateToken, tokenPath } = await import('@nodboard/core/auth')
     const t = o.rotate ? rotateToken() : loadOrCreateToken()
-    if (o.rotate) console.error(`✓ rotated ${tokenPath()} — reconnect HTTP MCP clients and reopen browser tabs with \`aifig open\``)
+    if (o.rotate) console.error(`✓ rotated ${tokenPath()} — reconnect HTTP MCP clients and reopen browser tabs with \`nodboard open\``)
     console.log(t)
   })
 
@@ -621,8 +621,8 @@ program
   .action(async (o) => {
     const { ensureCore, base } = await import('./client')
     await ensureCore()
-    const { loadOrCreateToken } = await import('@aifig/core/auth')
-    const origin = o.dev ? `http://127.0.0.1:${process.env.AIFIG_UI_PORT ?? 47820}` : base()
+    const { loadOrCreateToken } = await import('@nodboard/core/auth')
+    const origin = o.dev ? `http://127.0.0.1:${process.env.NODBOARD_UI_PORT ?? 47820}` : base()
     const link = `${origin}/#token=${loadOrCreateToken()}`
     if (o.print) return console.log(link)
     const { spawn } = await import('node:child_process')
@@ -693,7 +693,7 @@ skill
   .option('-d, --dir <dir>', 'parent folder', '.')
   .option('--tools <tools>', 'comma-separated tools for an L1 skill, e.g. web.search')
   .action(async (name: string, o) => {
-    const { writeSkillFolder, loadSkill } = await import('@aifig/core')
+    const { writeSkillFolder, loadSkill } = await import('@nodboard/core')
     const path = await import('node:path')
     const dir = path.resolve(o.dir, name)
     if (fs.existsSync(dir) && fs.readdirSync(dir).length) {
@@ -730,7 +730,7 @@ skill
       },
     })
     const r = loadSkill(dir, 'dev')
-    printValidation(r, `✓ created ${dir}\n  next: aifig skill dev ${path.relative(process.cwd(), dir).startsWith('..') ? dir : path.relative(process.cwd(), dir) || '.'}   (live reload into the canvas)`)
+    printValidation(r, `✓ created ${dir}\n  next: nodboard skill dev ${path.relative(process.cwd(), dir).startsWith('..') ? dir : path.relative(process.cwd(), dir) || '.'}   (live reload into the canvas)`)
   })
 
 skill
@@ -738,7 +738,7 @@ skill
   .description('check a skill folder without installing it')
   .argument('[dir]', 'skill folder', '.')
   .action(async (dir: string) => {
-    const { loadSkill } = await import('@aifig/core')
+    const { loadSkill } = await import('@nodboard/core')
     const r = loadSkill(dir, 'dev')
     if (!printValidation(r, `✓ ${r.name} ${r.version} (${r.capability}) — ${r.canvas.types.length} type(s), ${r.canvas.layouts.length} layout(s), ${r.canvas.actions.length} action(s)`)) process.exit(1)
   })
@@ -802,7 +802,7 @@ skill
 
 skill
   .command('install')
-  .description('validate a skill folder and copy it into ~/.aifig/skills')
+  .description('validate a skill folder and copy it into ~/.nodboard/skills')
   .argument('<dir>')
   .action(async (dir: string) => {
     const path = await import('node:path')
@@ -824,7 +824,7 @@ skill
   .action((o) =>
     run('list_activity', { skill: o.skill, limit: 50 }, (r) => {
       for (const e of r.activity) console.log(`${new Date(e.at).toLocaleString()}  ${String(e.source?.id ?? '').padEnd(18)} ${String(e.category === 'permission' ? 'permission' : e.action).padEnd(10)} ${String(e.outcome).padEnd(8)} ${e.target ?? ''} ${e.detail ?? ''}`)
-      if (r.grants.length) console.log(`\nAllowed: ${r.grants.map((g: { subject: string; target: string }) => `${g.subject.replace(/^skill:/, '')} → ${g.target}`).join(', ')}  (revoke: aifig permissions revoke <skill:name> tool <tool>)`)
+      if (r.grants.length) console.log(`\nAllowed: ${r.grants.map((g: { subject: string; target: string }) => `${g.subject.replace(/^skill:/, '')} → ${g.target}`).join(', ')}  (revoke: nodboard permissions revoke <skill:name> tool <tool>)`)
     }),
   )
 

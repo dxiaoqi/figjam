@@ -1,4 +1,4 @@
-import { COLORS, COLOR_TOKENS, SURFACES } from '@aifig/shared'
+import { COLORS, COLOR_TOKENS, SURFACES } from '@nodboard/shared'
 
 /** Turn the shared design tokens into CSS variables so the canvas and the core render identically. */
 export function installTokenStyles() {
@@ -10,11 +10,11 @@ export function installTokenStyles() {
   for (const c of COLOR_TOKENS) {
     const l = COLORS[c].light
     const d = COLORS[c].dark
-    rules.push(`.aifig-c-${c}{--c-bg:${l.bg};--c-ink:${l.ink};--c-accent:${l.accent}}`)
-    rules.push(`.dark .aifig-c-${c}{--c-bg:${d.bg};--c-ink:${d.ink};--c-accent:${d.accent}}`)
+    rules.push(`.nodboard-c-${c}{--c-bg:${l.bg};--c-ink:${l.ink};--c-accent:${l.accent}}`)
+    rules.push(`.dark .nodboard-c-${c}{--c-bg:${d.bg};--c-ink:${d.ink};--c-accent:${d.accent}}`)
   }
   const el = document.createElement('style')
-  el.dataset.aifig = 'tokens'
+  el.dataset.nodboard = 'tokens'
   el.textContent = rules.join('\n')
   document.head.appendChild(el)
 }

@@ -1,9 +1,9 @@
 {
-  "name": "@aifig/telemetry",
+  "name": "@nodboard/telemetry",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Self-hostable install/download counter for ai-figma (Hono; Node + SQLite or Cloudflare Workers + D1)",
+  "description": "Self-hostable install/download counter for nodboard (Hono; Node + SQLite or Cloudflare Workers + D1)",
   "scripts": {
     "dev": "tsx watch src/node.ts --mock",
     "start": "tsx src/node.ts",

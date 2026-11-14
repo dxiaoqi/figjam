@@ -1,7 +1,7 @@
 import { AlertTriangle, FileCode2, FolderOpen, Globe, Loader2, MessageSquare, ListTree, ShieldCheck, FileArchive } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { formatBytes } from '@aifig/shared'
+import { formatBytes } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
@@ -15,7 +15,7 @@ import { getLocale, t, useT, type MessageKey } from '../i18n'
 
 type Mode = 'folder' | 'zip' | 'single'
 const size = (n: number) => formatBytes(n, getLocale())
-export const openWebExport = () => window.dispatchEvent(new Event('aifig:export-web'))
+export const openWebExport = () => window.dispatchEvent(new Event('nodboard:export-web'))
 
 function Option({ active, onClick, icon, label, hint, detail, ...rest }: { active: boolean; onClick: () => void; icon: ReactNode; label: string; hint: string; detail?: string } & Record<`data-${string}`, string>) {
   return (
@@ -57,8 +57,8 @@ export function WebExportDialog() {
         .then(setEstimate)
         .catch(() => setEstimate(null))
     }
-    window.addEventListener('aifig:export-web', on)
-    return () => window.removeEventListener('aifig:export-web', on)
+    window.addEventListener('nodboard:export-web', on)
+    return () => window.removeEventListener('nodboard:export-web', on)
   }, [boardId])
 
   const threads = editor.doc.getMap('threads').size
@@ -83,7 +83,7 @@ export function WebExportDialog() {
         const r = await apiFetch(`/api/boards/${encodeURIComponent(boardId)}/web.${mode === 'single' ? 'html' : 'zip'}?${q}`)
         if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `Export failed (${r.status})`)
         const name = decodeURIComponent(r.headers.get('content-disposition')?.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? 'board.zip')
-        const warning = r.headers.get('x-aifig-warning')
+        const warning = r.headers.get('x-nodboard-warning')
         const url = URL.createObjectURL(await r.blob())
         const a = document.createElement('a')
         a.href = url

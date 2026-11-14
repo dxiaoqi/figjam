@@ -6,14 +6,16 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 
 /**
- * One-click MCP setup for agents installed on this machine: detect them, show whether ai-figma is configured,
+ * One-click MCP setup for agents installed on this machine: detect them, show whether nodboard is configured,
  * add it (backup first, atomic, idempotent) and check that the configured server really speaks MCP. Two
  * transports: stdio (the agent launches the CLI) or local HTTP (the running core, with the access token).
  */
 
 export const AGENT_IDS = ['claude', 'cursor'] as const
 export type AgentId = (typeof AGENT_IDS)[number]
-export const SERVER_NAME = 'ai-figma'
+export const SERVER_NAME = 'nodboard'
+/** Written into agent configs before the product was renamed. Install moves this entry to {@link SERVER_NAME}. */
+export const LEGACY_SERVER_NAME = 'ai-figma'
 
 export interface McpLaunch {
   command: string
@@ -49,7 +51,7 @@ export interface AgentStatus {
 }
 
 /** Home folder for agent configs, and the PATH searched for their binaries. Tests point both somewhere disposable. */
-const home = () => process.env.AIFIG_AGENT_CONFIG_HOME ?? os.homedir()
+const home = () => process.env.NODBOARD_AGENT_CONFIG_HOME ?? os.homedir()
 
 const bearer = (h: McpHttp) => ({ Authorization: `Bearer ${h.token}` })
 
@@ -81,7 +83,7 @@ export const isAgentId = (v: unknown): v is AgentId => typeof v === 'string' && 
 
 function onPath(bin: string): string | null {
   const exts = process.platform === 'win32' ? ['.exe', '.cmd', ''] : ['']
-  for (const dir of (process.env.AIFIG_AGENT_PATH ?? process.env.PATH ?? '').split(path.delimiter).filter(Boolean)) {
+  for (const dir of (process.env.NODBOARD_AGENT_PATH ?? process.env.PATH ?? '').split(path.delimiter).filter(Boolean)) {
     for (const ext of exts) {
       const p = path.join(dir, bin + ext)
       try {
@@ -123,6 +125,13 @@ function sameEntry(a: any, b: any) {
 }
 
 const transportOf = (entry: any): Transport | null => (!entry || typeof entry !== 'object' ? null : entry.url ? 'http' : 'stdio')
+
+/** Prefer the current MCP name. An older config still under {@link LEGACY_SERVER_NAME} counts as needing an update. */
+function configuredEntry(servers: Record<string, any> | undefined): { entry: any; legacy: boolean } {
+  if (servers?.[SERVER_NAME]) return { entry: servers[SERVER_NAME], legacy: false }
+  if (servers?.[LEGACY_SERVER_NAME]) return { entry: servers[LEGACY_SERVER_NAME], legacy: true }
+  return { entry: undefined, legacy: false }
+}
 const entryFor = (id: AgentId, transport: Transport, launch: McpLaunch, http: McpHttp) => (transport === 'http' ? AGENTS[id].httpEntry(http) : AGENTS[id].entry(launch))
 
 export function agentStatus(id: AgentId, launch: McpLaunch, http: McpHttp): AgentStatus {
@@ -131,9 +140,9 @@ export function agentStatus(id: AgentId, launch: McpLaunch, http: McpHttp): Agen
   const cfg = readConfig(file)
   const bin = def.bins.map(onPath).find(Boolean) ?? null
   const dir = def.dirs().find((d) => fs.existsSync(d)) ?? null
-  const current = cfg.data.mcpServers?.[SERVER_NAME]
-  const transport = transportOf(current)
-  const state: ConfigState = !transport ? 'missing' : sameEntry(current, entryFor(id, transport, launch, http)) ? 'configured' : 'different'
+  const found = configuredEntry(cfg.data.mcpServers)
+  const transport = transportOf(found.entry)
+  const state: ConfigState = !transport ? 'missing' : found.legacy || !sameEntry(found.entry, entryFor(id, transport, launch, http)) ? 'different' : 'configured'
   return { id, name: def.name, installed: !!(bin || dir), foundAt: bin ?? dir, configFile: file, configExists: cfg.exists, state, transport, ...(cfg.error ? { error: cfg.error } : {}) }
 }
 
@@ -141,23 +150,26 @@ export const detectAgents = (launch: McpLaunch, http: McpHttp) => AGENT_IDS.map(
 
 const stamp = () => new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
 
-/** Add (or update) the ai-figma entry. Unchanged configs are left alone — no write, no backup. */
+/** Add (or update) the nodboard entry. Unchanged configs are left alone — no write, no backup. */
 export function installAgent(id: AgentId, launch: McpLaunch, http: McpHttp, transport: Transport = 'stdio'): { changed: boolean; file: string; backup: string | null; status: AgentStatus } {
   const def = AGENTS[id]
   const file = def.file()
   const cfg = readConfig(file)
   if (cfg.error) throw new Error(`${file}: ${cfg.error} Fix it or use the manual setup.`)
   const entry = entryFor(id, transport, launch, http)
-  if (sameEntry(cfg.data.mcpServers?.[SERVER_NAME], entry)) return { changed: false, file, backup: null, status: agentStatus(id, launch, http) }
-  const next = { ...cfg.data, mcpServers: { ...(cfg.data.mcpServers ?? {}), [SERVER_NAME]: entry } }
+  const servers = { ...(cfg.data.mcpServers ?? {}) }
+  const legacy = servers[LEGACY_SERVER_NAME]
+  if (sameEntry(servers[SERVER_NAME], entry) && legacy == null) return { changed: false, file, backup: null, status: agentStatus(id, launch, http) }
+  delete servers[LEGACY_SERVER_NAME]
+  const next = { ...cfg.data, mcpServers: { ...servers, [SERVER_NAME]: entry } }
   fs.mkdirSync(path.dirname(file), { recursive: true })
   let backup: string | null = null
   if (cfg.exists) {
-    backup = `${file}.aifig-backup-${stamp()}`
+    backup = `${file}.nodboard-backup-${stamp()}`
     fs.copyFileSync(file, backup)
   }
   const indent = /^\{\n(\s+)/.exec(cfg.raw)?.[1] ?? '  '
-  const tmp = `${file}.aifig-tmp-${process.pid}`
+  const tmp = `${file}.nodboard-tmp-${process.pid}`
   // an HTTP entry carries the access token: keep the file (and its backup) readable by this user only
   const existing = cfg.exists ? fs.statSync(file).mode & 0o777 : 0o600
   const mode = transport === 'http' ? existing & 0o700 : existing
@@ -172,7 +184,7 @@ type TestResult = { ok: true; tools: number; server: string } | { ok: false; err
 
 /** MCP handshake over Streamable HTTP with the URL and headers from the agent's config. */
 async function testHttp(entry: { url: string; headers?: Record<string, string> }, timeoutMs: number): Promise<TestResult> {
-  const client = new Client({ name: 'aifig-setup-check', version: '1' })
+  const client = new Client({ name: 'nodboard-setup-check', version: '1' })
   const signal = AbortSignal.timeout(timeoutMs)
   try {
     await client.connect(new StreamableHTTPClientTransport(new URL(entry.url), { requestInit: { headers: entry.headers ?? {}, signal } }))
@@ -194,12 +206,12 @@ async function testHttp(entry: { url: string; headers?: Record<string, string> }
 export async function testAgent(id: AgentId, timeoutMs = 20_000): Promise<TestResult> {
   const def = AGENTS[id]
   const cfg = readConfig(def.file())
-  const entry = cfg.data.mcpServers?.[SERVER_NAME]
+  const entry = configuredEntry(cfg.data.mcpServers).entry
   if (cfg.error) return { ok: false, error: cfg.error }
   if (typeof entry?.url === 'string') return testHttp(entry, timeoutMs)
   if (!entry?.command) return { ok: false, error: `No "${SERVER_NAME}" entry in ${def.file()}.` }
   return new Promise((resolve) => {
-    const child = spawn(entry.command, entry.args ?? [], { env: { ...process.env, ...(entry.env ?? {}), AIFIG_AGENT_NAME: `${def.name} (setup check)` }, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(entry.command, entry.args ?? [], { env: { ...process.env, ...(entry.env ?? {}), NODBOARD_AGENT_NAME: `${def.name} (setup check)` }, stdio: ['pipe', 'pipe', 'pipe'] })
     let out = ''
     let err = ''
     let serverName = ''
@@ -240,6 +252,6 @@ export async function testAgent(id: AgentId, timeoutMs = 20_000): Promise<TestRe
         }
       }
     })
-    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'aifig-setup-check', version: '1' } } })
+    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'nodboard-setup-check', version: '1' } } })
   })
 }

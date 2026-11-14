@@ -1,7 +1,7 @@
 import { Bookmark, FolderOpen, History, ImageOff, Loader2, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import type { DiffSummary, VersionInfo } from '@aifig/shared'
+import type { DiffSummary, VersionInfo } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -114,8 +114,8 @@ export function VersionHistory() {
       load()
       if ((e as CustomEvent).detail?.checkpoint) setTimeout(() => nameRef.current?.focus(), 50)
     }
-    window.addEventListener('aifig:versions', onOpen)
-    return () => window.removeEventListener('aifig:versions', onOpen)
+    window.addEventListener('nodboard:versions', onOpen)
+    return () => window.removeEventListener('nodboard:versions', onOpen)
   }, [load])
 
   const current = versions?.find((v) => v.id === selected) ?? null

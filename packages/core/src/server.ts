@@ -6,8 +6,8 @@ import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import { WebSocketServer, type WebSocket } from 'ws'
 import * as syncProtocol from 'y-protocols/sync'
-import type { CallerInfo, Capability, ClientMessage, PermissionDecision, ServerMessage } from '@aifig/shared'
-import { CAPABILITIES, CORE_PORT, FEATURES, SNIPPET_PORT, snippetOrigin, type CallRequest } from '@aifig/shared'
+import type { CallerInfo, Capability, ClientMessage, PermissionDecision, ServerMessage } from '@nodboard/shared'
+import { CAPABILITIES, CORE_PORT, FEATURES, SNIPPET_PORT, snippetOrigin, type CallRequest } from '@nodboard/shared'
 import { startSnippetHost } from './snippet-host'
 import { zipFolder } from './zip'
 import { randomUUID } from 'node:crypto'
@@ -21,7 +21,7 @@ import { localPolicy, presentedToken, selectWsProtocol, tokenGuard, tokensEqual 
 import { ASSET_PATH_RE, assetKeyFor, incomingDir, receiveUpload, saveBody, serveAsset, tempName } from './asset-routes'
 import { defaultPackDir } from './api'
 import { inspectPack, PACK_LIMITS } from './pack'
-import { aifigHome, type Board } from './board'
+import { nodboardHome, type Board } from './board'
 import { PermissionBroker } from './permissions'
 import { auditedStore, openSecretStore } from './secrets'
 import { installFlushOnExit } from './safety'
@@ -85,7 +85,7 @@ const MIME: Record<string, string> = {
 export async function startCore(port = CORE_PORT) {
   const core = new CanvasCore()
   core.init()
-  const home = aifigHome()
+  const home = nodboardHome()
   fs.mkdirSync(home, { recursive: true, mode: 0o700 })
   // boards, the token, grants and the activity log live here: keep other OS users out
   if (process.platform !== 'win32') fs.chmodSync(home, 0o700)
@@ -149,18 +149,18 @@ export async function startCore(port = CORE_PORT) {
     }
     if (!policy.hostOk(req.headers.host)) return deny(403, 'Forbidden host', 'host')
     if (!policy.originOk(req.headers.origin)) return deny(403, 'Forbidden origin', 'origin')
-    if (!guard.check(presentedToken(req))) return deny(401, 'Missing or invalid ai-figma access token. Run `aifig token` to see it.', 'token')
+    if (!guard.check(presentedToken(req))) return deny(401, 'Missing or invalid nodboard access token. Run `nodboard token` to see it.', 'token')
     return null
   }
 
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
-  const binPath = process.env.AIFIG_BIN ?? path.join(root, 'bin', 'aifig.mjs')
+  const binPath = process.env.NODBOARD_BIN ?? path.join(root, 'bin', 'nodboard.mjs')
   // packaged desktop app: the UI sits next to the bundled CLI (Resources/ui)
   const bundledUi = path.join(path.dirname(binPath), 'ui')
-  const distDir = process.env.AIFIG_UI_DIST ?? (process.env.AIFIG_BIN && fs.existsSync(path.join(bundledUi, 'index.html')) ? bundledUi : path.join(root, 'apps', 'canvas', 'dist'))
+  const distDir = process.env.NODBOARD_UI_DIST ?? (process.env.NODBOARD_BIN && fs.existsSync(path.join(bundledUi, 'index.html')) ? bundledUi : path.join(root, 'apps', 'canvas', 'dist'))
   const json_ = (v?: string) => (v ? JSON.parse(v) : undefined)
-  const mcpLaunch = process.env.AIFIG_MCP_COMMAND
-    ? { command: process.env.AIFIG_MCP_COMMAND, args: json_(process.env.AIFIG_MCP_ARGS) ?? [binPath, 'mcp'], env: json_(process.env.AIFIG_MCP_ENV) }
+  const mcpLaunch = process.env.NODBOARD_MCP_COMMAND
+    ? { command: process.env.NODBOARD_MCP_COMMAND, args: json_(process.env.NODBOARD_MCP_ARGS) ?? [binPath, 'mcp'], env: json_(process.env.NODBOARD_MCP_ENV) }
     : { command: 'node', args: [binPath, 'mcp'] }
 
   // MCP over local HTTP (Streamable HTTP), alongside stdio
@@ -168,7 +168,7 @@ export async function startCore(port = CORE_PORT) {
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`]
   const handleMcp = async (req: http.IncomingMessage, res: http.ServerResponse) => {
     const denied = gate(req, 'mcp')
-    if (denied) return json(res, denied.status, { jsonrpc: '2.0', error: { code: -32001, message: denied.error }, id: null }, denied.status === 401 ? { 'www-authenticate': 'Bearer realm="ai-figma"' } : {})
+    if (denied) return json(res, denied.status, { jsonrpc: '2.0', error: { code: -32001, message: denied.error }, id: null }, denied.status === 401 ? { 'www-authenticate': 'Bearer realm="nodboard"' } : {})
     const sid = req.headers['mcp-session-id'] as string | undefined
     let body: unknown
     if (req.method === 'POST') {
@@ -233,11 +233,11 @@ export async function startCore(port = CORE_PORT) {
       if (url.pathname.startsWith('/api/')) {
         const denied = gate(req, url.pathname === '/api/health' ? 'health' : 'api')
         // liveness stays answerable without the token (for clients deciding whether to start a core); details don't
-        if (denied && url.pathname === '/api/health' && denied.status === 401) return json(res, 200, { ok: true, name: 'aifig-core', auth: 'token', authenticated: false })
-        if (denied) return json(res, denied.status, { ok: false, error: denied.error }, denied.status === 401 ? { 'www-authenticate': 'Bearer realm="ai-figma"' } : {})
+        if (denied && url.pathname === '/api/health' && denied.status === 401) return json(res, 200, { ok: true, name: 'nodboard-core', auth: 'token', authenticated: false })
+        if (denied) return json(res, denied.status, { ok: false, error: denied.error }, denied.status === 401 ? { 'www-authenticate': 'Bearer realm="nodboard"' } : {})
       }
       if (url.pathname === '/api/health') {
-        return json(res, 200, { ok: true, name: 'aifig-core', auth: 'token', authenticated: true, home, bin: binPath, mcp: mcpLaunch, mcpUrl: `http://127.0.0.1:${port}/mcp`, token: guard.token, assetKey: assetKeyFor(guard.token), snippetOrigin: snippets.ok ? snippetOrigin(snippets.port) : null, boards: core.registry.all().length, pid: process.pid, secrets: { backend: secrets.backend, persistent: secrets.persistent, osBacked: secrets.osBacked }, readableCopy: readableCopies.status() })
+        return json(res, 200, { ok: true, name: 'nodboard-core', auth: 'token', authenticated: true, home, bin: binPath, mcp: mcpLaunch, mcpUrl: `http://127.0.0.1:${port}/mcp`, token: guard.token, assetKey: assetKeyFor(guard.token), snippetOrigin: snippets.ok ? snippetOrigin(snippets.port) : null, boards: core.registry.all().length, pid: process.pid, secrets: { backend: secrets.backend, persistent: secrets.persistent, osBacked: secrets.osBacked }, readableCopy: readableCopies.status() })
       }
       if (url.pathname === '/api/activity' && req.method === 'GET') {
         const category = url.searchParams.get('category') ?? undefined
@@ -282,13 +282,13 @@ export async function startCore(port = CORE_PORT) {
         return json(res, r.status, r.body)
       }
       // share packs: download one (browser export), or upload one to import (checked before anything is extracted)
-      const packGet = url.pathname.match(/^\/api\/boards\/([\w-]+)\/pack\.aifigpack$/)
+      const packGet = url.pathname.match(/^\/api\/boards\/([\w-]+)\/pack\.nodboardpack$/)
       if (packGet && req.method === 'GET') {
-        const out = path.join(incomingDir(home), tempName('.aifigpack'))
+        const out = path.join(incomingDir(home), tempName('.nodboardpack'))
         const r = await core.call({ tool: 'export_pack', args: { board: packGet[1], path: out, include_history: url.searchParams.get('history') === '1', include_comments: url.searchParams.get('comments') !== '0' }, caller: PERSON })
         if (!r.ok) return json(res, 400, r)
-        const name = `${(core.registry.get(packGet[1])?.title ?? 'board').replace(/[\\/:*?"<>|]+/g, '-')}.aifigpack`
-        res.writeHead(200, { 'content-type': 'application/zip', 'content-length': fs.statSync(out).size, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`, 'cache-control': 'no-store', 'x-aifig-pack': JSON.stringify((r.result as { includes: unknown }).includes) })
+        const name = `${(core.registry.get(packGet[1])?.title ?? 'board').replace(/[\\/:*?"<>|]+/g, '-')}.nodboardpack`
+        res.writeHead(200, { 'content-type': 'application/zip', 'content-length': fs.statSync(out).size, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`, 'cache-control': 'no-store', 'x-nodboard-pack': JSON.stringify((r.result as { includes: unknown }).includes) })
         const stream = fs.createReadStream(out)
         stream.on('close', () => fs.rmSync(out, { force: true }))
         return stream.pipe(res)
@@ -301,13 +301,13 @@ export async function startCore(port = CORE_PORT) {
         const base = (core.registry.get(webGet[1])?.title ?? 'board').replace(/[\\/:*?"<>|]+/g, '-')
         const name = webGet[2] === 'zip' ? `${base} (web).zip` : `${base}.html`
         const result = r.result as { warning?: string }
-        res.writeHead(200, { 'content-type': webGet[2] === 'zip' ? 'application/zip' : 'text/html; charset=utf-8', 'content-length': fs.statSync(out).size, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`, 'cache-control': 'no-store', ...(result.warning ? { 'x-aifig-warning': encodeURIComponent(result.warning) } : {}) })
+        res.writeHead(200, { 'content-type': webGet[2] === 'zip' ? 'application/zip' : 'text/html; charset=utf-8', 'content-length': fs.statSync(out).size, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`, 'cache-control': 'no-store', ...(result.warning ? { 'x-nodboard-warning': encodeURIComponent(result.warning) } : {}) })
         const stream = fs.createReadStream(out)
         stream.on('close', () => fs.rmSync(out, { force: true }))
         return stream.pipe(res)
       }
       if (url.pathname === '/api/packs' && req.method === 'POST') {
-        const file = path.join(incomingDir(home), tempName('.aifigpack'))
+        const file = path.join(incomingDir(home), tempName('.nodboardpack'))
         try {
           const size = await saveBody(req, file, PACK_LIMITS.maxTotal + 64 * 1024 * 1024)
           const { manifest } = inspectPack(file)
@@ -336,7 +336,7 @@ export async function startCore(port = CORE_PORT) {
           return json(res, 200, { ok: false, error: (e as Error).message })
         }
       }
-      // One-click agent setup writes to files outside ~/.aifig, so on top of the token gate above only the canvas
+      // One-click agent setup writes to files outside ~/.nodboard, so on top of the token gate above only the canvas
       // itself may ask: same-machine Host, a loopback Origin (or none, for the CLI), and never from another site.
       const setup = url.pathname.match(/^\/api\/agents(?:\/(\w+)\/(install|test))?$/)
       if (setup) {
@@ -347,7 +347,7 @@ export async function startCore(port = CORE_PORT) {
           res.writeHead(status, { 'content-type': 'application/json' })
           res.end(JSON.stringify(body))
         }
-        if (!local) return reply(403, { ok: false, error: 'Agent setup is only available from the ai-figma app on this machine.' })
+        if (!local) return reply(403, { ok: false, error: 'Agent setup is only available from the nodboard app on this machine.' })
         const mcpHttp = { url: `http://127.0.0.1:${port}/mcp`, token: guard.token }
         if (!setup[1] && req.method === 'GET') return reply(200, { ok: true, agents: detectAgents(mcpLaunch, mcpHttp), launch: mcpLaunch, url: mcpHttp.url })
         if (!setup[1] || req.method !== 'POST' || !isAgentId(setup[1])) return reply(404, { ok: false, error: 'Not found' })

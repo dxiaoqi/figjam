@@ -80,7 +80,7 @@ export default function scenariosEn(s: Site) {
           { name: 'Incident event', body: 'One moment of an incident, placed on a timeline.' },
         ],
         dialogName: 'Architecture & code',
-        boardTitle: 'ai-figma architecture',
+        boardTitle: 'nodboard architecture',
         prompt: `Use the arch-kit skill on my ${s.name} board “Architecture map”: map this repository’s packages, dependencies, interface contracts and risks, then tell me what to review first.`,
         shotAlt: 'An architecture board: modules in columns by layer (UI, API, domain, infra) connected by their dependencies, next to interface contracts grouped by kind',
         overviewAlt: 'The whole architecture board: modules, external dependencies, state and decisions, contracts, and a risk matrix',

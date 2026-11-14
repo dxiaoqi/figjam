@@ -1,7 +1,7 @@
 import { AlertTriangle, Code2, Database, ExternalLink, FileCode2, Film, FolderOpen, HardDrive, History, ImageIcon, Loader2, RefreshCw, Replace, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { formatBytes, type Asset, type AssetRole, type Block } from '@aifig/shared'
+import { formatBytes, type Asset, type AssetRole, type Block } from '@nodboard/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -46,7 +46,7 @@ const GROUP_COLOR: Record<Group, string> = {
 
 const size = (n: number) => formatBytes(n, getLocale())
 
-export const openStorage = () => window.dispatchEvent(new Event('aifig:storage'))
+export const openStorage = () => window.dispatchEvent(new Event('nodboard:storage'))
 
 function revealLabel(): MessageKey {
   const p = desktop?.platform ?? (navigator.platform.toLowerCase().includes('mac') ? 'darwin' : navigator.platform.toLowerCase().includes('win') ? 'win32' : 'linux')
@@ -120,8 +120,8 @@ export function StoragePanel() {
       setFilter('all')
       load()
     }
-    window.addEventListener('aifig:storage', on)
-    return () => window.removeEventListener('aifig:storage', on)
+    window.addEventListener('nodboard:storage', on)
+    return () => window.removeEventListener('nodboard:storage', on)
   }, [load])
 
   // stay current while open (uploads, agents, clean-up)

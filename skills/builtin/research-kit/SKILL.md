@@ -1,8 +1,8 @@
 ---
 name: research-kit
-description: Synthesize user research on an ai-figma board — interview cards, verbatim quotes with their source, affinity clusters, insights, opportunities and hypotheses — then export a research report. Use when turning interview transcripts, usability notes, surveys or support tickets into findings on the canvas.
+description: Synthesize user research on a nodboard board — interview cards, verbatim quotes with their source, affinity clusters, insights, opportunities and hypotheses — then export a research report. Use when turning interview transcripts, usability notes, surveys or support tickets into findings on the canvas.
 metadata:
-  aifig:
+  nodboard:
     version: 1.1.0
     canvas: canvas/blocks.json
     capability: L1
@@ -66,4 +66,4 @@ top), `research-kit.journey` (by `stage`).
 - Keep personal data out: use P1, P2… and roles, not names or emails.
 
 Action: **Find related sources** runs a web search for an insight (needs a `web` MCP server with a `search` tool
-in `~/.aifig/mcp.json`) and adds the results as stickies next to it, for review.
+in `~/.nodboard/mcp.json`) and adds the results as stickies next to it, for review.

@@ -8,7 +8,7 @@ export const template = 'architecture-map'
 
 const T = {
   en: {
-    title: 'ai-figma architecture',
+    title: 'nodboard architecture',
     comment: 'Which package starts the snippet host? Draw it.',
     hosts: 'starts',
     reply: 'The core starts it next to the API (packages/core/src/snippet-host.ts) — connected on the board.',
@@ -18,12 +18,12 @@ const T = {
     riskFrame: 'Risks',
     external: 'External',
     jobs: {
-      '@aifig/shared': 'Tokens, the board model, text measurement and the Canvas API tool schemas.',
-      '@aifig/core': 'Owns every board as a Yjs document: persistence, Canvas API, layout, snapshots, skills.',
-      '@aifig/canvas-engine': 'Our whiteboard engine: camera, selection, move and resize, connectors, undo.',
-      '@aifig/cli': 'The aifig CLI and the MCP stdio server, with core auto-start.',
-      '@aifig/canvas': 'The canvas app: block renderers, agent layer, review UI, dialogs.',
-      '@aifig/desktop': 'Electron shell: native menus, files, keychain, bundled core.',
+      '@nodboard/shared': 'Tokens, the board model, text measurement and the Canvas API tool schemas.',
+      '@nodboard/core': 'Owns every board as a Yjs document: persistence, Canvas API, layout, snapshots, skills.',
+      '@nodboard/canvas-engine': 'Our whiteboard engine: camera, selection, move and resize, connectors, undo.',
+      '@nodboard/cli': 'The nodboard CLI and the MCP stdio server, with core auto-start.',
+      '@nodboard/canvas': 'The canvas app: block renderers, agent layer, review UI, dialogs.',
+      '@nodboard/desktop': 'Electron shell: native menus, files, keychain, bundled core.',
     },
     core: 'Local core server', coreText: 'HTTP API, MCP over HTTP, live sync and snapshots on 127.0.0.1.',
     snippet: 'Snippet host', snippetText: 'Serves inline web snippets on a separate origin with a no-network CSP.',
@@ -48,7 +48,7 @@ const T = {
     ],
   },
   'zh-CN': {
-    title: 'ai-figma 架构',
+    title: 'nodboard 架构',
     comment: '网页片段宿主是哪个包启动的？画出来。',
     hosts: '启动',
     reply: '由核心服务在 API 旁边启动（packages/core/src/snippet-host.ts），已在画板上连好。',
@@ -58,12 +58,12 @@ const T = {
     riskFrame: '风险',
     external: '外部依赖',
     jobs: {
-      '@aifig/shared': '设计令牌、画板数据模型、文字测量，以及 Canvas API 的工具定义。',
-      '@aifig/core': '以 Yjs 文档持有所有画板：持久化、Canvas API、布局、快照和 Skill。',
-      '@aifig/canvas-engine': '自研白板引擎：视口、选择、移动缩放、连线和撤销。',
-      '@aifig/cli': 'aifig 命令行和 MCP stdio 服务，会自动拉起核心服务。',
-      '@aifig/canvas': '画布应用：块渲染、Agent 图层、审阅界面和各类对话框。',
-      '@aifig/desktop': 'Electron 外壳：原生菜单、文件、钥匙串，内置核心服务。',
+      '@nodboard/shared': '设计令牌、画板数据模型、文字测量，以及 Canvas API 的工具定义。',
+      '@nodboard/core': '以 Yjs 文档持有所有画板：持久化、Canvas API、布局、快照和 Skill。',
+      '@nodboard/canvas-engine': '自研白板引擎：视口、选择、移动缩放、连线和撤销。',
+      '@nodboard/cli': 'nodboard 命令行和 MCP stdio 服务，会自动拉起核心服务。',
+      '@nodboard/canvas': '画布应用：块渲染、Agent 图层、审阅界面和各类对话框。',
+      '@nodboard/desktop': 'Electron 外壳：原生菜单、文件、钥匙串，内置核心服务。',
     },
     core: '本地核心服务', coreText: '在 127.0.0.1 上提供 HTTP API、HTTP MCP、实时同步和快照。',
     snippet: '网页片段宿主', snippetText: '在独立源上托管内嵌网页片段，CSP 禁止一切网络访问。',
@@ -89,7 +89,7 @@ const T = {
   },
 }
 
-const LAYER = { '@aifig/canvas': 'ui', '@aifig/desktop': 'ui', '@aifig/canvas-engine': 'ui', '@aifig/cli': 'api', '@aifig/core': 'domain', '@aifig/shared': 'domain' }
+const LAYER = { '@nodboard/canvas': 'ui', '@nodboard/desktop': 'ui', '@nodboard/canvas-engine': 'ui', '@nodboard/cli': 'api', '@nodboard/core': 'domain', '@nodboard/shared': 'domain' }
 const GROUP = { ui: 'UI', api: 'API', domain: { en: 'Domain', 'zh-CN': '领域' }, data: { en: 'Data', 'zh-CN': '数据' }, infra: { en: 'Infra', 'zh-CN': '基础设施' } }
 const group = (layer, lang) => (typeof GROUP[layer] === 'string' ? GROUP[layer] : GROUP[layer][lang])
 
@@ -104,7 +104,7 @@ export function readRepo() {
     const ts = files.filter((f) => /\.tsx?$/.test(f)).length
     const js = files.filter((f) => /\.(mjs|cjs|js)$/.test(f)).length
     const deps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })
-    return { dir, name: pkg.name, language: ts >= js ? 'TypeScript' : 'JavaScript', internal: deps.filter((d) => d.startsWith('@aifig/')), external: deps.filter((d) => !d.startsWith('@aifig/') && !d.startsWith('@types/')), versions: { ...pkg.dependencies, ...pkg.devDependencies } }
+    return { dir, name: pkg.name, language: ts >= js ? 'TypeScript' : 'JavaScript', internal: deps.filter((d) => d.startsWith('@nodboard/')), external: deps.filter((d) => !d.startsWith('@nodboard/') && !d.startsWith('@types/')), versions: { ...pkg.dependencies, ...pkg.devDependencies } }
   })
   const server = fs.readFileSync(path.join(root, 'packages/core/src/server.ts'), 'utf8')
   const desktopMain = fs.readFileSync(path.join(root, 'apps/desktop/src/main.mjs'), 'utf8')
@@ -131,13 +131,13 @@ export async function run({ core, agent, lang, check }) {
   await tool('begin_change_set', { board, intent: lang === 'zh-CN' ? '梳理模块与服务' : 'Map modules and services' })
   const modules = repo.pkgs.map((p) => ({
     type: 'arch-kit.module',
-    title: p.name.replace('@aifig/', ''),
+    title: p.name.replace('@nodboard/', ''),
     text: t.jobs[p.name] ?? p.name,
     group: group(LAYER[p.name] ?? 'domain', lang),
-    fields: { path: p.dir, layer: LAYER[p.name] ?? 'domain', language: p.language, status: p.name === '@aifig/core' ? 'changing' : 'stable' },
+    fields: { path: p.dir, layer: LAYER[p.name] ?? 'domain', language: p.language, status: p.name === '@nodboard/core' ? 'changing' : 'stable' },
   }))
   const services = [
-    { type: 'arch-kit.service', title: t.core, text: t.coreText, group: 'API', fields: { runtime: 'Node 22', port: '47821', entry: 'bin/aifig.mjs core', layer: 'api' } },
+    { type: 'arch-kit.service', title: t.core, text: t.coreText, group: 'API', fields: { runtime: 'Node 22', port: '47821', entry: 'bin/nodboard.mjs core', layer: 'api' } },
     { type: 'arch-kit.service', title: t.snippet, text: t.snippetText, group: group('infra', lang), fields: { runtime: 'Node 22', port: '47822', entry: 'packages/core/src/snippet-host.ts', layer: 'infra' } },
   ]
   await tool('create_blocks', { board, frame: t.modules, layout: 'grid', blocks: [...modules, ...services] })
@@ -145,7 +145,7 @@ export async function run({ core, agent, lang, check }) {
 
   // 4. dependencies: every internal import, plus the few externals that shape the design
   const conns = []
-  for (const p of repo.pkgs) for (const d of p.internal) conns.push({ from: p.name.replace('@aifig/', ''), to: d.replace('@aifig/', '') })
+  for (const p of repo.pkgs) for (const d of p.internal) conns.push({ from: p.name.replace('@nodboard/', ''), to: d.replace('@nodboard/', '') })
   conns.push({ from: t.core, to: 'core' })
   if (repo.desktopSpawnsCore) conns.push({ from: 'desktop', to: t.core })
   await tool('connect', { board, connectors: conns })
@@ -167,10 +167,10 @@ export async function run({ core, agent, lang, check }) {
   const ifaces = [
     repo.routes.call && { type: 'arch-kit.interface', title: 'POST /api/call', text: t.ifaces.call, fields: { kind: 'http', signature: '{tool, args, caller} → {ok, result}', auth: 'Bearer token' }, from: 'core' },
     repo.routes.mcp && { type: 'arch-kit.interface', title: 'POST /mcp', text: t.ifaces.mcp, fields: { kind: 'mcp', signature: 'Streamable HTTP · tools/list, tools/call', auth: 'Bearer token' }, from: 'core' },
-    { type: 'arch-kit.interface', title: 'aifig mcp', text: t.ifaces.stdio, fields: { kind: 'mcp', signature: 'stdio · same tools as HTTP', auth: 'Token file' }, from: 'cli' },
+    { type: 'arch-kit.interface', title: 'nodboard mcp', text: t.ifaces.stdio, fields: { kind: 'mcp', signature: 'stdio · same tools as HTTP', auth: 'Token file' }, from: 'cli' },
     repo.routes.sync && { type: 'arch-kit.interface', title: 'WS /sync', text: t.ifaces.sync, fields: { kind: 'websocket', signature: 'y-protocols sync + awareness', auth: 'Token subprotocol' }, from: 'core' },
-    { type: 'arch-kit.interface', title: 'aifig <command>', text: t.ifaces.cli, fields: { kind: 'cli', signature: 'aifig add | connect | tidy | export …', auth: 'Token file' }, from: 'cli' },
-    { type: 'arch-kit.interface', title: '.aifig file', text: t.ifaces.file, fields: { kind: 'file', signature: 'header {schema, sha256} + Yjs update', stability: 'stable' }, from: 'core' },
+    { type: 'arch-kit.interface', title: 'nodboard <command>', text: t.ifaces.cli, fields: { kind: 'cli', signature: 'nodboard add | connect | tidy | export …', auth: 'Token file' }, from: 'cli' },
+    { type: 'arch-kit.interface', title: '.nodboard file', text: t.ifaces.file, fields: { kind: 'file', signature: 'header {schema, sha256} + Yjs update', stability: 'stable' }, from: 'core' },
   ].filter(Boolean)
   await tool('create_blocks', { board, frame: t.contracts, right_of: t.modules, layout: 'grid', columns: 2, blocks: ifaces.map(({ from: _f, ...b }) => b) })
   await tool('connect', { board, connectors: ifaces.map((i) => ({ from: i.from, to: i.title })) })
@@ -186,9 +186,9 @@ export async function run({ core, agent, lang, check }) {
     layout: 'grid',
     columns: 3,
     blocks: [
-      { type: 'arch-kit.datastore', title: t.stores.boards, text: t.stores.boardsText, fields: { engine: 'Yjs + .aifig', holds: 'boards', location: '~/.aifig/boards' } },
-      { type: 'arch-kit.datastore', title: t.stores.history, text: t.stores.historyText, fields: { engine: '.aifig copies', holds: 'versions', location: '~/.aifig/history' } },
-      { type: 'arch-kit.datastore', title: t.stores.home, text: t.stores.homeText, fields: { engine: 'files (0600)', holds: 'token, grants', location: '~/.aifig' } },
+      { type: 'arch-kit.datastore', title: t.stores.boards, text: t.stores.boardsText, fields: { engine: 'Yjs + .nodboard', holds: 'boards', location: '~/.nodboard/boards' } },
+      { type: 'arch-kit.datastore', title: t.stores.history, text: t.stores.historyText, fields: { engine: '.nodboard copies', holds: 'versions', location: '~/.nodboard/history' } },
+      { type: 'arch-kit.datastore', title: t.stores.home, text: t.stores.homeText, fields: { engine: 'files (0600)', holds: 'token, grants', location: '~/.nodboard' } },
       ...t.decisions.map(([title, text, status, date]) => ({ type: 'arch-kit.decision', title, text, fields: { status, date } })),
     ],
   })
@@ -225,7 +225,7 @@ export async function run({ core, agent, lang, check }) {
   const mods = blocks.filter((b) => b.type === 'arch-kit.module')
   check('one module card per workspace package, with its real path', repo.pkgs.every((p) => mods.some((m) => m.typeData['arch-kit.module'].path === p.dir)) && mods.length === repo.pkgs.length, mods.map((m) => m.title).join(', '))
   const idOf = (title) => blocks.find((b) => b.title === title)?.id
-  const internalEdges = repo.pkgs.flatMap((p) => p.internal.map((d) => [idOf(p.name.replace('@aifig/', '')), idOf(d.replace('@aifig/', ''))]))
+  const internalEdges = repo.pkgs.flatMap((p) => p.internal.map((d) => [idOf(p.name.replace('@nodboard/', '')), idOf(d.replace('@nodboard/', ''))]))
   check('every internal import is a "depends on" connector', internalEdges.every(([a, b]) => connectors.some((c) => c.from === a && c.to === b && c.relation === 'depends on')), `${internalEdges.length} imports`)
   const ifaceCards = blocks.filter((b) => b.type === 'arch-kit.interface')
   check('contracts cover HTTP, MCP (HTTP + stdio), WebSocket, CLI and the file format', ['http', 'mcp', 'websocket', 'cli', 'file'].every((k) => ifaceCards.some((b) => b.typeData['arch-kit.interface'].kind === k)) && ifaceCards.every((b) => connectors.some((c) => c.to === b.id && c.relation === 'exposes')))

@@ -65,7 +65,7 @@ test('sendBeacon-style text/plain bodies work (website downloads)', async () => 
 
 test('CORS preflight is allowed for the write endpoints', async () => {
   const s = await setup()
-  const r = await s.app.request('/v1/downloads', { method: 'OPTIONS', headers: { origin: 'https://aifig.dev', 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type' } })
+  const r = await s.app.request('/v1/downloads', { method: 'OPTIONS', headers: { origin: 'https://nodboard.dev', 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type' } })
   assert.ok(r.status === 204 || r.status === 200)
   assert.equal(r.headers.get('access-control-allow-origin'), '*')
 })

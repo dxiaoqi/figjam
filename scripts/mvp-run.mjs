@@ -22,7 +22,7 @@ const note = (s) => {
 
 // the agent (Claude Code over stdio MCP)
 const mcp = new Client({ name: 'claude-code', version: 'mvp-run' })
-await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/aifig.mjs'), 'mcp'], env: process.env, stderr: 'inherit' }))
+await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/nodboard.mjs'), 'mcp'], env: process.env, stderr: 'inherit' }))
 const call = async (name, args = {}) => {
   const r = await mcp.callTool({ name, arguments: args })
   const text = r.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n')

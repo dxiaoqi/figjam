@@ -19,7 +19,7 @@ const flag = (f) => argv.includes(f)
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { cwd: root, stdio: 'inherit', ...opts })
 const rel = (p) => path.relative(root, p)
 // build-time feature flags, baked into the UI (Vite reads the same env), both bundles and features.json
-const features = { assistant: process.env.AIFIG_FEATURE_ASSISTANT === '1' }
+const features = { assistant: process.env.NODBOARD_FEATURE_ASSISTANT === '1' }
 
 const hostPlatform = { darwin: 'mac', win32: 'win', linux: 'linux' }[process.platform]
 const platforms = ['linux', 'win', 'mac'].filter((p) => flag(`--${p}`))
@@ -36,12 +36,12 @@ fs.mkdirSync(path.join(out, 'resources'), { recursive: true })
 
 if (!flag('--skip-ui')) {
   console.log('› building the canvas UI')
-  run('npm', ['run', 'build', '-w', '@aifig/canvas'])
+  run('npm', ['run', 'build', '-w', '@nodboard/canvas'])
 }
 
 const esm = {
   bundle: true,
-  define: { __AIFIG_FEATURES__: JSON.stringify(features) },
+  define: { __NODBOARD_FEATURES__: JSON.stringify(features) },
   platform: 'node',
   format: 'esm',
   target: 'node22',
@@ -60,12 +60,12 @@ console.log('› bundling the CLI / core / MCP server')
 await build({
   ...esm,
   entryPoints: [path.join(root, 'packages/cli/src/index.ts')],
-  outfile: path.join(out, 'aifig.mjs'),
+  outfile: path.join(out, 'nodboard.mjs'),
   external: ['@resvg/resvg-js', 'bufferutil', 'utf-8-validate'],
 })
 fs.writeFileSync(path.join(desktop, 'build/features.json'), `${JSON.stringify(features)}\n`)
 
-// the readable-copy worker thread is loaded from next to aifig.mjs; there is no node_modules to find yjs in
+// the readable-copy worker thread is loaded from next to nodboard.mjs; there is no node_modules to find yjs in
 await build({
   ...esm,
   entryPoints: [path.join(root, 'packages/core/src/readable-copy-worker.mjs')],
@@ -80,7 +80,7 @@ await build({
   external: ['electron'],
 })
 for (const f of ['preload.cjs', 'snippet-preload.cjs']) fs.copyFileSync(path.join(desktop, 'src', f), path.join(out, 'app', f))
-// runtime URLs baked into the package (env vars and ~/.aifig/config.json can still override them)
+// runtime URLs baked into the package (env vars and ~/.nodboard/config.json can still override them)
 fs.writeFileSync(path.join(out, 'app/distribution.json'), JSON.stringify({ version, telemetryUrl: dist.telemetryUrl, updateFeedUrl: dist.updateFeedUrl }, null, 2))
 
 // the window/taskbar icon on Linux and Windows (macOS uses the bundle's .icns)
@@ -125,7 +125,7 @@ for (const p of platforms) for (const a of archsFor(p)) stageNative(p, a)
 
 // ---- package --------------------------------------------------------------------------------------
 const electronVersion = JSON.parse(fs.readFileSync(path.join(root, 'node_modules/electron/package.json'), 'utf8')).version
-const env = { ...process.env, AIFIG_UPDATE_URL: dist.updateFeedUrl }
+const env = { ...process.env, NODBOARD_UPDATE_URL: dist.updateFeedUrl }
 for (const p of platforms) {
   const archs = archsFor(p)
   console.log(`› packaging ${p} (${archs.join(', ')})${flag('--dir') ? ' — unpacked' : ''}`)

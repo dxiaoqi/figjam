@@ -2,10 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { aifigHome } from './board'
+import { nodboardHome } from './board'
 
 /**
- * MCP servers the person configured for skills (L1 tools), in ~/.aifig/mcp.json — the same shape Claude
+ * MCP servers the person configured for skills (L1 tools), in ~/.nodboard/mcp.json — the same shape Claude
  * Desktop / Cursor use: { "mcpServers": { "web": { "command": "…", "args": [], "env": {} } } }.
  * A skill calls `<server>.<tool>`; servers start on first use and stay up.
  */
@@ -15,7 +15,7 @@ interface ServerConfig {
   env?: Record<string, string>
 }
 
-export const mcpConfigPath = () => path.join(aifigHome(), 'mcp.json')
+export const mcpConfigPath = () => path.join(nodboardHome(), 'mcp.json')
 
 export function configuredServers(): Record<string, ServerConfig> {
   try {
@@ -35,7 +35,7 @@ export class McpTools {
       const cfg = configuredServers()[name]
       if (!cfg) throw new Error(`No MCP server "${name}" configured — add it to ${mcpConfigPath()}`)
       c = (async () => {
-        const client = new Client({ name: 'ai-figma-skills', version: '0.1.0' })
+        const client = new Client({ name: 'nodboard-skills', version: '0.1.0' })
         await client.connect(new StdioClientTransport({ command: cfg.command, args: cfg.args ?? [], env: { ...(process.env as Record<string, string>), ...(cfg.env ?? {}) }, stderr: 'ignore' }))
         return client
       })()

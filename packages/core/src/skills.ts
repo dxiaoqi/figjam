@@ -20,8 +20,8 @@ import {
   type SkillManifest,
   type SkillPrompt,
   type TypeLocale,
-} from '@aifig/shared'
-import { aifigHome } from './board'
+} from '@nodboard/shared'
+import { nodboardHome } from './board'
 
 const LAYOUT_INTENTS = ['grid', 'matrix', 'timeline', 'flow', 'cluster', 'type'] as const
 
@@ -62,23 +62,24 @@ export function loadSkill(dir: string, source: SkillManifest['source']): SkillMa
   const description = String(fm.data.description ?? '').trim()
   if (!description) errors.push(at('SKILL.md', 'description', 'required — say what the skill does and when to use it'))
   else if (description.length > 1024) errors.push(at('SKILL.md', 'description', 'at most 1024 characters'))
-  const meta = isObj(fm.data.metadata) && isObj(fm.data.metadata.aifig) ? (fm.data.metadata.aifig as Json) : null
+  const metaBlock = isObj(fm.data.metadata) ? fm.data.metadata : {}
+  const meta = isObj(metaBlock.nodboard) ? (metaBlock.nodboard as Json) : isObj(metaBlock.aifig) ? (metaBlock.aifig as Json) : null
   const version = String(meta?.version ?? '0.1.0')
   const capability = String(meta?.capability ?? 'L0')
-  if (capability === 'L2') errors.push(at('SKILL.md', 'metadata.aifig.capability', 'L2 (sandboxed scripts) is not supported yet — use L0 or L1'))
-  else if (capability !== 'L0' && capability !== 'L1') errors.push(at('SKILL.md', 'metadata.aifig.capability', `must be L0 or L1, got "${capability}"`))
+  if (capability === 'L2') errors.push(at('SKILL.md', 'metadata.nodboard.capability', 'L2 (sandboxed scripts) is not supported yet — use L0 or L1'))
+  else if (capability !== 'L0' && capability !== 'L1') errors.push(at('SKILL.md', 'metadata.nodboard.capability', `must be L0 or L1, got "${capability}"`))
   const perms = isObj(meta?.permissions) ? (meta!.permissions as Json) : {}
-  const tools = Array.isArray(perms.tools) ? perms.tools.map(String) : []
-  for (const k of ['network', 'secrets']) if (Array.isArray(perms[k]) && (perms[k] as unknown[]).length) errors.push(at('SKILL.md', `metadata.aifig.permissions.${k}`, 'only L2 scripts can ask for this, and L2 is not supported yet'))
-  if (tools.length && capability === 'L0') errors.push(at('SKILL.md', 'metadata.aifig.permissions.tools', 'an L0 skill cannot call tools — set capability: L1'))
-  for (const t of tools) if (!/^[\w-]+\.[\w.-]+$/.test(t)) errors.push(at('SKILL.md', 'metadata.aifig.permissions.tools', `"${t}" is not <server>.<tool> (or aifig.<tool>)`))
-  for (const t of tools) if (t.startsWith('aifig.') && !(BUILTIN_SKILL_TOOLS as readonly string[]).includes(t)) errors.push(at('SKILL.md', 'metadata.aifig.permissions.tools', `"${t}" is not a built-in tool skills can use (${BUILTIN_SKILL_TOOLS.join(', ')})`))
+  const tools = Array.isArray(perms.tools) ? perms.tools.map((t) => String(t).replace(/^aifig\./, 'nodboard.')) : []
+  for (const k of ['network', 'secrets']) if (Array.isArray(perms[k]) && (perms[k] as unknown[]).length) errors.push(at('SKILL.md', `metadata.nodboard.permissions.${k}`, 'only L2 scripts can ask for this, and L2 is not supported yet'))
+  if (tools.length && capability === 'L0') errors.push(at('SKILL.md', 'metadata.nodboard.permissions.tools', 'an L0 skill cannot call tools — set capability: L1'))
+  for (const t of tools) if (!/^[\w-]+\.[\w.-]+$/.test(t)) errors.push(at('SKILL.md', 'metadata.nodboard.permissions.tools', `"${t}" is not <server>.<tool> (or nodboard.<tool>)`))
+  for (const t of tools) if (t.startsWith('nodboard.') && !(BUILTIN_SKILL_TOOLS as readonly string[]).includes(t)) errors.push(at('SKILL.md', 'metadata.nodboard.permissions.tools', `"${t}" is not a built-in tool skills can use (${BUILTIN_SKILL_TOOLS.join(', ')})`))
 
   let canvas = empty
   if (meta?.canvas) {
     const rel = String(meta.canvas)
     const file = path.join(dir, rel)
-    if (!fs.existsSync(file)) errors.push(at('SKILL.md', 'metadata.aifig.canvas', `${rel} not found`))
+    if (!fs.existsSync(file)) errors.push(at('SKILL.md', 'metadata.nodboard.canvas', `${rel} not found`))
     else {
       let raw: unknown
       try {
@@ -89,7 +90,7 @@ export function loadSkill(dir: string, source: SkillManifest['source']): SkillMa
       if (raw !== undefined) canvas = parseCanvas(raw, name || path.basename(dir), dir, path.dirname(file), rel, tools, errors, warnings)
     }
   }
-  if (capability === 'L1' && !tools.length) warnings.push(at('SKILL.md', 'metadata.aifig.capability', 'L1 without any permissions.tools — did you mean L0?'))
+  if (capability === 'L1' && !tools.length) warnings.push(at('SKILL.md', 'metadata.nodboard.capability', 'L1 without any permissions.tools — did you mean L0?'))
   return { name: name || path.basename(dir), description, version, capability: capability === 'L1' ? 'L1' : 'L0', permissions: { tools }, instructions: fm.body, canvas, source, path: dir, errors, warnings }
 }
 
@@ -216,7 +217,7 @@ function parseCanvas(raw: unknown, skill: string, skillDir: string, canvasDir: s
       const w = `actions[${i}]`
       if (!isObj(a)) return void errors.push(at(w, 'must be an object'))
       const tool = String(a.tool ?? '')
-      if (!tools.includes(tool)) errors.push(at(`${w}.tool`, `"${tool}" must be listed in SKILL.md metadata.aifig.permissions.tools`))
+      if (!tools.includes(tool)) errors.push(at(`${w}.tool`, `"${tool}" must be listed in SKILL.md metadata.nodboard.permissions.tools`))
       const o = isObj(a.output) ? a.output : { mode: 'blocks' }
       const output: SkillAction['output'] = o.mode === 'field' ? { mode: 'field', field: String(o.field ?? '') } : { mode: 'blocks', type: o.type ? qualify(String(o.type)) : undefined, relation: o.relation ? String(o.relation) : undefined }
       if (output.mode === 'blocks' && output.type && !localIds.has(output.type) && !(output.type in BUILTIN_TYPES)) errors.push(at(`${w}.output.type`, `"${o.type}" is not a known type`))
@@ -246,13 +247,13 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 
 /** Folders with built-in skills: next to the CLI (repo / npm), or wherever the desktop app put them. */
 export function builtinSkillsDir() {
-  const candidates = [process.env.AIFIG_BUILTIN_SKILLS, path.resolve(here, '../../../skills/builtin'), path.resolve(path.dirname(process.argv[1] ?? '.'), '../skills/builtin'), path.resolve(process.cwd(), 'skills/builtin')]
+  const candidates = [process.env.NODBOARD_BUILTIN_SKILLS, path.resolve(here, '../../../skills/builtin'), path.resolve(path.dirname(process.argv[1] ?? '.'), '../skills/builtin'), path.resolve(process.cwd(), 'skills/builtin')]
   return candidates.find((c) => c && fs.existsSync(c)) ?? null
 }
 
-export const userSkillsDir = () => path.join(aifigHome(), 'skills')
+export const userSkillsDir = () => path.join(nodboardHome(), 'skills')
 
-/** Every skill this machine knows: built-in, installed in ~/.aifig/skills, and folders registered with `aifig skill dev`. */
+/** Every skill this machine knows: built-in, installed in ~/.nodboard/skills, and folders registered with `nodboard skill dev`. */
 export class SkillLibrary {
   private devPaths = new Set<string>()
 
@@ -286,7 +287,7 @@ export class SkillLibrary {
     return loadSkill(abs, 'dev')
   }
 
-  /** Copy a skill folder into ~/.aifig/skills after validating it. */
+  /** Copy a skill folder into ~/.nodboard/skills after validating it. */
   install(dir: string) {
     const src = path.resolve(dir)
     const s = loadSkill(src, 'user')
@@ -299,11 +300,11 @@ export class SkillLibrary {
   }
 }
 
-/** Write a skill folder: SKILL.md + canvas/blocks.json (used by `aifig skill new` and "Save as block type"). */
+/** Write a skill folder: SKILL.md + canvas/blocks.json (used by `nodboard skill new` and "Save as block type"). */
 export function writeSkillFolder(dir: string, s: { name: string; description: string; version?: string; capability?: 'L0' | 'L1'; tools?: string[]; instructions: string; blocks: Json }) {
   fs.mkdirSync(path.join(dir, 'canvas'), { recursive: true })
   const meta = { version: s.version ?? '0.1.0', canvas: 'canvas/blocks.json', capability: s.capability ?? 'L0', ...(s.tools?.length ? { permissions: { tools: s.tools } } : {}) }
-  const fm = yaml.dump({ name: s.name, description: s.description, metadata: { aifig: meta } }, { lineWidth: 100 })
+  const fm = yaml.dump({ name: s.name, description: s.description, metadata: { nodboard: meta } }, { lineWidth: 100 })
   fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\n${fm}---\n\n${s.instructions.trim()}\n`)
-  fs.writeFileSync(path.join(dir, 'canvas/blocks.json'), `${JSON.stringify({ $schema: 'https://aifig.dev/schemas/skill-blocks-1.json', version: 1, ...s.blocks }, null, 2)}\n`)
+  fs.writeFileSync(path.join(dir, 'canvas/blocks.json'), `${JSON.stringify({ $schema: 'https://nodboard.dev/schemas/skill-blocks-1.json', version: 1, ...s.blocks }, null, 2)}\n`)
 }

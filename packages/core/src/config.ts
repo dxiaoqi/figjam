@@ -1,10 +1,9 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { homeDir } from './auth'
 
-export function aifigHome() {
-  return process.env.AIFIG_HOME ?? path.join(os.homedir(), '.aifig')
-}
+export const nodboardHome = homeDir
 
 export interface RetentionPolicy {
   /** Newest automatic versions that are always kept. */
@@ -17,7 +16,7 @@ export interface RetentionPolicy {
 
 export interface DataSafetyConfig {
   backups: {
-    /** Absolute path; defaults to <AIFIG_HOME>/backups. `~` expands to the home folder. */
+    /** Absolute path; defaults to <NODBOARD_HOME>/backups. `~` expands to the home folder. */
     dir: string
     /** Rolling backups kept per board. */
     keep: number
@@ -37,20 +36,20 @@ export const DEFAULT_RETENTION: RetentionPolicy = { keepRecent: 20, hourlyForHou
 const expand = (p: string) => (p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p)
 
 /**
- * Data-safety settings from <AIFIG_HOME>/config.json (`{ "backups": { "dir": "~/Dropbox/aifig", "keep": 20 } }`),
- * with AIFIG_BACKUP_DIR taking precedence for the backup folder. Read on every use, so edits apply without a restart.
+ * Data-safety settings from <NODBOARD_HOME>/config.json (`{ "backups": { "dir": "~/Dropbox/nodboard", "keep": 20 } }`),
+ * with NODBOARD_BACKUP_DIR taking precedence for the backup folder. Read on every use, so edits apply without a restart.
  */
 export function dataSafetyConfig(): DataSafetyConfig {
   let file: Partial<{ backups: Partial<DataSafetyConfig['backups']>; versions: Partial<DataSafetyConfig['versions']> }> = {}
   try {
-    file = JSON.parse(fs.readFileSync(path.join(aifigHome(), 'config.json'), 'utf8'))
+    file = JSON.parse(fs.readFileSync(path.join(nodboardHome(), 'config.json'), 'utf8'))
   } catch {
     // no config file: defaults
   }
   const num = (v: unknown, d: number, min = 0) => (typeof v === 'number' && Number.isFinite(v) && v >= min ? v : d)
   const b = file.backups ?? {}
   const v = file.versions ?? {}
-  const dir = process.env.AIFIG_BACKUP_DIR || (typeof b.dir === 'string' && b.dir ? b.dir : path.join(aifigHome(), 'backups'))
+  const dir = process.env.NODBOARD_BACKUP_DIR || (typeof b.dir === 'string' && b.dir ? b.dir : path.join(nodboardHome(), 'backups'))
   return {
     backups: { dir: path.resolve(expand(dir)), keep: num(b.keep, 10, 1), intervalMinutes: num(b.intervalMinutes, 60) },
     versions: {

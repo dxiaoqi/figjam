@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import { useEditorVersion, type Editor } from '@aifig/canvas-engine'
+import { useEditorVersion, type Editor } from '@nodboard/canvas-engine'
 
 export const EditorContext = createContext<Editor | null>(null)
 

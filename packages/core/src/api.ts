@@ -2,12 +2,12 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
-import { hostOf } from '@aifig/shared'
+import { hostOf } from '@nodboard/shared'
 import type { ActivityLog } from './activity'
 import { guardedFetch, NetGuardError } from './net-guard'
 import { deniedMessage, type PermissionAsk, type PermissionBroker } from './permissions'
-import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect, Thread } from '@aifig/shared'
-import { ASSET_LIMITS, assetFileName, blockAssetRefs, bytesToBase64, COLOR_TOKENS, extForMime, fitHeight, IMAGE_MIMES, imageInfo, matchColor, maxBlockHeight, measureSticky, SNIPPET_FILES, SNIPPET_ROLES, stickyContentHeight, videoInfo, type Asset, type SnippetPart } from '@aifig/shared'
+import type { Author, Block, ChangeEntry, ChangeSet, Connector, Rect, Thread } from '@nodboard/shared'
+import { ASSET_LIMITS, assetFileName, blockAssetRefs, bytesToBase64, COLOR_TOKENS, extForMime, fitHeight, IMAGE_MIMES, imageInfo, matchColor, maxBlockHeight, measureSticky, SNIPPET_FILES, SNIPPET_ROLES, stickyContentHeight, videoInfo, type Asset, type SnippetPart } from '@nodboard/shared'
 import {
   BLOCK_TYPE_IDS,
   cardContentHeight,
@@ -40,7 +40,7 @@ import {
   snippetSourceBytes,
   snippetThumbKey,
   type WebSnippet,
-} from '@aifig/shared'
+} from '@nodboard/shared'
 import {
   SPACING,
   snap,
@@ -48,7 +48,7 @@ import {
   tokenManifest,
   type ColorToken,
   type SizeToken,
-} from '@aifig/shared'
+} from '@nodboard/shared'
 import {
   humanToolDefs,
   toolDefs,
@@ -56,11 +56,11 @@ import {
   type CallRequest,
   type CallResponse,
   type CallerInfo,
-} from '@aifig/shared'
+} from '@nodboard/shared'
 import { spawn } from 'node:child_process'
-import { diffBlocks, isEmptyPlan, planRestore } from '@aifig/shared'
+import { diffBlocks, isEmptyPlan, planRestore } from '@nodboard/shared'
 import { backupRoot, boardBackupDir } from './backups'
-import { aifigHome, Board, BoardRegistry, newId } from './board'
+import { nodboardHome, Board, BoardRegistry, newId } from './board'
 import { CorruptFileError, FutureVersionError } from './fileformat'
 import { deleteVersion, listVersions, readVersion } from './versions'
 import {
@@ -90,12 +90,12 @@ const axisLabelSize = (g: string) => measureBlock({ kind: 'text', text: `**${g}*
 import { renderSnapshot } from './snapshot'
 import { checkSnippetJs } from './snippet-host'
 import { templateSteps } from './templates'
-import { SCENARIO_IDS, SCENARIOS, TEMPLATE_IDS, TEMPLATES, type ContentLanguage, type TemplateId } from '@aifig/shared'
+import { SCENARIO_IDS, SCENARIOS, TEMPLATE_IDS, TEMPLATES, type ContentLanguage, type TemplateId } from '@nodboard/shared'
 
 export class ToolError extends Error {}
 
 /** Where imported packs go unless someone picks a folder. */
-export const defaultPackDir = () => process.env.AIFIG_PACK_DIR ?? path.join(os.homedir(), 'Documents', 'ai-figma')
+export const defaultPackDir = () => process.env.NODBOARD_PACK_DIR ?? path.join(os.homedir(), 'Documents', 'nodboard')
 
 type Args = Record<string, any>
 
@@ -320,7 +320,7 @@ export class CanvasCore {
   security: { permissions?: PermissionBroker; activity?: ActivityLog } = {}
 
   private get statePath() {
-    return path.join(aifigHome(), 'state.json')
+    return path.join(nodboardHome(), 'state.json')
   }
 
   init() {
@@ -340,7 +340,7 @@ export class CanvasCore {
     this.persistTimer = setTimeout(() => {
       this.persistTimer = null
       try {
-        fs.mkdirSync(aifigHome(), { recursive: true })
+        fs.mkdirSync(nodboardHome(), { recursive: true })
         fs.writeFileSync(this.statePath, JSON.stringify({ activeBoardId: this.activeBoardId }))
       } catch {
         // not fatal: the default just won't survive a restart
@@ -377,7 +377,7 @@ export class CanvasCore {
     if (!parsed.success) {
       return { ok: false, error: `Invalid arguments for ${tool}: ${parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}` }
     }
-    const ctx: CallContext = { caller, warnings: [], strict: (parsed.data as Args).strict === true || process.env.AIFIG_STRICT === '1' }
+    const ctx: CallContext = { caller, warnings: [], strict: (parsed.data as Args).strict === true || process.env.NODBOARD_STRICT === '1' }
     try {
       const out = await callContext.run(ctx, () => this.dispatch(tool, parsed.data as Args, caller))
       const withWarnings = (r: unknown) => (ctx.warnings.length && r && typeof r === 'object' && !Array.isArray(r) ? { ...(r as object), warnings: ctx.warnings } : r)
@@ -424,7 +424,7 @@ export class CanvasCore {
           b = this.registry.openFile(a.path)
         } catch (e) {
           if (e instanceof FutureVersionError) throw new ToolError(e.message)
-          if (e instanceof CorruptFileError) throw new ToolError(`“${path.basename(a.path)}” is damaged and can’t be opened (${e.reason}). If it was an ai-figma board, look for a copy in ${backupRoot()}.`)
+          if (e instanceof CorruptFileError) throw new ToolError(`“${path.basename(a.path)}” is damaged and can’t be opened (${e.reason}). If it was a nodboard board, look for a copy in ${backupRoot()}.`)
           throw e
         }
         return { board: b.summary() }
@@ -752,11 +752,11 @@ export class CanvasCore {
     }
   }
 
-  /** A copy of a built-in skill's sample board (examples/sample.<language>.aifig), as a new board of this person's. */
+  /** A copy of a built-in skill's sample board (examples/sample.<language>.nodboard), as a new board of this person's. */
   private openSample(a: Args) {
     const s = this.skills.get(a.skill)
     const language: ContentLanguage = a.language ?? 'en'
-    const file = s?.path ? [language, 'en'].map((l) => path.join(s.path!, 'examples', `sample.${l}.aifig`)).find((f) => fs.existsSync(f)) : undefined
+    const file = s?.path ? [language, 'en'].flatMap((l) => [`sample.${l}.nodboard`, `sample.${l}.aifig`].map((n) => path.join(s.path!, 'examples', n))).find((f) => fs.existsSync(f)) : undefined
     if (!s || !file) throw new ToolError(`No sample board for “${a.skill}”. Skills with samples: ${this.skills.list().filter((x) => x.path && fs.existsSync(path.join(x.path, 'examples'))).map((x) => x.name).join(', ') || 'none'}`)
     const b = this.registry.importCopy(file)
     // the sample carries the skill as it was when the sample was made; bring it up to the installed version
@@ -1094,7 +1094,7 @@ export class CanvasCore {
       description: s.description,
       version: s.version,
       capability: s.capability,
-      tools: s.permissions.tools.map((t) => ({ name: t, available: t.startsWith('aifig.') || this.mcpTools.available(t), allowed: !!this.security.permissions?.hasGrant(`skill:${s.name}`, 'tool', t) })),
+      tools: s.permissions.tools.map((t) => ({ name: t, available: t.startsWith('nodboard.') || this.mcpTools.available(t), allowed: !!this.security.permissions?.hasGrant(`skill:${s.name}`, 'tool', t) })),
       source: s.source,
       enabled: !!enabled,
       ...(enabled && enabled.version !== s.version ? { enabledVersion: enabled.version } : {}),
@@ -1115,7 +1115,7 @@ export class CanvasCore {
     return {
       board: board.id,
       skills: [...lib, ...boardOnly].map((s) => this.skillSummary(s, board)),
-      note: 'Enabled skills add block types (use their ids in create_blocks / set_type), layouts (apply_skill_layout) and actions (run_skill_action). Read get_skill for the instructions before working with a skill. The person enables skills in the canvas (Skills panel) or with `aifig skill enable`.',
+      note: 'Enabled skills add block types (use their ids in create_blocks / set_type), layouts (apply_skill_layout) and actions (run_skill_action). Read get_skill for the instructions before working with a skill. The person enables skills in the canvas (Skills panel) or with `nodboard skill enable`.',
     }
   }
 
@@ -1150,7 +1150,7 @@ export class CanvasCore {
   private enableSkill(a: Args, caller: CallerInfo) {
     const board = this.board(a.board)
     const s = this.skills.get(a.name)
-    if (!s) throw new ToolError(`No installed skill "${a.name}" (see list_skills; install folders with \`aifig skill install <dir>\`)`)
+    if (!s) throw new ToolError(`No installed skill "${a.name}" (see list_skills; install folders with \`nodboard skill install <dir>\`)`)
     if (s.errors.length) throw new ToolError(`“${s.name}” has problems and can't be enabled:\n- ${s.errors.join('\n- ')}`)
     const clash = s.canvas.types.find((t) => [...board.skills.values()].some((o) => o.name !== s.name && o.canvas.types.some((x) => x.id === t.id)))
     if (clash) throw new ToolError(`Type "${clash.id}" is already defined by another skill on this board`)
@@ -1174,7 +1174,7 @@ export class CanvasCore {
     return { installed: s.name, path: s.path, version: s.version, types: s.canvas.types.map((t) => t.id), warnings: s.warnings }
   }
 
-  /** `aifig skill dev`: (re)load a folder; boards that have it enabled pick up the new version immediately. */
+  /** `nodboard skill dev`: (re)load a folder; boards that have it enabled pick up the new version immediately. */
   private loadDevSkill(a: Args) {
     const s = this.skills.dev(a.path)
     const updated: string[] = []
@@ -1269,8 +1269,8 @@ export class CanvasCore {
       if (action.appliesTo && (!b.type || !action.appliesTo.includes(b.type))) throw new ToolError(`“${action.label}” works on ${action.appliesTo.map((t) => typeDef(t, board.types()).plural).join(', ')}; ${describeBlock(b)} is ${b.type ? `a ${typeDef(b.type, board.types()).label}` : 'untyped'}`)
       return b
     })
-    if (!action.tool.startsWith('aifig.') && !this.mcpTools.available(action.tool)) {
-      throw new ToolError(`“${action.label}” needs the tool ${action.tool}, but no MCP server "${action.tool.split('.')[0]}" is configured (~/.aifig/mcp.json).`)
+    if (!action.tool.startsWith('nodboard.') && !this.mcpTools.available(action.tool)) {
+      throw new ToolError(`“${action.label}” needs the tool ${action.tool}, but no MCP server "${action.tool.split('.')[0]}" is configured (~/.nodboard/mcp.json).`)
     }
     // the skill is the actor: even when a person clicks the action, its first use of a tool is confirmed
     const broker = this.security.permissions
@@ -1307,7 +1307,7 @@ export class CanvasCore {
       const args = fill(action.args ?? {}) as Record<string, unknown>
       try {
         let text: string
-        if (action.tool.startsWith('aifig.')) {
+        if (action.tool.startsWith('nodboard.')) {
           const r = await this.call({ tool: action.tool.slice(6) as AnyToolName, args: { board: board.id, ...args }, caller: as })
           if (!r.ok) throw new Error(r.error)
           text = JSON.stringify(r.result)
@@ -1320,7 +1320,7 @@ export class CanvasCore {
         if (action.output?.mode === 'field') {
           const r = await this.call({ tool: 'set_type', args: { board: board.id, ids: [b.id], fields: { [action.output.field]: text.slice(0, 120) }, intent: `${action.label} (${s.name})` }, caller: as })
           if (!r.ok) throw new Error(r.error)
-        } else if (!action.tool.startsWith('aifig.')) {
+        } else if (!action.tool.startsWith('nodboard.')) {
           const items = splitResults(text)
           const out = action.output
           const r = await this.call({
@@ -1387,8 +1387,8 @@ export class CanvasCore {
     const typeList = Object.entries(rest.types as Record<string, { label: string; fields?: FieldDef[] }>)
     writeSkillFolder(dir, {
       name: skillName,
-      description: `Block types saved from the “${board.title}” board: ${typeList.map(([, t]) => t.label).join(', ')}. Use when adding these kinds of items to an ai-figma board.`,
-      instructions: [`# ${board.title} types`, '', 'Block types made with “Save as block type” in ai-figma.', '', ...typeList.map(([id, t]) => `- \`${skillName}.${id}\` — ${t.label}${t.fields?.length ? `; fields: ${t.fields.map((f) => `\`${f.key}\` (${f.kind})`).join(', ')}` : ''}`)].join('\n'),
+      description: `Block types saved from the “${board.title}” board: ${typeList.map(([, t]) => t.label).join(', ')}. Use when adding these kinds of items to a nodboard board.`,
+      instructions: [`# ${board.title} types`, '', 'Block types made with “Save as block type” in nodboard.', '', ...typeList.map(([id, t]) => `- \`${skillName}.${id}\` — ${t.label}${t.fields?.length ? `; fields: ${t.fields.map((f) => `\`${f.key}\` (${f.kind})`).join(', ')}` : ''}`)].join('\n'),
       blocks: rest,
     })
     const s = this.skills.get(skillName)
@@ -2055,11 +2055,11 @@ export class CanvasCore {
     try {
       const r = importPack(this.registry, this.skills, file, a.dest ? path.resolve(String(a.dest)) : defaultPackDir(), { installSkills: a.install_skills === true })
       // packs uploaded by the canvas wait in the core's incoming folder until now
-      if (file.startsWith(path.join(aifigHome(), 'incoming') + path.sep)) fs.rmSync(file, { force: true })
+      if (file.startsWith(path.join(nodboardHome(), 'incoming') + path.sep)) fs.rmSync(file, { force: true })
       return {
         board: r.board.summary(),
         path: r.path,
-        assets: path.join(path.dirname(r.path), `${path.basename(r.path, '.aifig')}.assets`),
+        assets: path.join(path.dirname(r.path), `${path.basename(r.path).replace(/\.(nodboard|aifig)$/i, '')}.assets`),
         history: r.history,
         comments: r.board.threads.size,
         skills: r.skills,
@@ -2372,7 +2372,7 @@ export class CanvasCore {
       const clean = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).filter(([k, v]) => v !== undefined && v !== null && k !== 'changeSet')) as T
       const typeIds = [...new Set(blocks.map((b) => b.type).filter((t): t is string => !!t))]
       const byType = Object.fromEntries(typeIds.map((t) => [t, blocks.filter((b) => b.type === t).map((b) => b.id)]))
-      return { format: 'json', filename: `${slug(board.title)}.json`, content: JSON.stringify({ format: 'aifig-export/1', exportedAt: new Date().toISOString(), board: { id: board.id, title: board.title }, byType, blocks: blocks.map((b) => clean({ ...this.withSource(board, b), ...(b.type ? { fields: typeFields(b, reg) } : {}) })), connectors: connectors.map(clean), threads, assets }, null, 2) }
+      return { format: 'json', filename: `${slug(board.title)}.json`, content: JSON.stringify({ format: 'nodboard-export/1', exportedAt: new Date().toISOString(), board: { id: board.id, title: board.title }, byType, blocks: blocks.map((b) => clean({ ...this.withSource(board, b), ...(b.type ? { fields: typeFields(b, reg) } : {}) })), connectors: connectors.map(clean), threads, assets }, null, 2) }
     }
     const byY = (p: Block, q: Block) => p.y - q.y || p.x - q.x
     const label = (b: Block | undefined) => (b ? (b.kind === 'card' || b.kind === 'frame' ? b.title || b.text : b.text).replace(/\s+/g, ' ').trim() : '(free end)')
@@ -2407,7 +2407,7 @@ export class CanvasCore {
           return [`- ${b.text.replace(/\n/g, '\n  ')}`, ...notes]
       }
     }
-    const out: string[] = [`# ${target ? target.title : board.title}`, '', `_Exported from ai-figma on ${new Date().toISOString().slice(0, 10)}_`, '']
+    const out: string[] = [`# ${target ? target.title : board.title}`, '', `_Exported from nodboard on ${new Date().toISOString().slice(0, 10)}_`, '']
     // typed blocks first, one section per type; everything else by frame
     const where = (b: Block) => (b.parent ? board.blocks.get(b.parent)?.title : '') || ''
     const typedLine = (b: Block): string[] => {

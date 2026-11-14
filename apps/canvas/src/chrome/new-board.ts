@@ -1,5 +1,5 @@
 import { BookOpen, MessagesSquare, PanelsTopLeft, Target, Workflow, type LucideIcon } from 'lucide-react'
-import { TEMPLATE_IDS, TEMPLATES, type ScenarioId, type TemplateId } from '@aifig/shared'
+import { TEMPLATE_IDS, TEMPLATES, type ScenarioId, type TemplateId } from '@nodboard/shared'
 import type { MessageKey } from '../i18n'
 
 export type TemplateChoice = TemplateId | 'blank'
@@ -15,4 +15,4 @@ export const SCENARIO_ICONS: Record<ScenarioId, LucideIcon> = { architecture: Wo
 export type Preselect = TemplateChoice | `scenario:${ScenarioId}`
 
 /** Ask the app to open the new-board dialog, optionally with a template or a scenario (`scenario:<id>`) preselected. */
-export const openNewBoard = (pre?: Preselect) => window.dispatchEvent(new CustomEvent('aifig:new-board', { detail: pre }))
+export const openNewBoard = (pre?: Preselect) => window.dispatchEvent(new CustomEvent('nodboard:new-board', { detail: pre }))

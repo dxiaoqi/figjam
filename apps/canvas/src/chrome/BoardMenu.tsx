@@ -1,6 +1,6 @@
 import { Bookmark, Check, ChevronDown, FolderOpen, Globe, HardDrive, History, Package, PackageOpen, Pencil, Plus, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import { useId, useState } from 'react'
-import { FEATURES } from '@aifig/shared'
+import { FEATURES } from '@nodboard/shared'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -160,11 +160,11 @@ export function BoardMenu() {
             <PackageOpen className="size-4" /> {t('board.importPack')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:activity'))}>
+          <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('nodboard:activity'))}>
             <ShieldCheck className="size-4" /> {t('board.activity')}
           </DropdownMenuItem>
           {FEATURES.assistant && (
-            <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('aifig:assistant-settings'))}>
+            <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event('nodboard:assistant-settings'))}>
               <Sparkles className="size-4" /> {t('board.assistantSettings')}
             </DropdownMenuItem>
           )}

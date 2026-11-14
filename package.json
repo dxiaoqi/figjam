@@ -9,24 +9,24 @@
     "apps/*"
   ],
   "bin": {
-    "aifig": "bin/aifig.mjs"
+    "nodboard": "bin/nodboard.mjs"
   },
   "scripts": {
     "dev": "concurrently -k -n core,ui -c magenta,cyan \"npm:core\" \"npm:ui\"",
-    "dev:clean": "concurrently -k -n core,ui -c magenta,cyan \"npm:core\" \"npm run dev:clean -w @aifig/canvas\"",
-    "core": "node bin/aifig.mjs core",
-    "ui": "npm run dev -w @aifig/canvas",
-    "mcp": "node bin/aifig.mjs mcp",
-    "aifig": "node bin/aifig.mjs",
-    "build": "npm run build -w @aifig/canvas",
-    "start": "npm run build && node bin/aifig.mjs core",
+    "dev:clean": "concurrently -k -n core,ui -c magenta,cyan \"npm:core\" \"npm run dev:clean -w @nodboard/canvas\"",
+    "core": "node bin/nodboard.mjs core",
+    "ui": "npm run dev -w @nodboard/canvas",
+    "mcp": "node bin/nodboard.mjs mcp",
+    "nodboard": "node bin/nodboard.mjs",
+    "build": "npm run build -w @nodboard/canvas",
+    "start": "npm run build && node bin/nodboard.mjs core",
     "typecheck": "tsc -p packages/shared && tsc -p packages/core && tsc -p packages/cli && tsc -p packages/canvas-engine && tsc -p apps/canvas && tsc -p apps/telemetry",
     "lint": "oxlint packages apps",
     "desktop": "npm run build && electron apps/desktop",
-    "desktop:dev": "AIFIG_DESKTOP_URL=http://127.0.0.1:47820 electron apps/desktop",
+    "desktop:dev": "NODBOARD_DESKTOP_URL=http://127.0.0.1:47820 electron apps/desktop",
     "desktop:build": "node apps/desktop/scripts/build.mjs",
-    "website": "npm run dev -w @aifig/website",
-    "website:build": "npm run build -w @aifig/website",
+    "website": "npm run dev -w @nodboard/website",
+    "website:build": "npm run build -w @nodboard/website",
     "test:api": "node scripts/api-regressions.mjs",
     "test:skills": "node scripts/skills-tests.mjs && node scripts/scenarios/run.mjs",
     "test:scenarios": "node scripts/scenarios/run.mjs",
@@ -36,7 +36,7 @@
     "test:aesthetics:update": "node scripts/aesthetics.mjs --update",
     "test:e2e": "node scripts/engine-e2e.mjs",
     "ci": "node scripts/ci.mjs",
-    "test:data-safety": "node --import tsx --test tests/data-safety/*.test.ts && node scripts/data-safety.mjs",
+    "test:data-safety": "node --import tsx --test tests/data-safety/*.test.ts tests/agent-setup.test.ts && node scripts/data-safety.mjs",
     "test:onboarding": "node scripts/onboarding-e2e.mjs",
     "test:sharing": "node scripts/sharing-e2e.mjs",
     "bench": "node scripts/bench/run.mjs",
@@ -46,8 +46,8 @@
     "release:linux": "node scripts/release/release.mjs --linux",
     "release:win": "node scripts/release/release.mjs --win --x64 --arm64",
     "test:packaging": "node scripts/packaging-smoke.mjs",
-    "test:telemetry": "node --test apps/desktop/test/*.test.mjs scripts/release/*.test.mjs && npm test -w @aifig/telemetry",
-    "telemetry:dev": "npm run mock -w @aifig/telemetry"
+    "test:telemetry": "node --test apps/desktop/test/*.test.mjs scripts/release/*.test.mjs && npm test -w @nodboard/telemetry",
+    "telemetry:dev": "npm run mock -w @nodboard/telemetry"
   },
   "dependencies": {
     "tsx": "^4.23.15"

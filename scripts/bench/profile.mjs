@@ -1,7 +1,7 @@
 // CPU-profile one interaction on a board and print the hottest functions (self time).
 // usage: node scripts/bench/profile.mjs <app-url> <board-id> <scenario: open|pan|zoom|select|drag|hover> [top=30]
-// Point it at the Vite dev server (`npm run dev`) for readable function names; run with the core's AIFIG_HOME
-// (or AIFIG_TOKEN) set so the page gets the access token on cores that require one.
+// Point it at the Vite dev server (`npm run dev`) for readable function names; run with the core's NODBOARD_HOME
+// (or NODBOARD_TOKEN) set so the page gets the access token on cores that require one.
 import { chromium } from 'playwright-core'
 import { withToken } from './auth.mjs'
 

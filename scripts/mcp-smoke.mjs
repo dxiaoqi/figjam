@@ -11,7 +11,7 @@ const clientName = process.argv.find((a) => a.startsWith('--client='))?.split('=
 const quiet = process.argv.includes('--quiet')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/aifig.mjs'), 'mcp'], env: process.env, stderr: 'inherit' })
+const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'bin/nodboard.mjs'), 'mcp'], env: process.env, stderr: 'inherit' })
 const client = new Client({ name: clientName, version: '1.0.0' })
 await client.connect(transport)
 

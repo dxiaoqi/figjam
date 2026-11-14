@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   output: 'export',
   trailingSlash: true,
   images: { unoptimized: true },
-  transpilePackages: ['@aifig/shared'],
+  transpilePackages: ['@nodboard/shared'],
   devIndicators: false,
 }
 

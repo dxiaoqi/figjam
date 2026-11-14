@@ -1,7 +1,7 @@
-import type { Block, Rect } from '@aifig/shared'
-import { SPACING, snap } from '@aifig/shared'
-import { cardContentHeight, maxBlockHeight, richTextHeight, stickyContentHeight, measureCard, measureText, typeChrome } from '@aifig/shared'
-import { FONT_SIZES } from '@aifig/shared'
+import type { Block, Rect } from '@nodboard/shared'
+import { SPACING, snap } from '@nodboard/shared'
+import { cardContentHeight, maxBlockHeight, richTextHeight, stickyContentHeight, measureCard, measureText, typeChrome } from '@nodboard/shared'
+import { FONT_SIZES } from '@nodboard/shared'
 
 export type LayoutIntent = 'grid' | 'row' | 'stack' | 'cluster' | 'tree' | 'matrix' | 'timeline' | 'flow'
 
